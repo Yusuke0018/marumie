@@ -1,54 +1,262 @@
-.App {
+.app-shell {
   min-height: 100vh;
-  background-color: #f5f7fa;
   display: flex;
   flex-direction: column;
+  background: #eff3fa;
 }
 
-.App-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 2rem;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+.app-hero {
+  background: radial-gradient(circle at top left, rgba(96, 130, 255, 0.55), transparent 45%),
+              radial-gradient(circle at bottom right, rgba(90, 211, 164, 0.4), transparent 40%),
+              linear-gradient(135deg, #0a1d3c 0%, #152d5a 55%, #1f3d78 100%);
+  color: #f5f7ff;
+  padding: 3.8rem 0 2.8rem;
+  position: relative;
+  overflow: hidden;
 }
 
-.header-content {
-  max-width: 1400px;
+.app-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.05), transparent 50%);
+  pointer-events: none;
+}
+
+.hero-inner {
+  position: relative;
+  z-index: 1;
+  width: min(1180px, 92%);
   margin: 0 auto;
-}
-
-.App-header h1 {
-  margin: 0 0 0.5rem 0;
-  font-size: 2rem;
-}
-
-.header-subtitle {
-  margin: 0;
-  opacity: 0.95;
-  font-size: 1.1rem;
-}
-
-.App-main {
-  flex: 1;
-  padding-bottom: 2rem;
-}
-
-.views-container {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 2.5rem;
 }
 
-.App-footer {
-  background: #34495e;
-  color: white;
-  text-align: center;
-  padding: 1.5rem;
+.hero-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2.5rem;
+  justify-content: space-between;
+  align-items: stretch;
+}
+
+.hero-brand {
+  flex: 1 1 380px;
+  max-width: 620px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.brand-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.9rem;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  letter-spacing: 0.16em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.hero-brand h1 {
+  margin: 0;
+  font-size: clamp(2rem, 2.8vw, 2.8rem);
+  font-weight: 700;
+  line-height: 1.25;
+  text-shadow: 0 12px 24px rgba(6, 16, 36, 0.35);
+}
+
+.brand-description {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.7;
+  color: rgba(238, 243, 255, 0.9);
+  max-width: 520px;
+}
+
+.hero-controls {
+  flex: 1 1 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.hero-highlights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+}
+
+.highlight-card {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 18px 45px rgba(13, 29, 58, 0.2);
+  backdrop-filter: blur(8px);
+}
+
+.highlight-icon {
+  font-size: 1.4rem;
+}
+
+.highlight-title {
+  margin: 0 0 0.25rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.highlight-text {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(247, 249, 255, 0.8);
+  line-height: 1.6;
+}
+
+.primary-nav {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  background: rgba(250, 252, 255, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(19, 34, 68, 0.08);
+}
+
+.primary-nav ul {
+  width: min(1180px, 92%);
+  margin: 0 auto;
+  display: flex;
+  gap: 1.2rem;
+  padding: 0.9rem 0;
+  list-style: none;
+}
+
+.primary-nav a {
+  color: #1f2d4a;
+  text-decoration: none;
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  transition: all 0.2s ease;
+}
+
+.primary-nav a:hover {
+  background: rgba(96, 130, 255, 0.12);
+  color: #4b6cff;
+}
+
+.app-main {
+  flex: 1;
+  width: min(1180px, 92%);
+  margin: 3rem auto 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 3.5rem;
+}
+
+.dashboard-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1.5rem;
+}
+
+.section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.section-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6f85c5;
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: clamp(1.5rem, 2.4vw, 2.2rem);
+  color: #1a2745;
+}
+
+.section-description {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #5a6989;
+  max-width: 680px;
+  line-height: 1.7;
+}
+
+.app-footer {
+  background: #0d1c36;
+  color: rgba(237, 244, 255, 0.85);
+  padding: 1.75rem 0;
   margin-top: auto;
 }
 
-.App-footer p {
+.footer-inner {
+  width: min(1180px, 92%);
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.footer-inner p {
   margin: 0;
-  font-size: 0.9rem;
-  opacity: 0.9;
+}
+
+.footer-link {
+  opacity: 0.6;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 900px) {
+  .hero-main {
+    flex-direction: column;
+  }
+
+  .primary-nav ul {
+    overflow-x: auto;
+    padding: 0.9rem 1.5rem;
+  }
+
+  .primary-nav a {
+    white-space: nowrap;
+  }
+
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .app-main {
+    margin: 2.5rem auto 3rem;
+    gap: 2.75rem;
+  }
+
+  .highlight-card {
+    padding: 1rem 1.2rem;
+  }
 }

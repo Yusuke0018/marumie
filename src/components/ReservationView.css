@@ -1,0 +1,140 @@
+.reservation-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+.reservation-view--empty {
+  background: rgba(255, 255, 255, 0.75);
+  border: 2px dashed rgba(23, 42, 78, 0.12);
+  border-radius: 18px;
+  padding: 2.5rem;
+  text-align: center;
+  color: #50607a;
+}
+
+.reservation-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.type-toggle {
+  display: inline-flex;
+  gap: 0.75rem;
+  padding: 0.4rem;
+  border-radius: 999px;
+  background: rgba(16, 29, 60, 0.08);
+}
+
+.type-toggle__button {
+  border: none;
+  background: transparent;
+  color: #223352;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0.55rem 1.2rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.type-toggle__button:hover {
+  background: rgba(76, 132, 255, 0.12);
+  color: #2648ff;
+}
+
+.type-toggle__button.is-active {
+  background: linear-gradient(135deg, #3356ff 0%, #5ad3a4 90%);
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(51, 86, 255, 0.25);
+}
+
+.reservation-toolbar__hint {
+  font-size: 0.85rem;
+  color: #64718f;
+}
+
+.reservation-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1.25rem;
+}
+
+.res-card {
+  background: linear-gradient(155deg, rgba(51, 86, 255, 0.12), rgba(90, 211, 164, 0.08));
+  border-radius: 16px;
+  padding: 1.25rem;
+  border: 1px solid rgba(23, 42, 78, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  color: #1f2d4a;
+  box-shadow: 0 16px 32px rgba(21, 32, 65, 0.08);
+}
+
+.res-card__label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(31, 45, 74, 0.7);
+}
+
+.res-card__value {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.res-card__caption {
+  font-size: 0.8rem;
+  color: rgba(31, 45, 74, 0.6);
+}
+
+.reservation-panels {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 1.5rem;
+}
+
+.reservation-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.panel-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #1a2745;
+}
+
+.panel-caption {
+  font-size: 0.85rem;
+  color: #677491;
+}
+
+.placeholder-label {
+  margin: 0;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 1024px) {
+  .reservation-panels {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .reservation-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.8rem;
+  }
+
+  .reservation-summary {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+}

@@ -1,115 +1,251 @@
-.listing-view-container {
-  padding: 2rem;
-  max-width: 1400px;
-  margin: 0 auto;
+.listing-view {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
 }
 
-.listing-view-container h2 {
-  color: #2c3e50;
-  margin-bottom: 1.5rem;
-}
-
-.listing-view-empty {
+.listing-view--empty {
+  background: rgba(255, 255, 255, 0.75);
+  border: 2px dashed rgba(23, 42, 78, 0.12);
+  border-radius: 18px;
+  padding: 2.5rem;
   text-align: center;
-  padding: 3rem;
-  color: #7f8c8d;
+  color: #50607a;
 }
 
-.monthly-summary {
+.listing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+
+.listing-tabs {
+  display: inline-flex;
+  gap: 0.75rem;
+  padding: 0.4rem;
+  border-radius: 999px;
+  background: rgba(16, 29, 60, 0.08);
+}
+
+.listing-tab {
+  border: none;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 1.2rem;
+  border-radius: 999px;
+  font-weight: 600;
+  color: #223352;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.listing-tab__count {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(34, 51, 82, 0.08);
+}
+
+.listing-tab:hover {
+  background: rgba(76, 132, 255, 0.12);
+  color: #2648ff;
+}
+
+.listing-tab.is-active {
+  background: linear-gradient(135deg, #3356ff 0%, #5ad3a4 90%);
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(51, 86, 255, 0.25);
+}
+
+.listing-tab.is-active .listing-tab__count {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.listing-description {
+  margin: 0.75rem 0 0;
+  color: #5a6989;
+  font-size: 0.9rem;
+}
+
+.listing-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: flex-end;
+}
+
+.listing-alert {
+  padding: 0.45rem 0.9rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+}
+
+.listing-alert--error {
+  background: rgba(231, 76, 60, 0.12);
+  color: #c0392b;
+  border: 1px solid rgba(231, 76, 60, 0.35);
+}
+
+.listing-alert--warning {
+  background: rgba(243, 156, 18, 0.15);
+  color: #d35400;
+  border: 1px solid rgba(243, 156, 18, 0.3);
+}
+
+.listing-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 1rem;
-  margin-bottom: 2rem;
 }
 
-.summary-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 1.25rem;
-  border-radius: 8px;
+.listing-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 1.3rem;
+  border: 1px solid rgba(23, 42, 78, 0.06);
+  box-shadow: 0 14px 32px rgba(21, 32, 65, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  gap: 0.4rem;
+  border-top: 4px solid rgba(36, 72, 255, 0.5);
 }
 
-.summary-label {
-  font-size: 0.85rem;
-  opacity: 0.9;
-}
-
-.summary-value {
-  font-size: 1.5rem;
+.listing-card__label {
+  font-size: 0.75rem;
   font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(31, 45, 74, 0.7);
 }
 
-.daily-cards-grid {
+.listing-card__value {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.listing-card__caption {
+  font-size: 0.8rem;
+  color: rgba(31, 45, 74, 0.6);
+}
+
+.listing-panels {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: 1.3fr 1fr;
+  gap: 1.5rem;
+}
+
+.listing-panel {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 1.5rem;
+  box-shadow: 0 18px 40px rgba(21, 32, 65, 0.08);
+  border: 1px solid rgba(23, 42, 78, 0.08);
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
-  margin-bottom: 2rem;
 }
 
-.daily-card {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+.listing-panel--primary {
+  grid-column: 1 / 2;
 }
 
-.daily-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+.listing-panel--comparison {
+  padding: 1.75rem;
 }
 
-.daily-card-header {
-  background: #3498db;
-  color: white;
-  padding: 0.75rem 1rem;
+.listing-daily-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
 }
 
-.daily-card-header h4 {
-  margin: 0;
-  font-size: 1rem;
-}
-
-.daily-card-body {
+.daily-metric-card {
+  border-radius: 14px;
+  border: 1px solid rgba(23, 42, 78, 0.08);
   padding: 1rem;
+  background: linear-gradient(155deg, rgba(51, 86, 255, 0.08), rgba(90, 211, 164, 0.05));
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
 }
 
-.daily-stat {
+.daily-metric__header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid #ecf0f1;
 }
 
-.daily-stat:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
+.daily-metric__date {
+  font-weight: 700;
+  color: #1f2d4a;
 }
 
-.stat-label {
-  color: #7f8c8d;
-  font-size: 0.9rem;
-}
-
-.stat-value {
-  color: #2c3e50;
-  font-weight: 600;
+.daily-metric__alert {
   font-size: 1rem;
+  color: #e74c3c;
 }
 
-.cpa-warning {
-  margin-left: 0.5rem;
-  font-size: 0.9rem;
+.daily-metric__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(100px, 1fr));
+  gap: 0.75rem;
 }
 
-.hourly-section {
-  margin-top: 2rem;
+.daily-metric__label {
+  font-size: 0.75rem;
+  color: rgba(31, 45, 74, 0.65);
+  letter-spacing: 0.05em;
+}
+
+.daily-metric__value {
+  font-size: 1.05rem;
+  color: #1f2d4a;
+}
+
+.daily-metric__footer {
+  font-size: 0.8rem;
+  color: rgba(31, 45, 74, 0.65);
+}
+
+.panel-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #1a2745;
+}
+
+.panel-caption {
+  font-size: 0.85rem;
+  color: #677491;
+}
+
+.placeholder-label {
+  margin: 0;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 1100px) {
+  .listing-panels {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .listing-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .listing-summary {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+
+  .listing-daily-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
 }

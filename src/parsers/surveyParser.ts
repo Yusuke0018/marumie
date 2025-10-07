@@ -7,11 +7,12 @@ import { SurveyRecord, ParseResult, ParseError, ParseWarning } from '../types/da
 import { parseJSTDate, isAfterStartDate } from '../utils/dateUtils';
 import { parseNumber } from '../utils/validation';
 
-/**
- * アンケート調査 - 外来CSVをパース
- * 列: 日付, ネット検索(Google/Yahoo), Googleマップ, 看板, 紹介系, チラシ, Youtube, リベシティ, AI検索, (空2列), 発熱外来(Google)
- */
-export function parseSurveyOutpatient(csvText: string): ParseResult<SurveyRecord> {
+interface SurveyParseOptions {
+  label: string;
+  excludedChannels?: string[];
+}
+
+function parseSurvey(csvText: string, { label, excludedChannels = [] }: SurveyParseOptions): ParseResult<SurveyRecord> {
   const errors: ParseError[] = [];
   const warnings: ParseWarning[] = [];
   const data: SurveyRecord[] = [];
@@ -23,48 +24,47 @@ export function parseSurveyOutpatient(csvText: string): ParseResult<SurveyRecord
   if (parsed.errors.length > 0) {
     errors.push({
       row: 0,
-      message: `CSV解析エラー: ${parsed.errors.map(e => e.message).join(', ')}`
+      message: `${label}CSV解析エラー: ${parsed.errors.map(e => e.message).join(', ')}`
     });
     return { data: [], errors, warnings };
   }
 
   const rows = parsed.data;
   if (rows.length === 0) {
-    errors.push({ row: 0, message: 'CSVが空です' });
+    errors.push({ row: 0, message: `${label}CSVが空です` });
     return { data: [], errors, warnings };
   }
 
-  // ヘッダー取得
   const headers = rows[0];
 
-  // 必須列確認
   if (!headers.includes('日付')) {
     errors.push({
       row: 0,
-      message: '必須列が見つかりません: 日付'
+      message: `${label}CSV: 必須列が見つかりません: 日付`
     });
     return { data: [], errors, warnings };
   }
 
-  // チャネル列のインデックスマップ (日付列を除く)
   const channelIndices: Record<string, number> = {};
   headers.forEach((header, idx) => {
-    if (idx > 0 && header.trim() !== '') {
-      channelIndices[header.trim()] = idx;
+    const trimmed = header.trim();
+    if (idx > 0 && trimmed !== '') {
+      channelIndices[trimmed] = idx;
     }
   });
 
-  // データ行を処理
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     const rowNum = i + 1;
 
-    // 2行目の"OFF"をスキップ
-    if (i === 1 && row[0]?.trim() === '') {
+    if (!row || row.length === 0) continue;
+
+    // 2行目のOFF等テンプレ行はスキップ
+    const isTemplateRow = row[0]?.trim() === '' || row[0]?.trim().toUpperCase() === 'OFF';
+    if (i === 1 && isTemplateRow) {
       continue;
     }
 
-    // 日付解析 (YYYY/M/D形式)
     const dateStr = row[0];
     const date = parseJSTDate(dateStr);
 
@@ -72,28 +72,28 @@ export function parseSurveyOutpatient(csvText: string): ParseResult<SurveyRecord
       warnings.push({
         row: rowNum,
         field: '日付',
-        message: `日付解析失敗: "${dateStr}"`
+        message: `${label}CSV 日付解析失敗: "${dateStr}"`
       });
       continue;
     }
 
-    // 2025-10-02以前はスキップ
     if (!isAfterStartDate(date)) {
       continue;
     }
 
-    // チャネル別データ
     const channels: Record<string, number | null> = {};
     let feverGoogle: number | null = null;
 
     Object.entries(channelIndices).forEach(([channelName, idx]) => {
       const value = parseNumber(row[idx]);
-
       if (channelName === '発熱外来(Google)') {
         feverGoogle = value;
-      } else {
-        channels[channelName] = value;
+        return;
       }
+      if (excludedChannels.includes(channelName)) {
+        return;
+      }
+      channels[channelName] = value;
     });
 
     data.push({
@@ -104,4 +104,21 @@ export function parseSurveyOutpatient(csvText: string): ParseResult<SurveyRecord
   }
 
   return { data, errors, warnings };
+}
+
+/**
+ * アンケート調査 - 外来CSV
+ */
+export function parseSurveyOutpatient(csvText: string): ParseResult<SurveyRecord> {
+  return parseSurvey(csvText, { label: 'アンケート(外来)' });
+}
+
+/**
+ * アンケート調査 - 内視鏡CSV
+ */
+export function parseSurveyEndoscopy(csvText: string): ParseResult<SurveyRecord> {
+  return parseSurvey(csvText, {
+    label: 'アンケート(内視鏡)',
+    excludedChannels: []
+  });
 }

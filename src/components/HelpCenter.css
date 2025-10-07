@@ -1,0 +1,114 @@
+.help-center {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 2rem;
+  box-shadow: 0 18px 40px rgba(21, 32, 65, 0.08);
+  border: 1px solid rgba(23, 42, 78, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.help-section h3 {
+  margin: 0 0 1rem;
+  font-size: 1.2rem;
+  color: #1a2745;
+}
+
+.help-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 1rem;
+}
+
+.help-steps li {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  align-items: start;
+  gap: 0.75rem;
+  background: linear-gradient(155deg, rgba(51, 86, 255, 0.08), rgba(90, 211, 164, 0.05));
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(23, 42, 78, 0.06);
+}
+
+.step-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3356ff 0%, #5ad3a4 90%);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.help-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.5rem;
+}
+
+.help-card {
+  background: rgba(247, 249, 255, 0.9);
+  border-radius: 16px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  border: 1px solid rgba(23, 42, 78, 0.06);
+}
+
+.help-card h4 {
+  margin: 0;
+  font-size: 1rem;
+  color: #1f2d4a;
+}
+
+.help-card__sample {
+  font-size: 0.8rem;
+  color: rgba(31, 45, 74, 0.7);
+  letter-spacing: 0.04em;
+}
+
+.help-card__columns span {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: rgba(31, 45, 74, 0.6);
+}
+
+.help-card__columns ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  color: #1f2d4a;
+  font-size: 0.9rem;
+}
+
+.help-card__note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(31, 45, 74, 0.65);
+}
+
+.help-notes {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #5a6989;
+}
+
+@media (max-width: 768px) {
+  .help-steps li {
+    grid-template-columns: 32px 1fr;
+  }
+
+  .help-cards {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+}

@@ -8,9 +8,10 @@ import './HourlyChart.css';
 interface HourlyChartProps {
   hourlyCV: (number | null)[];
   title?: string;
+  accentColor?: string;
 }
 
-export function HourlyChart({ hourlyCV, title = '時間帯別CV数' }: HourlyChartProps) {
+export function HourlyChart({ hourlyCV, title = '時間帯別CV数', accentColor = '#3498db' }: HourlyChartProps) {
   const data = hourlyCV.map((cv, hour) => ({
     hour: `${hour}時`,
     cv: cv ?? 0,
@@ -63,7 +64,7 @@ export function HourlyChart({ hourlyCV, title = '時間帯別CV数' }: HourlyCha
             {data.map((entry, index) => (
               <Cell
                 key={`cell-${index}`}
-                fill={entry.isMissing ? '#e74c3c' : '#3498db'}
+                fill={entry.isMissing ? '#e74c3c' : accentColor}
               />
             ))}
           </Bar>

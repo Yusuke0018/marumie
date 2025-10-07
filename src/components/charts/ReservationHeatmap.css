@@ -1,0 +1,127 @@
+.reservation-heatmap {
+  border-radius: 18px;
+  border: 1px solid rgba(23, 42, 78, 0.12);
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.reservation-heatmap--empty {
+  padding: 2.5rem;
+  text-align: center;
+}
+
+.heatmap-header,
+.heatmap-row {
+  display: grid;
+  grid-template-columns: 160px auto 80px;
+  align-items: stretch;
+}
+
+.heatmap-header {
+  background: linear-gradient(90deg, rgba(90, 130, 255, 0.15), rgba(90, 130, 255, 0.05));
+  border-bottom: 1px solid rgba(23, 42, 78, 0.08);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #223352;
+}
+
+.heatmap-header__label,
+.heatmap-header__total {
+  padding: 0.9rem 1rem;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+}
+
+.heatmap-header__grid {
+  display: grid;
+  grid-template-columns: repeat(24, 1fr);
+  border-left: 1px solid rgba(23, 42, 78, 0.05);
+}
+
+.heatmap-header__cell {
+  padding: 0.5rem 0;
+  text-align: center;
+  border-left: 1px solid rgba(23, 42, 78, 0.05);
+}
+
+.heatmap-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.heatmap-row {
+  border-bottom: 1px solid rgba(23, 42, 78, 0.06);
+}
+
+.heatmap-row:last-child {
+  border-bottom: none;
+}
+
+.heatmap-row__label {
+  padding: 0.85rem 1rem;
+  display: flex;
+  align-items: center;
+  background: rgba(241, 245, 255, 0.6);
+  font-weight: 600;
+  color: #1f2d4a;
+  border-right: 1px solid rgba(23, 42, 78, 0.05);
+}
+
+.heatmap-row__grid {
+  display: grid;
+  grid-template-columns: repeat(24, 1fr);
+}
+
+.heatmap-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-left: 1px solid rgba(23, 42, 78, 0.05);
+  border-bottom: 1px solid rgba(23, 42, 78, 0.05);
+  min-height: 32px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.heatmap-cell:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(23, 42, 78, 0.12);
+  z-index: 1;
+}
+
+.heatmap-row__total {
+  padding: 0.85rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-weight: 700;
+  color: #223352;
+  background: rgba(241, 245, 255, 0.6);
+  border-left: 1px solid rgba(23, 42, 78, 0.05);
+}
+
+@media (max-width: 1024px) {
+  .heatmap-header,
+  .heatmap-row {
+    grid-template-columns: 140px auto 70px;
+  }
+
+  .heatmap-row__label {
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .reservation-heatmap {
+    overflow-x: auto;
+  }
+
+  .heatmap-header,
+  .heatmap-row {
+    min-width: 720px;
+  }
+}

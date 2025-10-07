@@ -1,0 +1,102 @@
+.status-summary {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 18px;
+  padding: 1.25rem;
+  backdrop-filter: blur(10px);
+  color: #ecf2ff;
+}
+
+.status-summary__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.9rem;
+  gap: 1rem;
+}
+
+.status-summary__title {
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.status-summary__count {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.status-summary__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.status-pill__indicator {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.65);
+  box-shadow: 0 0 0 transparent;
+}
+
+.status-pill__label {
+  letter-spacing: 0.02em;
+}
+
+.status-pill__meta {
+  opacity: 0.85;
+}
+
+.status-pill-idle {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.status-pill-idle .status-pill__indicator {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.status-pill-ready {
+  background: rgba(90, 211, 164, 0.25);
+  border-color: rgba(90, 211, 164, 0.45);
+}
+
+.status-pill-ready .status-pill__indicator {
+  background: #5ad3a4;
+  box-shadow: 0 0 6px rgba(90, 211, 164, 0.7);
+}
+
+.status-pill-warning {
+  background: rgba(255, 193, 59, 0.25);
+  border-color: rgba(255, 193, 59, 0.45);
+}
+
+.status-pill-warning .status-pill__indicator {
+  background: #ffc13b;
+  box-shadow: 0 0 6px rgba(255, 193, 59, 0.7);
+}
+
+.status-pill-error {
+  background: rgba(255, 99, 132, 0.25);
+  border-color: rgba(255, 99, 132, 0.45);
+}
+
+.status-pill-error .status-pill__indicator {
+  background: #ff6384;
+  box-shadow: 0 0 6px rgba(255, 99, 132, 0.7);
+}

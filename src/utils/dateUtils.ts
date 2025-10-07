@@ -19,6 +19,28 @@ export function parseJSTDate(dateStr: string): Date | null {
   const trimmed = dateStr.trim();
 
   try {
+    // YYYY-MM-DD HH:mm 形式
+    if (/^\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2}(:\d{2})?$/.test(trimmed)) {
+      const formatString = trimmed.includes(':') && trimmed.split(':').length === 3
+        ? 'yyyy-MM-dd H:mm:ss'
+        : 'yyyy-MM-dd H:mm';
+      const date = parse(trimmed, formatString, new Date());
+      if (isValid(date)) {
+        return utcToZonedTime(date, TOKYO_TZ);
+      }
+    }
+
+    // YYYY/MM/DD HH:mm 形式
+    if (/^\d{4}\/\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}(:\d{2})?$/.test(trimmed)) {
+      const formatString = trimmed.includes(':') && trimmed.split(':').length === 3
+        ? 'yyyy/M/d H:mm:ss'
+        : 'yyyy/M/d H:mm';
+      const date = parse(trimmed, formatString, new Date());
+      if (isValid(date)) {
+        return utcToZonedTime(date, TOKYO_TZ);
+      }
+    }
+
     // ISO 8601形式 (YYYY-MM-DD または YYYY-MM-DDTHH:mm:ss+09:00)
     if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
       const date = parseISO(trimmed);

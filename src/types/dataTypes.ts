@@ -40,12 +40,44 @@ export interface SurveyRecord {
   feverGoogle?: number | null;  // 発熱外来(Google) - 除外対象
 }
 
-/** 予約ログレコード (将来拡張用) */
+/** 予約ログの診療科グルーピング */
+export type ReservationDepartmentGroup =
+  | '内科外科外来'
+  | '内科外来'
+  | '発熱外来'
+  | '胃カメラ'
+  | '大腸カメラ'
+  | '内視鏡ドック'
+  | '人間ドックA'
+  | '人間ドックB'
+  | 'オンライン診療'
+  | 'その他';
+
+/** 予約ログレコード */
 export interface ReservationRecord {
-  dateTime: Date;       // 予約日時(JST)
-  department: string;   // 診療科
+  dateTime: Date;                 // 予約日時(JST)
+  department: string;             // 原診療科名
+  departmentGroup: ReservationDepartmentGroup;
   type: '初診' | '再診';
-  count: number;
+  count: number;                  // 予約件数 (明記なしの場合は1)
+  isSameDay: boolean;             // 当日予約か否か
+}
+
+/** 予約ログ集計 (診療科×初診/再診) */
+export interface ReservationDepartmentStats {
+  department: ReservationDepartmentGroup;
+  type: '初診' | '再診';
+  total: number;
+  hourly: number[];               // 0-23時の件数
+  daily: Record<string, number>;  // YYYY-MM-DDごとの件数
+}
+
+/** 相関分析ポイント */
+export interface CorrelationPoint {
+  date: string;            // YYYY-MM-DD
+  listingCV: number;
+  reservationCount: number;
+  highlight: boolean;
 }
 
 /** 月次サマリー */

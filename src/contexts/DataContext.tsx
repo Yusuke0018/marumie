@@ -4,7 +4,14 @@
  */
 
 import { createContext, useContext, useState, ReactNode } from 'react';
-import { ListingRecord, SurveyRecord, ParseError, ParseWarning } from '../types/dataTypes';
+import {
+  ListingRecord,
+  SurveyRecord,
+  ReservationRecord,
+  ParseError,
+  ParseWarning
+} from '../types/dataTypes';
+import { getMonthKeyJST } from '../utils/dateUtils';
 
 interface DataState {
   // リスティングデータ
@@ -15,6 +22,9 @@ interface DataState {
   // アンケートデータ
   surveyOutpatient: SurveyRecord[];
   surveyEndoscopy: SurveyRecord[];
+
+  // 予約データ
+  reservations: ReservationRecord[];
 
   // エラー・警告
   errors: Record<string, ParseError[]>;
@@ -30,7 +40,10 @@ interface DataState {
 interface DataContextType extends DataState {
   setListingInternal: (data: ListingRecord[], errors: ParseError[], warnings: ParseWarning[]) => void;
   setListingGastroscopy: (data: ListingRecord[], errors: ParseError[], warnings: ParseWarning[]) => void;
+  setListingColonoscopy: (data: ListingRecord[], errors: ParseError[], warnings: ParseWarning[]) => void;
   setSurveyOutpatient: (data: SurveyRecord[], errors: ParseError[], warnings: ParseWarning[]) => void;
+  setSurveyEndoscopy: (data: SurveyRecord[], errors: ParseError[], warnings: ParseWarning[]) => void;
+  setReservations: (data: ReservationRecord[], errors: ParseError[], warnings: ParseWarning[]) => void;
   setSelectedMonth: (month: string | null) => void;
   setIsLoading: (loading: boolean) => void;
   clearAllData: () => void;
@@ -45,6 +58,7 @@ const initialState: DataState = {
   listingColonoscopy: [],
   surveyOutpatient: [],
   surveyEndoscopy: [],
+  reservations: [],
   errors: {},
   warnings: {},
   selectedMonth: null,
@@ -72,12 +86,39 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }));
   };
 
+  const setListingColonoscopy = (data: ListingRecord[], errors: ParseError[], warnings: ParseWarning[]) => {
+    setState(prev => ({
+      ...prev,
+      listingColonoscopy: data,
+      errors: { ...prev.errors, listingColonoscopy: errors },
+      warnings: { ...prev.warnings, listingColonoscopy: warnings }
+    }));
+  };
+
   const setSurveyOutpatient = (data: SurveyRecord[], errors: ParseError[], warnings: ParseWarning[]) => {
     setState(prev => ({
       ...prev,
       surveyOutpatient: data,
       errors: { ...prev.errors, surveyOutpatient: errors },
       warnings: { ...prev.warnings, surveyOutpatient: warnings }
+    }));
+  };
+
+  const setSurveyEndoscopy = (data: SurveyRecord[], errors: ParseError[], warnings: ParseWarning[]) => {
+    setState(prev => ({
+      ...prev,
+      surveyEndoscopy: data,
+      errors: { ...prev.errors, surveyEndoscopy: errors },
+      warnings: { ...prev.warnings, surveyEndoscopy: warnings }
+    }));
+  };
+
+  const setReservations = (data: ReservationRecord[], errors: ParseError[], warnings: ParseWarning[]) => {
+    setState(prev => ({
+      ...prev,
+      reservations: data,
+      errors: { ...prev.errors, reservations: errors },
+      warnings: { ...prev.warnings, reservations: warnings }
     }));
   };
 
@@ -96,10 +137,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const getAvailableMonths = (): string[] => {
     const monthSet = new Set<string>();
 
-    [...state.listingInternal, ...state.listingGastroscopy, ...state.listingColonoscopy].forEach(record => {
-      const month = record.date.toISOString().substring(0, 7);
-      monthSet.add(month);
-    });
+    state.listingInternal.forEach(record => monthSet.add(getMonthKeyJST(record.date)));
+    state.listingGastroscopy.forEach(record => monthSet.add(getMonthKeyJST(record.date)));
+    state.listingColonoscopy.forEach(record => monthSet.add(getMonthKeyJST(record.date)));
+    state.surveyOutpatient.forEach(record => monthSet.add(getMonthKeyJST(record.date)));
+    state.surveyEndoscopy.forEach(record => monthSet.add(getMonthKeyJST(record.date)));
+    state.reservations.forEach(record => monthSet.add(getMonthKeyJST(record.dateTime)));
 
     return Array.from(monthSet).sort();
   };
@@ -109,7 +152,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       ...state,
       setListingInternal,
       setListingGastroscopy,
+      setListingColonoscopy,
       setSurveyOutpatient,
+      setSurveyEndoscopy,
+      setReservations,
       setSelectedMonth,
       setIsLoading,
       clearAllData,
