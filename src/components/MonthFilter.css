@@ -1,0 +1,40 @@
+.month-filter-container {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 2rem;
+  background: white;
+  border-bottom: 1px solid #ecf0f1;
+}
+
+.month-filter-label {
+  font-weight: 600;
+  color: #2c3e50;
+  font-size: 1rem;
+}
+
+.month-filter-select {
+  padding: 0.5rem 1rem;
+  border: 2px solid #3498db;
+  border-radius: 4px;
+  font-size: 1rem;
+  color: #2c3e50;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.month-filter-select:hover {
+  border-color: #2980b9;
+}
+
+.month-filter-select:focus {
+  outline: none;
+  border-color: #2980b9;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.month-filter-info {
+  color: #7f8c8d;
+  font-size: 0.9rem;
+}

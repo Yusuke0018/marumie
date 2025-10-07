@@ -1,0 +1,16 @@
+.survey-view-container {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.survey-view-container h2 {
+  color: #2c3e50;
+  margin-bottom: 1.5rem;
+}
+
+.survey-view-empty {
+  text-align: center;
+  padding: 3rem;
+  color: #7f8c8d;
+}

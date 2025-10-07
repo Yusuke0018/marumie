@@ -1,0 +1,116 @@
+.file-upload-container {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.file-upload-container h2 {
+  color: #2c3e50;
+  margin-bottom: 0.5rem;
+}
+
+.upload-description {
+  color: #7f8c8d;
+  margin-bottom: 1.5rem;
+}
+
+.upload-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.upload-card {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+}
+
+.upload-card-idle {
+  border-color: #ecf0f1;
+}
+
+.upload-card-loading {
+  border-color: #3498db;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.upload-card-success {
+  border-color: #2ecc71;
+}
+
+.upload-card-error {
+  border-color: #e74c3c;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.upload-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.upload-icon {
+  font-size: 1.5rem;
+}
+
+.upload-header h3 {
+  color: #2c3e50;
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.file-input {
+  display: none;
+}
+
+.file-label {
+  display: inline-block;
+  padding: 0.75rem 1.5rem;
+  background: #3498db;
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  font-weight: 500;
+}
+
+.file-label:hover {
+  background: #2980b9;
+}
+
+.file-label:active {
+  transform: scale(0.98);
+}
+
+.upload-message {
+  margin-top: 0.75rem;
+  color: #7f8c8d;
+  font-size: 0.9rem;
+}
+
+.upload-card-error .upload-message {
+  color: #e74c3c;
+}
+
+.upload-card-success .upload-message {
+  color: #27ae60;
+}
+
+.upload-warning {
+  margin-top: 0.5rem;
+  color: #f39c12;
+  font-size: 0.85rem;
+}
