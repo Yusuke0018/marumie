@@ -23,7 +23,8 @@ npm run dev
 
 ```bash
 npm run build
-npm start # out ディレクトリを静的ホスト
+npm start # 本番構成のサーバーモード
+# GitHub Pages 用静的プレビューは npm run preview
 ```
 
 ## Vercel デプロイ
