@@ -933,7 +933,13 @@ ${response.url}`);
                     return order[item.name as keyof typeof order] ?? 999;
                   }}
                 />
-                <Legend />
+                <Legend
+                  payload={[
+                    { value: '初診', type: 'rect', color: '#5DD4C3' },
+                    { value: '再診', type: 'rect', color: '#FFB8C8' },
+                    { value: '当日予約', type: 'rect', color: '#FFA500' }
+                  ]}
+                />
                 <Bar dataKey="初診" fill="#5DD4C3" name="初診" />
                 <Bar dataKey="再診" fill="#FFB8C8" name="再診" />
                 <Bar dataKey="当日予約" fill="#FFA500" name="当日予約" />
@@ -1257,7 +1263,12 @@ ${response.url}`);
                       return order[item.name as keyof typeof order] ?? 999;
                     }}
                   />
-                  <Legend />
+                  <Legend
+                    payload={[
+                      { value: '初診', type: 'line', color: '#5DD4C3' },
+                      { value: '再診', type: 'line', color: '#FFB8C8' }
+                    ]}
+                  />
                   <Line
                     type="monotone"
                     dataKey="初診"
