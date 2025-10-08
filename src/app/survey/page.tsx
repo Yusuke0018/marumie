@@ -9,6 +9,7 @@ import {
   Cell,
   ResponsiveContainer,
   Tooltip,
+  type PieLabelRenderProps,
 } from "recharts";
 
 type SurveyData = {
@@ -25,6 +26,8 @@ type SurveyData = {
   libertyCity: number;
   aiSearch: number;
 };
+
+
 
 const STORAGE_KEY = "clinic-analytics/survey/v1";
 const TIMESTAMP_KEY = "clinic-analytics/survey-updated/v1";
@@ -252,16 +255,35 @@ return Object.entries(totals)
                   総回答数: {totalResponses.toLocaleString("ja-JP")}件
                 </p>
               </div>
-              <div className="h-96">
+              <div className="h-[500px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
                       data={chartData}
-                      cx="40%"
+                      cx="35%"
                       cy="50%"
-                      labelLine
-                      label
-                      outerRadius={110}
+                      labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
+                      label={(props: PieLabelRenderProps) => {
+                        const RADIAN = Math.PI / 180;
+                        const radius = (props.outerRadius as number) + 30;
+                        const x = (props.cx as number) + radius * Math.cos(-(props.midAngle as number) * RADIAN);
+                        const y = (props.cy as number) + radius * Math.sin(-(props.midAngle as number) * RADIAN);
+                        
+                        return (
+                          <text
+                            x={x}
+                            y={y}
+                            fill="#334155"
+                            textAnchor={x > (props.cx as number) ? 'start' : 'end'}
+                            dominantBaseline="central"
+                            fontSize={13}
+                            fontWeight={500}
+                          >
+                            {`${props.name}: ${props.value}件`}
+                          </text>
+                        );
+                      }}
+                      outerRadius={100}
                       fill="#8884d8"
                       dataKey="value"
                     >
