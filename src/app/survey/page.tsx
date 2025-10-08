@@ -150,20 +150,41 @@ return Object.entries(totals)
   }, [filteredData]);
 
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
 
     setUploadError(null);
     try {
-      const text = await file.text();
-      const parsed = parseSurveyCSV(text);
+      const allData: SurveyData[] = [...surveyData];
       
-      setSurveyData(parsed);
+      for (const file of Array.from(files)) {
+        const text = await file.text();
+        const parsed = parseSurveyCSV(text);
+        allData.push(...parsed);
+      }
+      
+      // Remove duplicates by date and merge data
+      const uniqueData = allData.reduce((acc, curr) => {
+        const exists = acc.find(item => item.date === curr.date);
+        if (!exists) {
+          acc.push(curr);
+        } else {
+          // Merge data for same date
+          Object.keys(curr).forEach(key => {
+            if (key !== 'date' && key !== 'month') {
+              (exists[key as keyof SurveyData] as number) += (curr[key as keyof SurveyData] as number);
+            }
+          });
+        }
+        return acc;
+      }, [] as SurveyData[]);
+      
+      setSurveyData(uniqueData);
       const timestamp = new Date().toISOString();
       setLastUpdated(timestamp);
 
       if (typeof window !== "undefined") {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(uniqueData));
         window.localStorage.setItem(TIMESTAMP_KEY, timestamp);
       }
     } catch (error) {
@@ -202,11 +223,12 @@ return Object.entries(totals)
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <label className="flex cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-400 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-500">
                 <Upload className="h-4 w-4" />
-                CSVを選択
+                CSVを追加
                 <input
                   type="file"
                   accept=".csv,text/csv"
                   onChange={handleFileUpload}
+                  multiple
                   className="hidden"
                 />
               </label>
