@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { RefreshCw, Upload } from "lucide-react";
+import { RefreshCw, Upload, Share2, Link as LinkIcon } from "lucide-react";
+import { uploadDataToR2, fetchDataFromR2 } from "@/lib/dataShare";
 import Papa from "papaparse";
 import {
   Bar,
@@ -416,6 +417,9 @@ export default function HomePage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [isSharing, setIsSharing] = useState(false);
+  const [isLoadingShared, setIsLoadingShared] = useState(false);
   const [diffMonthly, setDiffMonthly] = useState<MonthlyBucket[] | null>(null);
 const [departmentOrder, setDepartmentOrder] = useState<string[]>([]);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -425,27 +429,50 @@ const [departmentOrder, setDepartmentOrder] = useState<string[]>([]);
     "priority",
   );
 
-useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed: Reservation[] = JSON.parse(stored);
-        setReservations(parsed);
+// URLパラメータからデータを読み込む
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    
+    const params = new URLSearchParams(window.location.search);
+    const dataId = params.get('data');
+    
+    if (dataId) {
+      setIsLoadingShared(true);
+      fetchDataFromR2(dataId)
+        .then((response) => {
+          if (response.type === 'reservation') {
+            const parsed = JSON.parse(response.data);
+            setReservations(parsed);
+            setLastUpdated(response.uploadedAt);
+          }
+        })
+        .catch((error) => {
+          console.error(error);
+          setUploadError(`共有データの読み込みに失敗しました: ${error.message}`);
+        })
+        .finally(() => {
+          setIsLoadingShared(false);
+        });
+    } else {
+      // ローカルストレージから読み込み
+      try {
+        const stored = window.localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed: Reservation[] = JSON.parse(stored);
+          setReservations(parsed);
+        }
+        const storedTimestamp = window.localStorage.getItem(TIMESTAMP_KEY);
+        if (storedTimestamp) {
+          setLastUpdated(storedTimestamp);
+        }
+        const storedOrder = window.localStorage.getItem(ORDER_KEY);
+        if (storedOrder) {
+          setDepartmentOrder(JSON.parse(storedOrder));
+        }
+      } catch (error) {
+        console.error(error);
+        setUploadError("保存済みデータの読み込みに失敗しました。");
       }
-      const storedTimestamp = window.localStorage.getItem(TIMESTAMP_KEY);
-      if (storedTimestamp) {
-        setLastUpdated(storedTimestamp);
-      }
-      const storedOrder = window.localStorage.getItem(ORDER_KEY);
-      if (storedOrder) {
-        setDepartmentOrder(JSON.parse(storedOrder));
-      }
-    } catch (error) {
-      console.error(error);
-      setUploadError("保存済みデータの読み込みに失敗しました。");
     }
   }, []);
 
@@ -606,6 +633,37 @@ const departmentCount = useMemo(
     }
   };
 
+  // データを共有URLとして発行
+  const handleShare = async () => {
+    if (reservations.length === 0) {
+      setUploadError("共有するデータがありません。");
+      return;
+    }
+
+    setIsSharing(true);
+    setUploadError(null);
+
+    try {
+      const response = await uploadDataToR2({
+        type: 'reservation',
+        data: JSON.stringify(reservations),
+      });
+
+      setShareUrl(response.url);
+      
+      // クリップボードにコピー
+      await navigator.clipboard.writeText(response.url);
+      alert(`共有URLをクリップボードにコピーしました！
+
+${response.url}`);
+    } catch (error) {
+      console.error(error);
+      setUploadError(`共有URLの生成に失敗しました: ${(error as Error).message}`);
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
   const handleReset = () => {
     if (typeof window === "undefined") {
       return;
@@ -647,6 +705,24 @@ const departmentCount = useMemo(
               </label>
               <button
                 type="button"
+                onClick={handleShare}
+                disabled={isSharing || reservations.length === 0}
+                className="flex items-center justify-center gap-2 rounded-full bg-brand-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSharing ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    生成中...
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="h-4 w-4" />
+                    共有URLを発行
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
                 onClick={handleReset}
                 className="flex items-center justify-center gap-2 rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-brand-200 hover:text-brand-600"
               >
@@ -655,10 +731,26 @@ const departmentCount = useMemo(
               </button>
             </div>
           </div>
+          {isLoadingShared && (
+            <div className="mt-6 rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3">
+              <p className="flex items-center gap-2 text-sm text-brand-700">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                共有データを読み込んでいます...
+              </p>
+            </div>
+          )}
           {lastUpdated && (
             <p className="mt-6 text-xs font-medium text-slate-500">
               最終更新: {new Date(lastUpdated).toLocaleString("ja-JP")}
             </p>
+          )}
+          {shareUrl && (
+            <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3">
+              <p className="flex items-center gap-2 text-sm text-green-700">
+                <LinkIcon className="h-4 w-4" />
+                共有URL: <code className="rounded bg-white px-2 py-1 text-xs">{shareUrl}</code>
+              </p>
+            </div>
           )}
           {uploadError && (
             <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
