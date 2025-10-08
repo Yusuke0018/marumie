@@ -1,6 +1,6 @@
-# 予約ログ分析ダッシュボード
+# マルミエ
 
-Next.js 14（App Router）+ TypeScript + Tailwind CSS で構築した予約ログ解析アプリです。  
+マルミエは Next.js 14（App Router）+ TypeScript + Tailwind CSS で構築した予約ログ解析ダッシュボードです。  
 CSV をアップロードするとブラウザに保存され、初診/再診や診療科別の傾向を可視化します。
 
 ## セットアップ

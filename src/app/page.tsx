@@ -479,10 +479,10 @@ export default function HomePage() {
                 Team Mirai Analytics Suite
               </p>
               <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">
-                予約ログ分析ダッシュボード
+                マルミエ
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                CSVをアップロードすると、予約受付時刻を基準に初診・再診や診療科別の傾向を自動集計します。
+                マルミエは、CSVをアップロードすると予約受付時刻を基準に初診・再診や診療科別の傾向を自動集計します。
                 集計結果はブラウザに安全に保存され、再訪時も続きから確認できます。
               </p>
             </div>

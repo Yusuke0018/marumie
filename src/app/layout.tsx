@@ -11,9 +11,9 @@ const notoSans = Noto_Sans_JP({
 });
 
 export const metadata: Metadata = {
-  title: "Clinic Reservations Analytics",
+  title: "マルミエ",
   description:
-    "予約ログCSVから診療科ごとの予約傾向を可視化するダッシュボード。",
+    "診療科ごとの予約傾向を可視化するチームみらいの分析ダッシュボード「マルミエ」。",
 };
 
 export default function RootLayout({
