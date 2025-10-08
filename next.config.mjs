@@ -1,3 +1,5 @@
+const isGitHubPages = process.env.GITHUB_PAGES === "true";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -5,6 +7,8 @@ const nextConfig = {
     typedRoutes: true,
   },
   output: "export",
+  basePath: isGitHubPages ? "/marumie" : undefined,
+  assetPrefix: isGitHubPages ? "/marumie/" : undefined,
 };
 
 export default nextConfig;
