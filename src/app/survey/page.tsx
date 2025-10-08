@@ -253,12 +253,12 @@ export default function SurveyPage() {
                 来院経路のアンケートデータを分析し、どのチャネルから患者さんが来院しているかを可視化します。
               </p>
               <div className="mt-4 rounded-2xl border border-purple-200 bg-purple-50 p-4">
-                <p className="text-sm font-semibold text-purple-900 mb-2">📊 このページでできること</p>
+                <p className="text-sm font-semibold text-purple-900 mb-2">📊 データの見方</p>
                 <ul className="space-y-1 text-sm text-purple-800">
-                  <li>• <strong>外来・内視鏡の分析</strong>: それぞれの来院経路を円グラフで可視化</li>
-                  <li>• <strong>チャネル別の割合表示</strong>: Google検索、マップ、紹介など各経路の詳細を確認</li>
-                  <li>• <strong>期間フィルター</strong>: 月別にデータを絞り込んで傾向を把握</li>
-                  <li>• <strong>複数ファイル対応</strong>: 外来・内視鏡のCSVを別々にアップロード可能</li>
+                  <li>• <strong>円グラフと割合</strong>: 患者さんがどの経路で当院を知ったかの分布です。多いチャネルが効果的な集客手段です</li>
+                  <li>• <strong>外来と内視鏡の違い</strong>: 患者層によって情報収集の方法が異なることがわかります</li>
+                  <li>• <strong>Google検索 vs マップ</strong>: 検索とマップの比率から、地域密着度や認知度が見えてきます</li>
+                  <li>• <strong>紹介の割合</strong>: 医療機関・家族友人からの紹介が多いほど、信頼されている証です</li>
                 </ul>
               </div>
             </div>

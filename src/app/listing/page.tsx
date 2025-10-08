@@ -174,12 +174,12 @@ export default function ListingPage() {
                 リスティング広告（Google広告など）のパフォーマンスデータを分析し、広告効果を可視化します。
               </p>
               <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4">
-                <p className="text-sm font-semibold text-green-900 mb-2">📈 このページでできること</p>
+                <p className="text-sm font-semibold text-green-900 mb-2">📊 データの見方</p>
                 <ul className="space-y-1 text-sm text-green-800">
-                  <li>• <strong>3カテゴリ対応</strong>: 内科・胃カメラ・大腸カメラの広告データを個別管理</li>
-                  <li>• <strong>日別パフォーマンス</strong>: 金額・CV・CVR・CPAの推移をグラフで確認</li>
-                  <li>• <strong>時間帯別CV分析</strong>: どの時間帯に広告経由の予約ページ遷移が多いか把握</li>
-                  <li>• <strong>効果測定の基礎</strong>: 相関分析ページと組み合わせて広告効果を評価</li>
+                  <li>• <strong>CVR（コンバージョン率）</strong>: 広告を見た人のうち、何%が予約ページに進んだか。高いほど広告の質が良い証拠です</li>
+                  <li>• <strong>CPA（獲得単価）</strong>: 1件の予約ページ遷移にいくらかかったか。低いほど効率的です</li>
+                  <li>• <strong>時間帯別のCV</strong>: どの時間に広告経由の反応があるかがわかります。広告配信の最適化に使えます</li>
+                  <li>• <strong>日別の推移</strong>: 曜日や時期による効果の変動を見て、広告予算の配分を考えられます</li>
                 </ul>
               </div>
             </div>

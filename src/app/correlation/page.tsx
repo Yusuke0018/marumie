@@ -345,15 +345,15 @@ export default function CorrelationPage() {
                 リスティング広告のCV（予約ページ遷移）が、実際の初診予約にどの程度つながっているかを統計的に分析します。
               </p>
               <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                <p className="text-sm font-semibold text-amber-900 mb-2">🔬 このページでできること</p>
+                <p className="text-sm font-semibold text-amber-900 mb-2">📊 データの見方</p>
                 <ul className="space-y-1 text-sm text-amber-800">
-                  <li>• <strong>相関係数の算出</strong>: CVと予約の時間帯パターンの一致度を数値化（-1〜1）</li>
-                  <li>• <strong>日別相関分析</strong>: 各日のパターン一致度を可視化し、広告効果の変動を把握</li>
-                  <li>• <strong>高度な分析</strong>: ラグ相関（時間差）・アドストック（効果減衰）・回帰分析</li>
-                  <li>• <strong>統合判断</strong>: 複数の指標から広告が予約に寄与しているかを総合評価</li>
+                  <li>• <strong>相関係数</strong>: 0.7以上なら広告と予約の時間帯パターンがよく似ています。広告が効いている可能性が高いです</li>
+                  <li>• <strong>グラフの重なり</strong>: CV（水色の棒）と予約（赤い線）の形が似ているほど、広告が予約につながっている証拠です</li>
+                  <li>• <strong>ラグ相関</strong>: 広告を見てから予約まで何時間かかるかがわかります。即決型か検討型かの判断材料に</li>
+                  <li>• <strong>アドストック</strong>: 広告効果がどれくらい持続するかを示します。短期的な効果か長期的な効果かが見えます</li>
                 </ul>
                 <p className="mt-3 text-xs text-amber-700">
-                  ⚠️ 注意: 相関関係は因果関係を意味しません。診療時間の影響なども考慮が必要です。
+                  💡 ヒント: 相関が高くても、それが本当に広告のおかげかは慎重に判断を。診療時間など他の要因も考えましょう。
                 </p>
               </div>
           </div>
