@@ -9,7 +9,6 @@ import {
   Cell,
   ResponsiveContainer,
   Tooltip,
-  type PieLabelRenderProps,
 } from "recharts";
 
 type SurveyData = {
