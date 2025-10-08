@@ -14,6 +14,7 @@ function generateId(): string {
 
 // CORS ヘッダーを追加
 function corsHeaders(origin: string | null) {
+	// localhost と本番URL、Vercelプレビューを許可
 	const allowedOrigins = [
 		'http://localhost:3000',
 		'http://localhost:3001',
@@ -21,10 +22,12 @@ function corsHeaders(origin: string | null) {
 		'https://yusuke0018.github.io',
 	];
 
-	const corsOrigin = origin && allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+	// Vercelプレビューも許可（*.vercel.app）
+	const isVercelPreview = origin && origin.includes('.vercel.app');
+	const isAllowed = origin && (allowedOrigins.includes(origin) || isVercelPreview);
 
 	return {
-		'Access-Control-Allow-Origin': corsOrigin,
+		'Access-Control-Allow-Origin': isAllowed ? origin : '*',
 		'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 		'Access-Control-Allow-Headers': 'Content-Type',
 	};
