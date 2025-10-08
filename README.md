@@ -23,10 +23,10 @@ npm run dev
 
 ```bash
 npm run build
-npm start
+npm start # out ディレクトリを静的ホスト
 ```
 
 ## Vercel デプロイ
 
-ビルドコマンドは `npm run build`、出力は Next.js のデフォルト設定で動作します。  
+ビルドコマンドは `npm run build`（静的サイト出力 = `out/`）。  
 環境変数や追加のビルドステップは不要です。
