@@ -926,7 +926,13 @@ ${response.url}`);
                 <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
                 <XAxis dataKey="weekday" stroke="#64748B" />
                 <YAxis stroke="#64748B" />
-                <Tooltip formatter={tooltipFormatter} />
+                <Tooltip
+                  formatter={tooltipFormatter}
+                  itemSorter={(item) => {
+                    const order = { '初診': 0, '再診': 1, '当日予約': 2 };
+                    return order[item.name as keyof typeof order] ?? 999;
+                  }}
+                />
                 <Legend />
                 <Bar dataKey="初診" fill="#5DD4C3" name="初診" />
                 <Bar dataKey="再診" fill="#FFB8C8" name="再診" />
