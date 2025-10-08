@@ -10,6 +10,7 @@ const links = [
     { href: "/" as const, label: "予約分析" },
     { href: "/survey" as const, label: "アンケート分析" },
     { href: "/listing" as const, label: "リスティング分析" },
+    { href: "/correlation" as const, label: "相関分析" },
   ];
 
   return (
