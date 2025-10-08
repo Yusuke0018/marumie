@@ -560,7 +560,7 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-background">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-12">
-        <section className="relative overflow-hidden rounded-3xl border border-sky-100 bg-gradient-to-r from-white via-sky-50 to-emerald-50 p-8 shadow-card">
+        <section className="relative overflow-hidden rounded-3xl border border-brand-200 bg-gradient-to-r from-white via-brand-50 to-brand-100 p-8 shadow-card">
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="space-y-3">
               <p className="text-sm font-semibold text-brand-600">
@@ -575,7 +575,7 @@ export default function HomePage() {
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-600">
+              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-400 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-500">
                 <Upload className="h-4 w-4" />
                 CSVを選択
                 <input
@@ -642,9 +642,9 @@ export default function HomePage() {
                 <YAxis stroke="#64748B" />
                 <Tooltip formatter={tooltipFormatter} />
                 <Legend />
-                <Bar dataKey="total" fill="#3B82F6" name="総数" />
-                <Bar dataKey="初診" fill="#60A5FA" name="初診" />
-                <Bar dataKey="再診" fill="#10B981" name="再診" />
+                <Bar dataKey="total" fill="#5DD4C3" name="総数" />
+                <Bar dataKey="初診" fill="#3FBFAA" name="初診" />
+                <Bar dataKey="再診" fill="#FFB8C8" name="再診" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -664,7 +664,7 @@ export default function HomePage() {
                 <Line
                   type="monotone"
                   dataKey="total"
-                  stroke="#2563EB"
+                  stroke="#5DD4C3"
                   strokeWidth={2}
                   dot={false}
                   name="総数"
@@ -818,7 +818,7 @@ export default function HomePage() {
                         <Line
                           type="monotone"
                           dataKey="初診"
-                          stroke="#3B82F6"
+                          stroke="#5DD4C3"
                           strokeWidth={2}
                           dot={false}
                           name="初診"
@@ -826,7 +826,7 @@ export default function HomePage() {
                         <Line
                           type="monotone"
                           dataKey="再診"
-                          stroke="#10B981"
+                          stroke="#FFB8C8"
                           strokeWidth={2}
                           dot={false}
                           name="再診"
