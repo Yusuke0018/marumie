@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { RefreshCw, Upload } from "lucide-react";
+import { ChevronDown, RefreshCw, Upload } from "lucide-react";
 import Papa from "papaparse";
 import {
   Bar,
@@ -61,6 +61,22 @@ type ParsedDateTime = {
 const STORAGE_KEY = "clinic-analytics/reservations/v1";
 const TIMESTAMP_KEY = "clinic-analytics/last-updated/v1";
 const HOURS = Array.from({ length: 24 }, (_, index) => index);
+const DEPARTMENT_PRIORITIES = [
+  "内科外科外来",
+  "内科外来",
+  "発熱外来",
+  "胃カメラ",
+  "人間ドックA",
+  "大腸カメラ",
+  "人間ドックB",
+  "内視鏡ドック",
+  "オンライン診療（保険診療その他）",
+  "オンライン診療（AGA/ED）",
+  "健康診断（A",
+  "健康診断（B",
+  "特定健診",
+  "健康診断C",
+];
 
 const hourLabel = (hour: number) => `${hour.toString().padStart(2, "0")}:00`;
 
@@ -299,12 +315,29 @@ const aggregateDepartmentHourly = (
     }
   }
 
+  const normalizeDepartment = (name: string) =>
+    name.replace(/[（）()]/g, "").replace(/\s+/g, "");
+
+  const getPriority = (name: string) => {
+    const normalized = normalizeDepartment(name);
+    const index = DEPARTMENT_PRIORITIES.findIndex((keyword) =>
+      normalized.includes(keyword.replace(/\s+/g, "")),
+    );
+    return index >= 0 ? index : DEPARTMENT_PRIORITIES.length;
+  };
+
   return Array.from(byDepartment.entries())
     .map(([department, data]) => ({
       department,
       data,
     }))
-    .sort((a, b) => a.department.localeCompare(b.department, "ja"));
+    .sort((a, b) => {
+      const priorityDiff = getPriority(a.department) - getPriority(b.department);
+      if (priorityDiff !== 0) {
+        return priorityDiff;
+      }
+      return a.department.localeCompare(b.department, "ja");
+    });
 };
 
 const tooltipFormatter = (value: unknown, name: string): [string, string] => {
@@ -379,6 +412,7 @@ export default function HomePage() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [diffMonthly, setDiffMonthly] = useState<MonthlyBucket[] | null>(null);
+  const [openDepartment, setOpenDepartment] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -556,45 +590,49 @@ export default function HomePage() {
           />
         </section>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <SectionCard title="時間帯別 予約数（受付基準）" description="1時間単位で予約受付が集中する時間帯を可視化します。">
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={overallHourly}>
-                  <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
-                  <XAxis dataKey="hour" stroke="#64748B" />
-                  <YAxis stroke="#64748B" />
-                  <Tooltip formatter={tooltipFormatter} />
-                  <Legend />
-                  <Bar dataKey="total" fill="#3B82F6" name="総数" />
-                  <Bar dataKey="初診" fill="#60A5FA" name="初診" />
-                  <Bar dataKey="再診" fill="#10B981" name="再診" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </SectionCard>
+        <SectionCard
+          title="時間帯別 予約数（受付基準）"
+          description="1時間単位で予約受付が集中する時間帯を大きく表示しています。"
+        >
+          <div className="h-[380px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={overallHourly}>
+                <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
+                <XAxis dataKey="hour" stroke="#64748B" />
+                <YAxis stroke="#64748B" />
+                <Tooltip formatter={tooltipFormatter} />
+                <Legend />
+                <Bar dataKey="total" fill="#3B82F6" name="総数" />
+                <Bar dataKey="初診" fill="#60A5FA" name="初診" />
+                <Bar dataKey="再診" fill="#10B981" name="再診" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </SectionCard>
 
-          <SectionCard title="日別 予約推移（受付基準）" description="日ごとの予約受付件数の推移を確認できます。">
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={overallDaily}>
-                  <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
-                  <XAxis dataKey="date" stroke="#64748B" />
-                  <YAxis stroke="#64748B" />
-                  <Tooltip formatter={tooltipFormatter} />
-                  <Line
-                    type="monotone"
-                    dataKey="total"
-                    stroke="#2563EB"
-                    strokeWidth={2}
-                    dot={false}
-                    name="総数"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </SectionCard>
-        </div>
+        <SectionCard
+          title="日別 予約推移（受付基準）"
+          description="日ごとの予約受付件数の推移を確認できます。"
+        >
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={overallDaily}>
+                <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
+                <XAxis dataKey="date" stroke="#64748B" />
+                <YAxis stroke="#64748B" />
+                <Tooltip formatter={tooltipFormatter} />
+                <Line
+                  type="monotone"
+                  dataKey="total"
+                  stroke="#2563EB"
+                  strokeWidth={2}
+                  dot={false}
+                  name="総数"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </SectionCard>
 
         <SectionCard
           title="月次サマリ（受付基準）"
@@ -691,44 +729,54 @@ export default function HomePage() {
         >
           <div className="flex flex-col gap-4">
             {departmentHourly.map(({ department, data }) => (
-              <details
+              <div
                 key={department}
-                className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-brand-200"
+                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-brand-200"
               >
-                <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-slate-800 outline-none transition group-open:text-brand-600">
-                  {department}
-                  <span className="text-xs font-medium text-slate-400 group-open:text-brand-400">
-                    詳細を見る
-                  </span>
-                </summary>
-                <div className="mt-4 h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={data}>
-                      <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
-                      <XAxis dataKey="hour" stroke="#64748B" />
-                      <YAxis stroke="#64748B" />
-                      <Tooltip formatter={tooltipFormatter} />
-                      <Legend />
-                      <Line
-                        type="monotone"
-                        dataKey="初診"
-                        stroke="#3B82F6"
-                        strokeWidth={2}
-                        dot={false}
-                        name="初診"
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="再診"
-                        stroke="#10B981"
-                        strokeWidth={2}
-                        dot={false}
-                        name="再診"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </details>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpenDepartment((prev) => (prev === department ? null : department))
+                  }
+                  className="flex w-full items-center justify-between text-left text-sm font-semibold text-slate-800 outline-none transition hover:text-brand-600"
+                >
+                  <span>{department}</span>
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      openDepartment === department ? "rotate-180 text-brand-500" : ""
+                    }`}
+                  />
+                </button>
+                {openDepartment === department && (
+                  <div className="mt-4 h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={data}>
+                        <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
+                        <XAxis dataKey="hour" stroke="#64748B" />
+                        <YAxis stroke="#64748B" />
+                        <Tooltip formatter={tooltipFormatter} />
+                        <Legend />
+                        <Line
+                          type="monotone"
+                          dataKey="初診"
+                          stroke="#3B82F6"
+                          strokeWidth={2}
+                          dot={false}
+                          name="初診"
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="再診"
+                          stroke="#10B981"
+                          strokeWidth={2}
+                          dot={false}
+                          name="再診"
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
             ))}
             {departmentHourly.length === 0 && (
               <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
