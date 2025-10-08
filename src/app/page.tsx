@@ -1178,7 +1178,14 @@ ${response.url}`);
                           tick={{ fontSize: 10 }}
                           width={30}
                         />
-                        <Tooltip formatter={tooltipFormatter} contentStyle={{ fontSize: 12 }} />
+                        <Tooltip
+                          formatter={tooltipFormatter}
+                          contentStyle={{ fontSize: 12 }}
+                          itemSorter={(item) => {
+                            const order = { '初診': 0, '再診': 1 };
+                            return order[item.name as keyof typeof order] ?? 999;
+                          }}
+                        />
                         <Line
                           type="monotone"
                           dataKey="初診"
@@ -1243,7 +1250,13 @@ ${response.url}`);
                   <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
                   <XAxis dataKey="hour" stroke="#64748B" />
                   <YAxis stroke="#64748B" />
-                  <Tooltip formatter={tooltipFormatter} />
+                  <Tooltip
+                    formatter={tooltipFormatter}
+                    itemSorter={(item) => {
+                      const order = { '初診': 0, '再診': 1 };
+                      return order[item.name as keyof typeof order] ?? 999;
+                    }}
+                  />
                   <Legend />
                   <Line
                     type="monotone"
