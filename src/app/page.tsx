@@ -688,9 +688,17 @@ ${response.url}`);
                 マルミエ
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                マルミエは、CSVをアップロードすると予約受付時刻を基準に初診・再診や診療科別の傾向を自動集計します。
-                集計結果はブラウザに安全に保存され、再訪時も続きから確認できます。
+                予約ログCSVをアップロードすると、受付時刻を基準に初診・再診や診療科別の傾向を自動集計します。
               </p>
+              <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                <p className="text-sm font-semibold text-blue-900 mb-2">📋 このページでできること</p>
+                <ul className="space-y-1 text-sm text-blue-800">
+                  <li>• <strong>予約データの可視化</strong>: 時間帯別・日別・月別の予約傾向をグラフで表示</li>
+                  <li>• <strong>診療科別分析</strong>: 各診療科の予約パターンを個別に確認</li>
+                  <li>• <strong>データの保存</strong>: ブラウザに安全に保存され、再訪時も続きから確認可能</li>
+                  <li>• <strong>共有機能</strong>: URLを発行してチームメンバーとデータを共有</li>
+                </ul>
+              </div>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <label className="flex cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-400 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-500">

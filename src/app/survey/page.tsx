@@ -251,8 +251,17 @@ export default function SurveyPage() {
                 アンケート分析
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                来院経路のアンケートデータを分析し、集客チャネルの効果を可視化します。
+                来院経路のアンケートデータを分析し、どのチャネルから患者さんが来院しているかを可視化します。
               </p>
+              <div className="mt-4 rounded-2xl border border-purple-200 bg-purple-50 p-4">
+                <p className="text-sm font-semibold text-purple-900 mb-2">📊 このページでできること</p>
+                <ul className="space-y-1 text-sm text-purple-800">
+                  <li>• <strong>外来・内視鏡の分析</strong>: それぞれの来院経路を円グラフで可視化</li>
+                  <li>• <strong>チャネル別の割合表示</strong>: Google検索、マップ、紹介など各経路の詳細を確認</li>
+                  <li>• <strong>期間フィルター</strong>: 月別にデータを絞り込んで傾向を把握</li>
+                  <li>• <strong>複数ファイル対応</strong>: 外来・内視鏡のCSVを別々にアップロード可能</li>
+                </ul>
+              </div>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <label className="flex cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-400 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-500">
@@ -312,45 +321,64 @@ export default function SurveyPage() {
                     総回答数: {gairaiChartData.reduce((sum, item) => sum + item.value, 0).toLocaleString("ja-JP")}件
                   </p>
                 </div>
-                <div className="h-[700px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={gairaiChartData}
-                        cx="30%"
-                        cy="50%"
-                        labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
-                        label={(props: PieLabelRenderProps) => {
-                          const RADIAN = Math.PI / 180;
-                          const radius = (props.outerRadius as number) + 40;
-                          const x = (props.cx as number) + radius * Math.cos(-(props.midAngle as number) * RADIAN);
-                          const y = (props.cy as number) + radius * Math.sin(-(props.midAngle as number) * RADIAN);
-                          
-                          return (
-                            <text
-                              x={x}
-                              y={y}
-                              fill="#334155"
-                              textAnchor={x > (props.cx as number) ? 'start' : 'end'}
-                              dominantBaseline="central"
-                              fontSize={11}
-                              fontWeight={500}
-                            >
-                              {`${props.name}: ${props.value}件`}
-                            </text>
-                          );
-                        }}
-                        outerRadius={130}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {gairaiChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value: number) => [value.toLocaleString("ja-JP"), "回答数"]} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* 円グラフ */}
+                  <div className="h-[600px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={gairaiChartData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={false}
+                          outerRadius={180}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {gairaiChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          formatter={(value: number) => [value.toLocaleString("ja-JP"), "回答数"]}
+                          contentStyle={{ fontSize: 14, padding: '8px 12px' }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  {/* 凡例テーブル */}
+                  <div className="flex flex-col justify-center">
+                    <div className="space-y-2">
+                      {gairaiChartData.map((entry, index) => {
+                        const total = gairaiChartData.reduce((sum, item) => sum + item.value, 0);
+                        const percentage = ((entry.value / total) * 100).toFixed(1);
+                        return (
+                          <div 
+                            key={entry.name} 
+                            className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 hover:bg-slate-100 transition"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div 
+                                className="h-5 w-5 rounded-sm shrink-0" 
+                                style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                              />
+                              <span className="font-medium text-slate-900 text-sm">{entry.name}</span>
+                            </div>
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-lg font-bold text-slate-900">
+                                {entry.value.toLocaleString("ja-JP")}
+                              </span>
+                              <span className="text-sm text-slate-500">件</span>
+                              <span className="ml-2 text-sm font-semibold text-brand-600">
+                                ({percentage}%)
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </section>
             )}
@@ -363,45 +391,64 @@ export default function SurveyPage() {
                     総回答数: {naishikyoChartData.reduce((sum, item) => sum + item.value, 0).toLocaleString("ja-JP")}件
                   </p>
                 </div>
-                <div className="h-[700px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={naishikyoChartData}
-                        cx="30%"
-                        cy="50%"
-                        labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
-                        label={(props: PieLabelRenderProps) => {
-                          const RADIAN = Math.PI / 180;
-                          const radius = (props.outerRadius as number) + 40;
-                          const x = (props.cx as number) + radius * Math.cos(-(props.midAngle as number) * RADIAN);
-                          const y = (props.cy as number) + radius * Math.sin(-(props.midAngle as number) * RADIAN);
-                          
-                          return (
-                            <text
-                              x={x}
-                              y={y}
-                              fill="#334155"
-                              textAnchor={x > (props.cx as number) ? 'start' : 'end'}
-                              dominantBaseline="central"
-                              fontSize={11}
-                              fontWeight={500}
-                            >
-                              {`${props.name}: ${props.value}件`}
-                            </text>
-                          );
-                        }}
-                        outerRadius={130}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {naishikyoChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value: number) => [value.toLocaleString("ja-JP"), "回答数"]} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* 円グラフ */}
+                  <div className="h-[600px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={naishikyoChartData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={false}
+                          outerRadius={180}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {naishikyoChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          formatter={(value: number) => [value.toLocaleString("ja-JP"), "回答数"]}
+                          contentStyle={{ fontSize: 14, padding: '8px 12px' }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  {/* 凡例テーブル */}
+                  <div className="flex flex-col justify-center">
+                    <div className="space-y-2">
+                      {naishikyoChartData.map((entry, index) => {
+                        const total = naishikyoChartData.reduce((sum, item) => sum + item.value, 0);
+                        const percentage = ((entry.value / total) * 100).toFixed(1);
+                        return (
+                          <div 
+                            key={entry.name} 
+                            className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 hover:bg-slate-100 transition"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div 
+                                className="h-5 w-5 rounded-sm shrink-0" 
+                                style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                              />
+                              <span className="font-medium text-slate-900 text-sm">{entry.name}</span>
+                            </div>
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-lg font-bold text-slate-900">
+                                {entry.value.toLocaleString("ja-JP")}
+                              </span>
+                              <span className="text-sm text-slate-500">件</span>
+                              <span className="ml-2 text-sm font-semibold text-brand-600">
+                                ({percentage}%)
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </section>
             )}

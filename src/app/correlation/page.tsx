@@ -342,8 +342,20 @@ export default function CorrelationPage() {
               CV-予約 相関分析
             </h1>
             <p className="max-w-3xl text-sm leading-6 text-slate-600">
-              リスティング広告のCV（予約ページ遷移）が、実際の初診予約にどの程度つながっているかを時間帯の動きから分析します。
-            </p>
+                リスティング広告のCV（予約ページ遷移）が、実際の初診予約にどの程度つながっているかを統計的に分析します。
+              </p>
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <p className="text-sm font-semibold text-amber-900 mb-2">🔬 このページでできること</p>
+                <ul className="space-y-1 text-sm text-amber-800">
+                  <li>• <strong>相関係数の算出</strong>: CVと予約の時間帯パターンの一致度を数値化（-1〜1）</li>
+                  <li>• <strong>日別相関分析</strong>: 各日のパターン一致度を可視化し、広告効果の変動を把握</li>
+                  <li>• <strong>高度な分析</strong>: ラグ相関（時間差）・アドストック（効果減衰）・回帰分析</li>
+                  <li>• <strong>統合判断</strong>: 複数の指標から広告が予約に寄与しているかを総合評価</li>
+                </ul>
+                <p className="mt-3 text-xs text-amber-700">
+                  ⚠️ 注意: 相関関係は因果関係を意味しません。診療時間の影響なども考慮が必要です。
+                </p>
+              </div>
           </div>
         </section>
 

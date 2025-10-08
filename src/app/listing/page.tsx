@@ -171,8 +171,17 @@ export default function ListingPage() {
                 リスティング分析
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                リスティング広告のパフォーマンスデータを分析し、効果を可視化します。
+                リスティング広告（Google広告など）のパフォーマンスデータを分析し、広告効果を可視化します。
               </p>
+              <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4">
+                <p className="text-sm font-semibold text-green-900 mb-2">📈 このページでできること</p>
+                <ul className="space-y-1 text-sm text-green-800">
+                  <li>• <strong>3カテゴリ対応</strong>: 内科・胃カメラ・大腸カメラの広告データを個別管理</li>
+                  <li>• <strong>日別パフォーマンス</strong>: 金額・CV・CVR・CPAの推移をグラフで確認</li>
+                  <li>• <strong>時間帯別CV分析</strong>: どの時間帯に広告経由の予約ページ遷移が多いか把握</li>
+                  <li>• <strong>効果測定の基礎</strong>: 相関分析ページと組み合わせて広告効果を評価</li>
+                </ul>
+              </div>
             </div>
             <div className="flex flex-col gap-3">
               {categories.map(cat => (
