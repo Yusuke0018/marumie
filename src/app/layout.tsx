@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
+import { Noto_Sans_JP } from "next/font/google";
 import type { ReactNode } from "react";
 import "./globals.css";
+
+const notoSans = Noto_Sans_JP({
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+  display: "swap",
+  variable: "--font-sans",
+});
 
 export const metadata: Metadata = {
   title: "Clinic Reservations Analytics",
@@ -15,7 +23,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja">
-      <body className="min-h-screen bg-midnight-950 text-midnight-50 antialiased">
+      <body
+        className={`${notoSans.variable} min-h-screen bg-white text-slate-900 antialiased`}
+      >
         {children}
       </body>
     </html>

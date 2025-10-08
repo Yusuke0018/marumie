@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { RefreshCw, Upload } from "lucide-react";
 import Papa from "papaparse";
 import {
   Bar,
@@ -19,12 +20,13 @@ type VisitType = "初診" | "再診" | "未設定";
 
 type Reservation = {
   key: string;
-  receivedAt: string;
   department: string;
   visitType: VisitType;
-  appointmentDate: string;
-  appointmentDateTime: string;
-  appointmentHour: number;
+  reservationDate: string;
+  reservationMonth: string;
+  reservationHour: number;
+  receivedAtIso: string;
+  appointmentIso: string | null;
   patientId: string;
   isSameDay: boolean;
 };
@@ -49,50 +51,41 @@ type MonthlyBucket = {
   当日予約: number;
 };
 
+type ParsedDateTime = {
+  iso: string;
+  dateKey: string;
+  monthKey: string;
+  hour: number;
+};
+
 const STORAGE_KEY = "clinic-analytics/reservations/v1";
 const TIMESTAMP_KEY = "clinic-analytics/last-updated/v1";
 const HOURS = Array.from({ length: 24 }, (_, index) => index);
 
 const hourLabel = (hour: number) => `${hour.toString().padStart(2, "0")}:00`;
 
+const createEmptyHourlyBuckets = (): HourlyBucket[] =>
+  HOURS.map((hour) => ({
+    hour: hourLabel(hour),
+    total: 0,
+    初診: 0,
+    再診: 0,
+  }));
+
 const createReservationKey = (payload: {
   department: string;
   visitType: VisitType;
-  appointmentDateTime: string;
+  receivedIso: string;
   patientId: string;
+  appointmentIso: string | null;
 }) =>
   [
     payload.department,
     payload.visitType,
-    payload.appointmentDateTime,
+    payload.receivedIso,
     payload.patientId,
+    payload.appointmentIso ?? "",
   ].join("|");
-
-const parseAppointmentDateTime = (raw: string | undefined): Date | null => {
-  if (!raw) {
-    return null;
-  }
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-
-  const [datePart, timePartOrUndefined] = trimmed.split(" ");
-  const safeDate = datePart.replace(/\//g, "-");
-  const timePart = (timePartOrUndefined ?? "00:00")
-    .split(":")
-    .map((segment, idx) =>
-      idx === 0 ? segment.padStart(2, "0") : segment.padStart(2, "0"),
-    )
-    .join(":");
-
-  const isoCandidate = `${safeDate}T${timePart}`;
-  const parsed = new Date(isoCandidate);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-  return parsed;
-};
 
 const normalizeVisitType = (value: string | undefined): VisitType => {
   if (!value) {
@@ -105,6 +98,48 @@ const normalizeVisitType = (value: string | undefined): VisitType => {
   return "未設定";
 };
 
+const parseJstDateTime = (raw: string | undefined): ParsedDateTime | null => {
+  if (!raw) {
+    return null;
+  }
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const [datePart, timePartRaw = "00:00"] = trimmed.split(" ");
+  const [yearStr, monthStr, dayStr] = datePart.split("/");
+  const [hourStr, minuteStr = "00"] = timePartRaw.split(":");
+
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  const hour = Number(hourStr);
+  const minute = Number(minuteStr);
+
+  if (
+    Number.isNaN(year) ||
+    Number.isNaN(month) ||
+    Number.isNaN(day) ||
+    Number.isNaN(hour) ||
+    Number.isNaN(minute)
+  ) {
+    return null;
+  }
+
+  const mm = month.toString().padStart(2, "0");
+  const dd = day.toString().padStart(2, "0");
+  const hh = hour.toString().padStart(2, "0");
+  const mi = minute.toString().padStart(2, "0");
+
+  return {
+    iso: `${year}-${mm}-${dd}T${hh}:${mi}:00+09:00`,
+    dateKey: `${year}-${mm}-${dd}`,
+    monthKey: `${year}-${mm}`,
+    hour,
+  };
+};
+
 const parseCsv = (content: string): Reservation[] => {
   const parsed = Papa.parse<Record<string, string>>(content, {
     header: true,
@@ -113,43 +148,39 @@ const parseCsv = (content: string): Reservation[] => {
   });
 
   if (parsed.errors.length > 0) {
-    throw new Error(parsed.errors[0]?.message ?? "CSV parse error");
+    throw new Error(parsed.errors[0]?.message ?? "CSV parsing error");
   }
 
   const items: Reservation[] = [];
+
   for (const row of parsed.data) {
     const department = row["診療科"]?.trim();
-    const appointmentDateTimeRaw = row["予約日時"];
-    const appointmentDateTime = parseAppointmentDateTime(appointmentDateTimeRaw);
-    if (!department || !appointmentDateTime) {
+    const received = parseJstDateTime(row["受信時刻JST"]);
+    if (!department || !received) {
       continue;
     }
 
     const visitType = normalizeVisitType(row["初再診"]);
-    const formattedDate = `${appointmentDateTime.getFullYear()}-${(
-      appointmentDateTime.getMonth() + 1
-    )
-      .toString()
-      .padStart(2, "0")}-${appointmentDateTime
-      .getDate()
-      .toString()
-      .padStart(2, "0")}`;
+    const appointment = parseJstDateTime(row["予約日時"]);
+    const patientId = row["患者ID"]?.trim() ?? "";
 
     const reservation: Reservation = {
-      department,
-      visitType,
-      appointmentDate: formattedDate,
-      appointmentDateTime: appointmentDateTime.toISOString(),
-      appointmentHour: appointmentDateTime.getHours(),
-      patientId: row["患者ID"]?.trim() ?? "",
-      receivedAt: row["受信時刻JST"]?.trim() ?? "",
-      isSameDay: (row["当日予約"] ?? "").trim().toLowerCase() === "true",
       key: createReservationKey({
         department,
         visitType,
-        appointmentDateTime: appointmentDateTime.toISOString(),
-        patientId: row["患者ID"]?.trim() ?? "",
+        receivedIso: received.iso,
+        patientId,
+        appointmentIso: appointment?.iso ?? null,
       }),
+      department,
+      visitType,
+      reservationDate: received.dateKey,
+      reservationMonth: received.monthKey,
+      reservationHour: received.hour,
+      receivedAtIso: received.iso,
+      appointmentIso: appointment?.iso ?? null,
+      patientId,
+      isSameDay: (row["当日予約"] ?? "").trim().toLowerCase() === "true",
     };
 
     items.push(reservation);
@@ -161,23 +192,14 @@ const parseCsv = (content: string): Reservation[] => {
   }
 
   return Array.from(deduplicated.values()).sort((a, b) =>
-    a.appointmentDateTime.localeCompare(b.appointmentDateTime),
+    a.receivedAtIso.localeCompare(b.receivedAtIso),
   );
 };
 
 const aggregateHourly = (reservations: Reservation[]): HourlyBucket[] => {
-  const map = new Map<number, HourlyBucket>();
-  for (const hour of HOURS) {
-    map.set(hour, {
-      hour: hourLabel(hour),
-      total: 0,
-      初診: 0,
-      再診: 0,
-    });
-  }
-
+  const buckets = createEmptyHourlyBuckets();
   for (const reservation of reservations) {
-    const bucket = map.get(reservation.appointmentHour);
+    const bucket = buckets[reservation.reservationHour];
     if (!bucket) {
       continue;
     }
@@ -186,16 +208,15 @@ const aggregateHourly = (reservations: Reservation[]): HourlyBucket[] => {
       bucket[reservation.visitType] += 1;
     }
   }
-
-  return Array.from(map.values());
+  return buckets;
 };
 
 const aggregateDaily = (reservations: Reservation[]): DailyBucket[] => {
   const counts = new Map<string, number>();
   for (const reservation of reservations) {
     counts.set(
-      reservation.appointmentDate,
-      (counts.get(reservation.appointmentDate) ?? 0) + 1,
+      reservation.reservationDate,
+      (counts.get(reservation.reservationDate) ?? 0) + 1,
     );
   }
 
@@ -207,8 +228,7 @@ const aggregateDaily = (reservations: Reservation[]): DailyBucket[] => {
 const aggregateMonthly = (reservations: Reservation[]): MonthlyBucket[] => {
   const counts = new Map<string, MonthlyBucket>();
   for (const reservation of reservations) {
-    const [year, month] = reservation.appointmentDate.split("-");
-    const key = `${year}-${month}`;
+    const key = reservation.reservationMonth;
     const bucket =
       counts.get(key) ??
       ({
@@ -239,13 +259,13 @@ const aggregateDepartmentHourly = (
 
   for (const reservation of reservations) {
     if (!byDepartment.has(reservation.department)) {
-      byDepartment.set(reservation.department, aggregateHourly([]));
+      byDepartment.set(reservation.department, createEmptyHourlyBuckets());
     }
     const buckets = byDepartment.get(reservation.department);
     if (!buckets) {
       continue;
     }
-    const bucket = buckets[reservation.appointmentHour];
+    const bucket = buckets[reservation.reservationHour];
     bucket.total += 1;
     if (reservation.visitType === "初診" || reservation.visitType === "再診") {
       bucket[reservation.visitType] += 1;
@@ -265,6 +285,59 @@ const tooltipFormatter = (value: unknown, name: string): [string, string] => {
     return [value.toLocaleString("ja-JP"), name];
   }
   return ["0", name];
+};
+
+const formatMonthLabel = (month: string) => {
+  const [year, monthStr] = month.split("-");
+  return `${year}年${Number(monthStr)}月`;
+};
+
+type SectionCardProps = {
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+};
+
+const SectionCard = ({ title, description, action, children }: SectionCardProps) => (
+  <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
+    <header className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+        {description && <p className="text-sm text-slate-500">{description}</p>}
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
+    </header>
+    {children}
+  </section>
+);
+
+const StatCard = ({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "brand" | "accent" | "muted" | "emerald";
+}) => {
+  const toneClass =
+    tone === "brand"
+      ? "text-brand-600"
+      : tone === "accent"
+        ? "text-accent-600"
+        : tone === "emerald"
+          ? "text-emerald-600"
+          : "text-slate-900";
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </dt>
+      <dd className={`mt-2 text-2xl font-bold ${toneClass}`}>{value}</dd>
+    </div>
+  );
 };
 
 export default function HomePage() {
@@ -314,12 +387,12 @@ export default function HomePage() {
   );
 
   const totalReservations = reservations.length;
-  const initialCount = reservations.filter(
-    (item) => item.visitType === "初診",
-  ).length;
-  const followupCount = reservations.filter(
-    (item) => item.visitType === "再診",
-  ).length;
+  const initialCount = reservations.filter((item) => item.visitType === "初診").length;
+  const followupCount = reservations.filter((item) => item.visitType === "再診").length;
+  const departmentCount = useMemo(
+    () => new Set(reservations.map((item) => item.department)).size,
+    [reservations],
+  );
 
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -344,7 +417,7 @@ export default function HomePage() {
       }
 
       const merged = Array.from(mergedMap.values()).sort((a, b) =>
-        a.appointmentDateTime.localeCompare(b.appointmentDateTime),
+        a.receivedAtIso.localeCompare(b.receivedAtIso),
       );
 
       setReservations(merged);
@@ -377,179 +450,126 @@ export default function HomePage() {
   };
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-10">
-      <section className="flex flex-col gap-4 rounded-2xl bg-midnight-900/60 p-6 shadow-lg shadow-midnight-950/60">
-        <header className="flex flex-col gap-2">
-          <h1 className="text-2xl">予約ログ分析ダッシュボード</h1>
-          <p className="text-sm text-midnight-200">
-            CSVをアップロードすると、予約状況が自動で集計されます。直近の集計結果はブラウザに保存され、再訪時にも確認できます。
-          </p>
-        </header>
-        <div className="flex flex-wrap items-center gap-4">
-          <label className="inline-flex cursor-pointer items-center gap-3 rounded-xl bg-midnight-800 px-4 py-3 text-sm font-semibold text-midnight-100 transition hover:bg-midnight-700">
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            CSVを選択
-          </label>
-          <button
-            type="button"
-            onClick={handleReset}
-            className="rounded-xl border border-midnight-700 px-4 py-2 text-sm text-midnight-200 transition hover:bg-midnight-800"
-          >
-            保存内容をリセット
-          </button>
-          {lastUpdated && (
-            <span className="text-xs text-midnight-300">
-              最終更新: {new Date(lastUpdated).toLocaleString("ja-JP")}
-            </span>
-          )}
-        </div>
-        {uploadError && (
-          <p className="rounded-xl border border-red-500/40 bg-red-950/20 px-4 py-3 text-sm text-red-200">
-            {uploadError}
-          </p>
-        )}
-        <dl className="grid grid-cols-1 gap-4 rounded-2xl border border-midnight-800 bg-midnight-900/50 p-4 md:grid-cols-4">
-          <div className="flex flex-col gap-1 rounded-xl bg-midnight-800/40 p-3">
-            <dt className="text-xs text-midnight-300">総予約数</dt>
-            <dd className="text-xl font-semibold text-midnight-50">
-              {totalReservations.toLocaleString("ja-JP")}
-            </dd>
-          </div>
-          <div className="flex flex-col gap-1 rounded-xl bg-midnight-800/40 p-3">
-            <dt className="text-xs text-midnight-300">初診</dt>
-            <dd className="text-xl font-semibold text-cyan-200">
-              {initialCount.toLocaleString("ja-JP")}
-            </dd>
-          </div>
-          <div className="flex flex-col gap-1 rounded-xl bg-midnight-800/40 p-3">
-            <dt className="text-xs text-midnight-300">再診</dt>
-            <dd className="text-xl font-semibold text-emerald-200">
-              {followupCount.toLocaleString("ja-JP")}
-            </dd>
-          </div>
-          <div className="flex flex-col gap-1 rounded-xl bg-midnight-800/40 p-3">
-            <dt className="text-xs text-midnight-300">診療科数</dt>
-            <dd className="text-xl font-semibold text-amber-200">
-              {
-                new Set(reservations.map((item) => item.department)).size
-                  .toLocaleString("ja-JP")
-              }
-            </dd>
-          </div>
-        </dl>
-      </section>
-
-      <section className="grid gap-6 md:grid-cols-2">
-        <article className="flex flex-col gap-4 rounded-2xl border border-midnight-800 bg-midnight-900/60 p-5">
-          <h2 className="text-lg">時間帯別 予約数（全体）</h2>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={overallHourly}>
-                <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
-                <XAxis dataKey="hour" stroke="#b0b8ca" />
-                <YAxis stroke="#b0b8ca" />
-                <Tooltip formatter={tooltipFormatter} />
-                <Legend />
-                <Bar dataKey="total" fill="#60a5fa" name="総数" />
-                <Bar dataKey="初診" fill="#38bdf8" name="初診" />
-                <Bar dataKey="再診" fill="#34d399" name="再診" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </article>
-        <article className="flex flex-col gap-4 rounded-2xl border border-midnight-800 bg-midnight-900/60 p-5">
-          <h2 className="text-lg">日別 予約推移（全体）</h2>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={overallDaily}>
-                <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
-                <XAxis dataKey="date" stroke="#b0b8ca" />
-                <YAxis stroke="#b0b8ca" />
-                <Tooltip formatter={tooltipFormatter} />
-                <Line
-                  type="monotone"
-                  dataKey="total"
-                  stroke="#f97316"
-                  strokeWidth={2}
-                  dot={false}
-                  name="総数"
+    <main className="min-h-screen bg-background">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-12">
+        <section className="relative overflow-hidden rounded-3xl border border-sky-100 bg-gradient-to-r from-white via-sky-50 to-emerald-50 p-8 shadow-card">
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-brand-600">
+                Team Mirai Analytics Suite
+              </p>
+              <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">
+                予約ログ分析ダッシュボード
+              </h1>
+              <p className="max-w-2xl text-sm leading-6 text-slate-600">
+                CSVをアップロードすると、予約受付時刻を基準に初診・再診や診療科別の傾向を自動集計します。
+                集計結果はブラウザに安全に保存され、再訪時も続きから確認できます。
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-600">
+                <Upload className="h-4 w-4" />
+                CSVを選択
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={handleFileUpload}
+                  className="hidden"
                 />
-              </LineChart>
-            </ResponsiveContainer>
+              </label>
+              <button
+                type="button"
+                onClick={handleReset}
+                className="flex items-center justify-center gap-2 rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-brand-200 hover:text-brand-600"
+              >
+                <RefreshCw className="h-4 w-4" />
+                保存内容をリセット
+              </button>
+            </div>
           </div>
-        </article>
-      </section>
-
-      <section className="rounded-2xl border border-midnight-800 bg-midnight-900/60 p-6">
-        <header className="mb-4">
-          <h2 className="text-lg">月次サマリ</h2>
-          <p className="text-xs text-midnight-300">
-            CSVに含まれる予約を月単位で集計しています。
-          </p>
-        </header>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-midnight-800 text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wider text-midnight-300">
-                <th className="px-3 py-2">月</th>
-                <th className="px-3 py-2">総数</th>
-                <th className="px-3 py-2">初診</th>
-                <th className="px-3 py-2">再診</th>
-                <th className="px-3 py-2">当日予約</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-midnight-800">
-              {monthlyOverview.map((row) => (
-                <tr key={row.month} className="hover:bg-midnight-800/40">
-                  <td className="px-3 py-2 font-medium text-midnight-100">
-                    {row.month}
-                  </td>
-                  <td className="px-3 py-2">
-                    {row.total.toLocaleString("ja-JP")}
-                  </td>
-                  <td className="px-3 py-2">
-                    {row["初診"].toLocaleString("ja-JP")}
-                  </td>
-                  <td className="px-3 py-2">
-                    {row["再診"].toLocaleString("ja-JP")}
-                  </td>
-                  <td className="px-3 py-2">
-                    {row["当日予約"].toLocaleString("ja-JP")}
-                  </td>
-                </tr>
-              ))}
-              {monthlyOverview.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-3 py-8 text-center text-midnight-300"
-                  >
-                    集計対象のデータがありません。
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {diffMonthly && diffMonthly.length > 0 && (
-        <section className="rounded-2xl border border-cyan-500/40 bg-cyan-950/20 p-6">
-          <header className="mb-4">
-            <h2 className="text-lg text-cyan-100">最新アップロードの差分</h2>
-            <p className="text-xs text-cyan-200">
-              直近で追加された予約のみを月単位で表示しています。
+          {lastUpdated && (
+            <p className="mt-6 text-xs font-medium text-slate-500">
+              最終更新: {new Date(lastUpdated).toLocaleString("ja-JP")}
             </p>
-          </header>
+          )}
+          {uploadError && (
+            <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {uploadError}
+            </p>
+          )}
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            label="総予約数"
+            value={totalReservations.toLocaleString("ja-JP")}
+            tone="brand"
+          />
+          <StatCard
+            label="初診"
+            value={initialCount.toLocaleString("ja-JP")}
+            tone="brand"
+          />
+          <StatCard
+            label="再診"
+            value={followupCount.toLocaleString("ja-JP")}
+            tone="accent"
+          />
+          <StatCard
+            label="診療科数"
+            value={departmentCount.toLocaleString("ja-JP")}
+            tone="muted"
+          />
+        </section>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <SectionCard title="時間帯別 予約数（受付基準）" description="1時間単位で予約受付が集中する時間帯を可視化します。">
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={overallHourly}>
+                  <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
+                  <XAxis dataKey="hour" stroke="#64748B" />
+                  <YAxis stroke="#64748B" />
+                  <Tooltip formatter={tooltipFormatter} />
+                  <Legend />
+                  <Bar dataKey="total" fill="#3B82F6" name="総数" />
+                  <Bar dataKey="初診" fill="#60A5FA" name="初診" />
+                  <Bar dataKey="再診" fill="#10B981" name="再診" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </SectionCard>
+
+          <SectionCard title="日別 予約推移（受付基準）" description="日ごとの予約受付件数の推移を確認できます。">
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={overallDaily}>
+                  <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
+                  <XAxis dataKey="date" stroke="#64748B" />
+                  <YAxis stroke="#64748B" />
+                  <Tooltip formatter={tooltipFormatter} />
+                  <Line
+                    type="monotone"
+                    dataKey="total"
+                    stroke="#2563EB"
+                    strokeWidth={2}
+                    dot={false}
+                    name="総数"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </SectionCard>
+        </div>
+
+        <SectionCard
+          title="月次サマリ（受付基準）"
+          description="CSVに含まれる予約受付データを月単位で集計しています。"
+        >
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-cyan-800/40 text-sm">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead>
-                <tr className="text-left text-xs uppercase tracking-wider text-cyan-200/90">
+                <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
                   <th className="px-3 py-2">月</th>
                   <th className="px-3 py-2">総数</th>
                   <th className="px-3 py-2">初診</th>
@@ -557,11 +577,11 @@ export default function HomePage() {
                   <th className="px-3 py-2">当日予約</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-cyan-800/30">
-                {diffMonthly.map((row) => (
-                  <tr key={row.month} className="hover:bg-cyan-900/40">
-                    <td className="px-3 py-2 font-medium text-cyan-100">
-                      {row.month}
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {monthlyOverview.map((row) => (
+                  <tr key={row.month} className="hover:bg-slate-50">
+                    <td className="px-3 py-2 font-medium text-slate-900">
+                      {formatMonthLabel(row.month)}
                     </td>
                     <td className="px-3 py-2">
                       {row.total.toLocaleString("ja-JP")}
@@ -577,67 +597,113 @@ export default function HomePage() {
                     </td>
                   </tr>
                 ))}
+                {monthlyOverview.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+                      集計対象のデータがありません。
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
-        </section>
-      )}
+        </SectionCard>
 
-      <section className="flex flex-col gap-4 rounded-2xl border border-midnight-800 bg-midnight-900/60 p-6">
-        <header>
-          <h2 className="text-lg">診療科別 初診・再診の時間帯分布</h2>
-          <p className="text-xs text-midnight-300">
-            診療科ごとに1時間単位で初診・再診の予約数を可視化しています。
-          </p>
-        </header>
-        <div className="flex flex-col gap-6">
-          {departmentHourly.map(({ department, data }) => (
-            <details
-              key={department}
-              className="rounded-xl border border-midnight-800 bg-midnight-900/70 p-4"
-            >
-              <summary className="cursor-pointer list-none text-sm font-semibold text-midnight-100">
-                {department}
-              </summary>
-              <div className="mt-4 h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={data}>
-                    <CartesianGrid
-                      stroke="rgba(255,255,255,0.05)"
-                      vertical={false}
-                    />
-                    <XAxis dataKey="hour" stroke="#b0b8ca" />
-                    <YAxis stroke="#b0b8ca" />
-                    <Tooltip formatter={tooltipFormatter} />
-                    <Legend />
-                    <Line
-                      type="monotone"
-                      dataKey="初診"
-                      stroke="#38bdf8"
-                      strokeWidth={2}
-                      dot={false}
-                      name="初診"
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="再診"
-                      stroke="#34d399"
-                      strokeWidth={2}
-                      dot={false}
-                      name="再診"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </details>
-          ))}
-          {departmentHourly.length === 0 && (
-            <p className="rounded-xl border border-midnight-800 bg-midnight-900/60 px-4 py-6 text-center text-sm text-midnight-300">
-              集計対象のデータがありません。CSVをアップロードしてください。
-            </p>
-          )}
-        </div>
-      </section>
+        {diffMonthly && diffMonthly.length > 0 && (
+          <SectionCard
+            title="最新アップロードの差分"
+            description="直近で追加された予約受付のみを月単位でハイライト表示します。"
+          >
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="px-3 py-2">月</th>
+                    <th className="px-3 py-2">総数</th>
+                    <th className="px-3 py-2">初診</th>
+                    <th className="px-3 py-2">再診</th>
+                    <th className="px-3 py-2">当日予約</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {diffMonthly.map((row) => (
+                    <tr key={row.month} className="hover:bg-emerald-50/60">
+                      <td className="px-3 py-2 font-medium text-emerald-700">
+                        {formatMonthLabel(row.month)}
+                      </td>
+                      <td className="px-3 py-2">
+                        {row.total.toLocaleString("ja-JP")}
+                      </td>
+                      <td className="px-3 py-2">
+                        {row["初診"].toLocaleString("ja-JP")}
+                      </td>
+                      <td className="px-3 py-2">
+                        {row["再診"].toLocaleString("ja-JP")}
+                      </td>
+                      <td className="px-3 py-2">
+                        {row["当日予約"].toLocaleString("ja-JP")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </SectionCard>
+        )}
+
+        <SectionCard
+          title="診療科別の時間帯分布（受付基準）"
+          description="診療科ごとに初診・再診の受付時間帯をラインチャートで比較できます。"
+        >
+          <div className="flex flex-col gap-4">
+            {departmentHourly.map(({ department, data }) => (
+              <details
+                key={department}
+                className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-brand-200"
+              >
+                <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-slate-800 outline-none transition group-open:text-brand-600">
+                  {department}
+                  <span className="text-xs font-medium text-slate-400 group-open:text-brand-400">
+                    詳細を見る
+                  </span>
+                </summary>
+                <div className="mt-4 h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={data}>
+                      <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
+                      <XAxis dataKey="hour" stroke="#64748B" />
+                      <YAxis stroke="#64748B" />
+                      <Tooltip formatter={tooltipFormatter} />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="初診"
+                        stroke="#3B82F6"
+                        strokeWidth={2}
+                        dot={false}
+                        name="初診"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="再診"
+                        stroke="#10B981"
+                        strokeWidth={2}
+                        dot={false}
+                        name="再診"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </details>
+            ))}
+            {departmentHourly.length === 0 && (
+              <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                集計対象のデータがありません。CSVをアップロードしてください。
+              </p>
+            )}
+          </div>
+        </SectionCard>
+      </div>
     </main>
   );
 }

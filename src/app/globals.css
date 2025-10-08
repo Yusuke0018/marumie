@@ -3,20 +3,18 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
-  @apply bg-midnight-950 text-midnight-50;
+  @apply bg-white text-slate-900 font-sans;
   font-feature-settings: "palt";
 }
 
-h1,
-h2,
-h3 {
-  @apply font-semibold text-midnight-100;
+a {
+  @apply text-brand-600 transition-colors hover:text-brand-500;
 }
 
-button {
-  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-midnight-300 focus-visible:ring-offset-2 focus-visible:ring-offset-midnight-950;
+::selection {
+  @apply bg-brand-200 text-slate-900;
 }
