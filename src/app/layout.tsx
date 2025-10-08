@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Noto_Sans_JP } from "next/font/google";
 import type { ReactNode } from "react";
+import Navigation from "@/components/Navigation";
 import "./globals.css";
 
 const notoSans = Noto_Sans_JP({
@@ -21,11 +22,12 @@ export default function RootLayout({
 }: Readonly<{
   children: ReactNode;
 }>) {
-  return (
+return (
     <html lang="ja">
       <body
         className={`${notoSans.variable} min-h-screen bg-white text-slate-900 antialiased`}
       >
+        <Navigation />
         {children}
       </body>
     </html>

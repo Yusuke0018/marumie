@@ -417,9 +417,10 @@ export default function HomePage() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [diffMonthly, setDiffMonthly] = useState<MonthlyBucket[] | null>(null);
-  const [departmentOrder, setDepartmentOrder] = useState<string[]>([]);
+const [departmentOrder, setDepartmentOrder] = useState<string[]>([]);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [expandedDepartment, setExpandedDepartment] = useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
   const [sortMode, setSortMode] = useState<"priority" | "alphabetical" | "volume">(
     "priority",
   );
@@ -448,19 +449,29 @@ useEffect(() => {
     }
   }, []);
 
+const availableMonths = useMemo(() => {
+    const months = new Set(reservations.map(r => r.reservationMonth));
+    return Array.from(months).sort();
+  }, [reservations]);
+
+  const filteredReservations = useMemo(() => {
+    if (selectedMonth === "all") return reservations;
+    return reservations.filter(r => r.reservationMonth === selectedMonth);
+  }, [reservations, selectedMonth]);
+
   const overallHourly = useMemo(
-    () => aggregateHourly(reservations),
-    [reservations],
+    () => aggregateHourly(filteredReservations),
+    [filteredReservations],
   );
 
-  const overallDaily = useMemo(
-    () => aggregateDaily(reservations),
-    [reservations],
+const overallDaily = useMemo(
+    () => aggregateDaily(filteredReservations),
+    [filteredReservations],
   );
 
   const departmentHourly = useMemo(
-    () => aggregateDepartmentHourly(reservations),
-    [reservations],
+    () => aggregateDepartmentHourly(filteredReservations),
+    [filteredReservations],
   );
 
   const sortedDepartmentHourly = useMemo(() => {
@@ -538,17 +549,17 @@ const handleDragEnd = () => {
     }
   };
 
-  const monthlyOverview = useMemo(
+const monthlyOverview = useMemo(
     () => aggregateMonthly(reservations),
     [reservations],
   );
 
-  const totalReservations = reservations.length;
-  const initialCount = reservations.filter((item) => item.visitType === "初診").length;
-  const followupCount = reservations.filter((item) => item.visitType === "再診").length;
-  const departmentCount = useMemo(
-    () => new Set(reservations.map((item) => item.department)).size,
-    [reservations],
+  const totalReservations = filteredReservations.length;
+  const initialCount = filteredReservations.filter((item) => item.visitType === "初診").length;
+  const followupCount = filteredReservations.filter((item) => item.visitType === "再診").length;
+const departmentCount = useMemo(
+    () => new Set(filteredReservations.map((item) => item.department)).size,
+    [filteredReservations],
   );
 
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -655,6 +666,22 @@ const handleDragEnd = () => {
             </p>
           )}
         </section>
+
+{reservations.length > 0 && (
+          <div className="flex items-center gap-4">
+            <label className="text-sm font-semibold text-slate-700">期間:</label>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+            >
+              <option value="all">全期間</option>
+              {availableMonths.map(month => (
+                <option key={month} value={month}>{month}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <StatCard
