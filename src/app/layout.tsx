@@ -1,34 +1,21 @@
 import type { Metadata } from "next";
-import { Geist_Mono, Noto_Sans_JP } from "next/font/google";
+import type { ReactNode } from "react";
 import "./globals.css";
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-const notoSansJp = Noto_Sans_JP({
-  variable: "--font-sans",
-  display: "swap",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "700"],
-});
-
 export const metadata: Metadata = {
-  title: "マルミエ ダッシュボード",
-  description: "医療機関向け統合分析ダッシュボード",
+  title: "Clinic Reservations Analytics",
+  description:
+    "予約ログCSVから診療科ごとの予約傾向を可視化するダッシュボード。",
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: ReactNode;
 }>) {
   return (
     <html lang="ja">
-      <body
-        className={`${notoSansJp.variable} ${geistMono.variable} bg-surface text-muted antialiased`}
-      >
+      <body className="min-h-screen bg-midnight-950 text-midnight-50 antialiased">
         {children}
       </body>
     </html>

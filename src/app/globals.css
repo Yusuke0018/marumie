@@ -1,43 +1,22 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --surface: #f8fafc;
-  --surface-muted: #eef2ff;
-  --surface-card: #ffffff;
-  --primary: #2563eb;
-  --primary-strong: #1d4ed8;
-  --accent: #10b981;
-  --muted: #334155;
-  --text: #0f172a;
-  --border: rgba(15, 23, 42, 0.08);
-}
-
-@theme inline {
-  --color-surface: var(--surface);
-  --color-panel: var(--surface-card);
-  --color-muted: var(--muted);
-  --color-primary: var(--primary);
-  --color-primary-strong: var(--primary-strong);
-  --color-accent: var(--accent);
-  --color-border: var(--border);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
+  color-scheme: dark;
 }
 
 body {
-  background: var(--surface);
-  color: var(--text);
-  font-family: var(--font-sans), "Hiragino Sans", "Yu Gothic", sans-serif;
-  letter-spacing: 0.01em;
+  @apply bg-midnight-950 text-midnight-50;
+  font-feature-settings: "palt";
 }
 
 h1,
 h2,
 h3 {
-  color: var(--text);
-  font-weight: 600;
+  @apply font-semibold text-midnight-100;
 }
 
-p {
-  color: var(--muted);
+button {
+  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-midnight-300 focus-visible:ring-offset-2 focus-visible:ring-offset-midnight-950;
 }
