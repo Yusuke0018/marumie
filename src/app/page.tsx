@@ -310,6 +310,7 @@ type WeekdayBucket = {
   total: number;
   初診: number;
   再診: number;
+  当日予約: number;
 };
 
 type DayTypeBucket = {
@@ -321,22 +322,27 @@ type DayTypeBucket = {
 };
 
 const aggregateByWeekday = (reservations: Reservation[]): WeekdayBucket[] => {
-  const weekdays = ["日曜", "月曜", "火曜", "水曜", "木曜", "金曜", "土曜"];
+  const weekdays = ["日曜", "月曜", "火曜", "水曜", "木曜", "金曜", "土曜", "祝日"];
   const buckets = weekdays.map(weekday => ({
     weekday,
     total: 0,
     初診: 0,
     再診: 0,
+    当日予約: 0,
   }));
 
   for (const reservation of reservations) {
-    const weekdayName = getWeekdayName(reservation.reservationDate);
+    const dayType = getDayType(reservation.reservationDate);
+    const weekdayName = dayType === "祝日" ? "祝日" : getWeekdayName(reservation.reservationDate);
     const bucket = buckets.find(b => b.weekday === weekdayName);
     if (!bucket) continue;
 
     bucket.total += 1;
     if (reservation.visitType === "初診" || reservation.visitType === "再診") {
       bucket[reservation.visitType] += 1;
+    }
+    if (reservation.isSameDay) {
+      bucket["当日予約"] += 1;
     }
   }
 
@@ -924,6 +930,7 @@ ${response.url}`);
                 <Legend />
                 <Bar dataKey="初診" fill="#5DD4C3" name="初診" />
                 <Bar dataKey="再診" fill="#FFB8C8" name="再診" />
+                <Bar dataKey="当日予約" fill="#FFA500" name="当日予約" />
               </BarChart>
             </ResponsiveContainer>
           </div>
