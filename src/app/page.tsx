@@ -78,6 +78,17 @@ const DEPARTMENT_PRIORITIES = [
   "健康診断C",
 ];
 
+const normalizeDepartment = (name: string) =>
+  name.replace(/[（）()]/g, "").replace(/\s+/g, "");
+
+const getPriority = (name: string) => {
+  const normalized = normalizeDepartment(name);
+  const index = DEPARTMENT_PRIORITIES.findIndex((keyword) =>
+    normalized.includes(keyword.replace(/\s+/g, "")),
+  );
+  return index >= 0 ? index : DEPARTMENT_PRIORITIES.length;
+};
+
 const hourLabel = (hour: number) => `${hour.toString().padStart(2, "0")}:00`;
 
 const createEmptyHourlyBuckets = (): HourlyBucket[] =>
@@ -285,10 +296,17 @@ const aggregateMonthly = (reservations: Reservation[]): MonthlyBucket[] => {
   return Array.from(counts.values()).sort((a, b) => a.month.localeCompare(b.month));
 };
 
+type DepartmentHourly = {
+  department: string;
+  data: HourlyBucket[];
+  total: number;
+};
+
 const aggregateDepartmentHourly = (
   reservations: Reservation[],
-): Array<{ department: string; data: HourlyBucket[] }> => {
+): DepartmentHourly[] => {
   const byDepartment = new Map<string, HourlyBucket[]>();
+  const totals = new Map<string, number>();
 
   for (const reservation of reservations) {
     if (!byDepartment.has(reservation.department)) {
@@ -313,31 +331,17 @@ const aggregateDepartmentHourly = (
     if (reservation.visitType === "初診" || reservation.visitType === "再診") {
       bucket[reservation.visitType] += 1;
     }
+    totals.set(
+      reservation.department,
+      (totals.get(reservation.department) ?? 0) + 1,
+    );
   }
 
-  const normalizeDepartment = (name: string) =>
-    name.replace(/[（）()]/g, "").replace(/\s+/g, "");
-
-  const getPriority = (name: string) => {
-    const normalized = normalizeDepartment(name);
-    const index = DEPARTMENT_PRIORITIES.findIndex((keyword) =>
-      normalized.includes(keyword.replace(/\s+/g, "")),
-    );
-    return index >= 0 ? index : DEPARTMENT_PRIORITIES.length;
-  };
-
-  return Array.from(byDepartment.entries())
-    .map(([department, data]) => ({
-      department,
-      data,
-    }))
-    .sort((a, b) => {
-      const priorityDiff = getPriority(a.department) - getPriority(b.department);
-      if (priorityDiff !== 0) {
-        return priorityDiff;
-      }
-      return a.department.localeCompare(b.department, "ja");
-    });
+  return Array.from(byDepartment.entries()).map(([department, data]) => ({
+    department,
+    data,
+    total: totals.get(department) ?? 0,
+  }));
 };
 
 const tooltipFormatter = (value: unknown, name: string): [string, string] => {
@@ -413,6 +417,9 @@ export default function HomePage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [diffMonthly, setDiffMonthly] = useState<MonthlyBucket[] | null>(null);
   const [openDepartment, setOpenDepartment] = useState<string | null>(null);
+  const [sortMode, setSortMode] = useState<"priority" | "alphabetical" | "volume">(
+    "priority",
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -448,6 +455,39 @@ export default function HomePage() {
     () => aggregateDepartmentHourly(reservations),
     [reservations],
   );
+
+  const sortedDepartmentHourly = useMemo(() => {
+    const base = [...departmentHourly];
+    switch (sortMode) {
+      case "alphabetical":
+        base.sort((a, b) => a.department.localeCompare(b.department, "ja"));
+        break;
+      case "volume":
+        base.sort((a, b) => {
+          const diff = b.total - a.total;
+          if (diff !== 0) {
+            return diff;
+          }
+          return a.department.localeCompare(b.department, "ja");
+        });
+        break;
+      case "priority":
+      default:
+        base.sort((a, b) => {
+          const priorityDiff = getPriority(a.department) - getPriority(b.department);
+          if (priorityDiff !== 0) {
+            return priorityDiff;
+          }
+          const diff = b.total - a.total;
+          if (diff !== 0) {
+            return diff;
+          }
+          return a.department.localeCompare(b.department, "ja");
+        });
+        break;
+    }
+    return base;
+  }, [departmentHourly, sortMode]);
 
   const monthlyOverview = useMemo(
     () => aggregateMonthly(reservations),
@@ -726,9 +766,25 @@ export default function HomePage() {
         <SectionCard
           title="診療科別の時間帯分布（受付基準）"
           description="診療科ごとに初診・再診の受付時間帯をラインチャートで比較できます。"
+          action={
+            <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
+              並び替え
+              <select
+                value={sortMode}
+                onChange={(event) =>
+                  setSortMode(event.target.value as typeof sortMode)
+                }
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 shadow-sm focus:border-brand-300 focus:outline-none"
+              >
+                <option value="priority">推奨順</option>
+                <option value="alphabetical">五十音順</option>
+                <option value="volume">予約数順</option>
+              </select>
+            </label>
+          }
         >
           <div className="flex flex-col gap-4">
-            {departmentHourly.map(({ department, data }) => (
+            {sortedDepartmentHourly.map(({ department, data, total }) => (
               <div
                 key={department}
                 className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-brand-200"
@@ -747,6 +803,9 @@ export default function HomePage() {
                     }`}
                   />
                 </button>
+                <p className="mt-1 text-xs text-slate-500">
+                  総予約数: {total.toLocaleString("ja-JP")}
+                </p>
                 {openDepartment === department && (
                   <div className="mt-4 h-72">
                     <ResponsiveContainer width="100%" height="100%">
@@ -778,7 +837,7 @@ export default function HomePage() {
                 )}
               </div>
             ))}
-            {departmentHourly.length === 0 && (
+            {sortedDepartmentHourly.length === 0 && (
               <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
                 集計対象のデータがありません。CSVをアップロードしてください。
               </p>
