@@ -65,38 +65,66 @@ const STORAGE_KEY = "clinic-analytics/reservations/v1";
 const TIMESTAMP_KEY = "clinic-analytics/last-updated/v1";
 const ORDER_KEY = "clinic-analytics/department-order/v1";
 const HOURS = Array.from({ length: 24 }, (_, index) => index);
-const DEPARTMENT_PRIORITIES = [
-  "内科・外科外来（大岩医師）",
-  "内科外来（担当医師）",
-  "発熱・風邪症状外来",
-  "予防接種",
-  "ワクチン予約（インフルエンザ・新型コロナウイルス）",
-  "フルミスト（経鼻インフルエンザワクチン）",
-  "胃カメラ",
-  "大腸カメラ（胃カメラ併用もこちら）",
-  "大腸カメラ（４日以内の直前枠）",
-  "内視鏡ドック",
-  "人間ドックA",
-  "人間ドックB",
-  "健康診断（A,B,特定健診）",
-  "健康診断C",
-  "睡眠ドック",
+
+const RAW_DEPARTMENT_PRIORITIES = [
+  "●内科・外科外来（大岩医師）",
+  "●内科外来（担当医師）",
+  "●発熱・風邪症状外来",
+  "●予防接種",
+  "●ワクチン予約（インフルエンザ・新型コロナウイルス）",
+  "●フルミスト（経鼻インフルエンザワクチン）",
+  "●胃カメラ",
+  "●大腸カメラ（胃カメラ併用もこちら）",
+  "●大腸カメラ（４日以内の直前枠）",
+  "●内視鏡ドック",
+  "●人間ドックA",
+  "●人間ドックB",
+  "●健康診断（A,B,特定健診）",
+  "●健康診断C",
+  "●睡眠ドック",
   "★胃カメラ",
   "企業健診（健診）",
   "企業健診（人間ドック）",
-  "オンライン診療（保険診療その他）",
-  "オンライン診療（AGA/ED）",
+  "●オンライン診療（保険診療その他）",
+  "●オンライン診療（AGA/ED）",
 ];
 
 const normalizeDepartment = (name: string) =>
-  name.replace(/[（）()●]/g, "").replace(/\s+/g, "");
+  name
+    .replace(/[（）()●]/g, "")
+    .replace(/\s+/g, "")
+    .trim();
+
+const DEPARTMENT_PRIORITIES = RAW_DEPARTMENT_PRIORITIES.map((label) =>
+  label.replace(/^●\s*/, "").trim(),
+);
+
+const DEPARTMENT_PRIORITY_LOOKUP = new Map<string, number>();
+DEPARTMENT_PRIORITIES.forEach((label, index) => {
+  const normalized = normalizeDepartment(label);
+  if (!DEPARTMENT_PRIORITY_LOOKUP.has(normalized)) {
+    DEPARTMENT_PRIORITY_LOOKUP.set(normalized, index);
+  }
+});
 
 const getPriority = (name: string) => {
   const normalized = normalizeDepartment(name);
-  const index = DEPARTMENT_PRIORITIES.findIndex((keyword) =>
-    normalized.includes(keyword.replace(/\s+/g, "")),
-  );
-  return index >= 0 ? index : DEPARTMENT_PRIORITIES.length;
+  const directMatch = DEPARTMENT_PRIORITY_LOOKUP.get(normalized);
+  if (directMatch !== undefined) {
+    return directMatch;
+  }
+
+  for (let index = 0; index < DEPARTMENT_PRIORITIES.length; index++) {
+    const keywordNormalized = normalizeDepartment(DEPARTMENT_PRIORITIES[index]);
+    if (
+      keywordNormalized.length > 0 &&
+      (normalized.includes(keywordNormalized) || keywordNormalized.includes(normalized))
+    ) {
+      return index;
+    }
+  }
+
+  return DEPARTMENT_PRIORITIES.length;
 };
 
 const hourLabel = (hour: number) => `${hour.toString().padStart(2, "0")}:00`;
