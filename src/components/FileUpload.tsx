@@ -16,9 +16,23 @@ import {
   ParseResult,
   ListingRecord,
   SurveyRecord,
-  ReservationRecord
+  ReservationRecord,
+  ParseError,
+  ParseWarning
 } from '../types/dataTypes';
+import { parseSnapshotJson } from '../utils/snapshotUtils';
 import './FileUpload.css';
+
+const SNAPSHOT_DATASET_KEYS = [
+  'listingInternal',
+  'listingGastroscopy',
+  'listingColonoscopy',
+  'reservations',
+  'surveyOutpatient',
+  'surveyEndoscopy'
+] as const;
+
+type SnapshotDatasetKey = typeof SNAPSHOT_DATASET_KEYS[number];
 
 type FileType =
   | 'listing-internal'
@@ -26,13 +40,14 @@ type FileType =
   | 'listing-colonoscopy'
   | 'reservations'
   | 'survey-outpatient'
-  | 'survey-endoscopy';
+  | 'survey-endoscopy'
+  | 'snapshot';
 
-type FileCategory = 'listing' | 'reservation' | 'survey';
+type FileCategory = 'listing' | 'reservation' | 'survey' | 'snapshot';
 
 interface UploadStatus {
   type: FileType;
-  status: 'idle' | 'loading' | 'success' | 'error';
+  status: 'idle' | 'loading' | 'success' | 'error' | 'warning';
   message?: string;
   errorCount?: number;
   warningCount?: number;
@@ -44,6 +59,7 @@ interface FileConfig {
   subtitle: string;
   helper?: string;
   category: FileCategory;
+  accept?: string;
 }
 
 const FILE_CONFIGS: FileConfig[] = [
@@ -83,16 +99,25 @@ const FILE_CONFIGS: FileConfig[] = [
     title: 'アンケート調査 - 内視鏡',
     subtitle: 'チャネル別流入データ',
     category: 'survey'
+  },
+  {
+    type: 'snapshot',
+    title: '保存データ復元',
+    subtitle: 'JSONスナップショットから一括復元します',
+    helper: '例: marumie_data_20251015.json',
+    category: 'snapshot',
+    accept: '.json'
   }
 ];
 
 const CATEGORY_LABELS: Record<FileCategory, string> = {
   listing: 'リスティング広告データ',
   reservation: '予約ログデータ',
-  survey: 'アンケート調査データ'
+  survey: 'アンケート調査データ',
+  snapshot: '復元オプション'
 };
 
-const categoryOrder: FileCategory[] = ['listing', 'reservation', 'survey'];
+const categoryOrder: FileCategory[] = ['listing', 'reservation', 'survey', 'snapshot'];
 
 function createInitialStatuses(): Record<FileType, UploadStatus> {
   return FILE_CONFIGS.reduce((acc, config) => {
@@ -109,7 +134,10 @@ export function FileUpload() {
     setSurveyOutpatient,
     setSurveyEndoscopy,
     setReservations,
-    setIsLoading
+    setIsLoading,
+    restoreSnapshot,
+    persistSnapshot,
+    autoRestoreEnabled
   } = useData();
 
   const [statuses, setStatuses] = useState<Record<FileType, UploadStatus>>(createInitialStatuses());
@@ -120,7 +148,8 @@ export function FileUpload() {
     'listing-colonoscopy': useRef(null),
     reservations: useRef(null),
     'survey-outpatient': useRef(null),
-    'survey-endoscopy': useRef(null)
+    'survey-endoscopy': useRef(null),
+    snapshot: useRef(null)
   };
 
   const handleFileSelect = async (type: FileType, file: File) => {
@@ -132,6 +161,76 @@ export function FileUpload() {
 
     try {
       const text = await file.text();
+
+      if (type === 'snapshot') {
+        const snapshot = parseSnapshotJson(text);
+        const counts = restoreSnapshot(snapshot);
+        persistSnapshot(snapshot, autoRestoreEnabled);
+
+        const parsedDate = snapshot.savedAt ? new Date(snapshot.savedAt) : new Date();
+        const errorsMap = snapshot.errors as Record<SnapshotDatasetKey, ParseError[]>;
+        const warningsMap = snapshot.warnings as Record<SnapshotDatasetKey, ParseWarning[]>;
+        const warningTotal = SNAPSHOT_DATASET_KEYS.reduce(
+          (sum, key) => sum + (warningsMap[key]?.length ?? 0),
+          0
+        );
+
+        setStatuses(prev => {
+          const next = { ...prev };
+          next.snapshot = {
+            type: 'snapshot',
+            status: 'success',
+            message: `保存日時: ${parsedDate.toLocaleString('ja-JP', { hour12: false })}`,
+            errorCount: 0,
+            warningCount: warningTotal
+          };
+
+          const datasetMap: Array<{
+            type: Exclude<FileType, 'snapshot'>;
+            key: SnapshotDatasetKey;
+            count: number;
+          }> = [
+            { type: 'listing-internal', key: 'listingInternal', count: counts.listingInternal },
+            { type: 'listing-gastroscopy', key: 'listingGastroscopy', count: counts.listingGastroscopy },
+            { type: 'listing-colonoscopy', key: 'listingColonoscopy', count: counts.listingColonoscopy },
+            { type: 'reservations', key: 'reservations', count: counts.reservations },
+            { type: 'survey-outpatient', key: 'surveyOutpatient', count: counts.surveyOutpatient },
+            { type: 'survey-endoscopy', key: 'surveyEndoscopy', count: counts.surveyEndoscopy }
+          ];
+
+          datasetMap.forEach(item => {
+            const errorCount = errorsMap[item.key]?.length ?? 0;
+            const warningCount = warningsMap[item.key]?.length ?? 0;
+
+            let status: UploadStatus['status'] = 'idle';
+            if (errorCount > 0) {
+              status = 'error';
+            } else if (item.count > 0) {
+              status = 'success';
+            } else if (warningCount > 0) {
+              status = 'warning';
+            }
+
+            const message =
+              item.count > 0
+                ? `${item.count}件を復元しました`
+                : errorCount > 0
+                  ? errorsMap[item.key]?.[0]?.message ?? 'エラーが発生しました'
+                  : 'データ未読み込み';
+
+            next[item.type] = {
+              type: item.type,
+              status,
+              message,
+              errorCount,
+              warningCount
+            };
+          });
+
+          return next;
+        });
+        return;
+      }
 
       let result: ParseResult<unknown>;
 
@@ -180,7 +279,7 @@ export function FileUpload() {
           ...prev,
           [type]: {
             type,
-            status: 'success',
+            status: result.warnings.length > 0 ? 'warning' : 'success',
             message: `${result.data.length}件のデータを読み込みました`,
             errorCount: result.errors.length,
             warningCount: result.warnings.length
@@ -206,6 +305,7 @@ export function FileUpload() {
     if (file) {
       handleFileSelect(type, file);
     }
+    event.target.value = '';
   };
 
   const getStatusIcon = (status: UploadStatus['status']) => {
@@ -213,6 +313,7 @@ export function FileUpload() {
       case 'loading': return '⏳';
       case 'success': return '✅';
       case 'error': return '❌';
+      case 'warning': return '⚠️';
       default: return '📄';
     }
   };
@@ -225,7 +326,7 @@ export function FileUpload() {
     <div className="file-upload-container">
       <h2>CSVファイル読み込み</h2>
       <p className="upload-description">
-        各種CSVファイルを選択してください。2025-10-02以降のデータが解析対象になります。
+        各種CSVファイル、または保存済みJSONを選択してください。2025-10-02以降のデータが解析対象になります。
       </p>
 
       <div className="upload-grid">
@@ -254,7 +355,7 @@ export function FileUpload() {
                       <input
                         ref={fileInputRefs[config.type]}
                         type="file"
-                        accept=".csv"
+                        accept={config.accept ?? '.csv'}
                         onChange={(e) => handleFileChange(config.type, e)}
                         className="file-input"
                         id={`file-${config.type}`}
@@ -268,7 +369,7 @@ export function FileUpload() {
                       {status.errorCount && status.errorCount > 0 && (
                         <p className="upload-error">❗ {status.errorCount}件のエラー</p>
                       )}
-                      {status.warningCount && status.warningCount > 0 && (
+                      {status.warningCount && status.warningCount > 0 && status.errorCount === 0 && (
                         <p className="upload-warning">⚠️ {status.warningCount}件の警告</p>
                       )}
                     </div>

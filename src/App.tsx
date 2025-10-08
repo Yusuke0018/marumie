@@ -7,6 +7,7 @@ import { ReservationView } from './components/ReservationView';
 import { CorrelationView } from './components/CorrelationView';
 import { HelpCenter } from './components/HelpCenter';
 import { DataStatusSummary } from './components/DataStatusSummary';
+import { ActionPanel } from './components/ActionPanel';
 import './App.css';
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
               <div className="hero-controls">
                 <MonthFilter />
                 <DataStatusSummary />
+                <ActionPanel />
               </div>
             </div>
             <div className="hero-highlights">

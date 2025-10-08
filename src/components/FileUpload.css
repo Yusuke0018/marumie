@@ -66,6 +66,10 @@
   border-color: #e74c3c;
 }
 
+.upload-card-warning {
+  border-color: #f39c12;
+}
+
 @keyframes pulse {
   0%, 100% {
     opacity: 1;

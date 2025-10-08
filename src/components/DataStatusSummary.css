@@ -63,6 +63,11 @@
   opacity: 0.85;
 }
 
+.status-pill__detail {
+  opacity: 0.75;
+  font-size: 0.72rem;
+}
+
 .status-pill-idle {
   border-color: rgba(255, 255, 255, 0.2);
 }
