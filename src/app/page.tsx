@@ -9,6 +9,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  DefaultLegendContent,
   Legend,
   Line,
   LineChart,
@@ -16,6 +17,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  type LegendProps,
 } from "recharts";
 
 type VisitType = "初診" | "再診" | "未設定";
@@ -101,6 +103,29 @@ const createEmptyHourlyBuckets = (): HourlyBucket[] =>
     初診: 0,
     再診: 0,
   }));
+
+const VISIT_LEGEND_ORDER = ["初診", "再診", "当日予約"];
+
+const sortLegendPayload = (
+  payload: NonNullable<LegendProps["payload"]>,
+) => {
+  return [...payload].sort((a, b) => {
+    const indexOf = (entry: (typeof payload)[number]) => {
+      const label = `${entry.value ?? entry.dataKey ?? ""}`;
+      const orderIndex = VISIT_LEGEND_ORDER.indexOf(label);
+      return orderIndex === -1 ? VISIT_LEGEND_ORDER.length : orderIndex;
+    };
+    return indexOf(a) - indexOf(b);
+  });
+};
+
+const VisitLegend = (props: LegendProps) => {
+  if (!props.payload) {
+    return null;
+  }
+
+  return <DefaultLegendContent {...props} payload={sortLegendPayload(props.payload)} />;
+};
 
 const createReservationKey = (payload: {
   department: string;
@@ -933,7 +958,7 @@ ${response.url}`);
                     return order[item.name as keyof typeof order] ?? 999;
                   }}
                 />
-                <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                <Legend wrapperStyle={{ paddingTop: "10px" }} content={<VisitLegend />} />
                 <Bar dataKey="初診" fill="#5DD4C3" name="初診" />
                 <Bar dataKey="再診" fill="#FFB8C8" name="再診" />
                 <Bar dataKey="当日予約" fill="#FFA500" name="当日予約" />
@@ -1006,7 +1031,7 @@ ${response.url}`);
                     return order[item.name as keyof typeof order] ?? 999;
                   }}
                 />
-                <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                <Legend wrapperStyle={{ paddingTop: "10px" }} content={<VisitLegend />} />
                 <Bar dataKey="初診" fill="#5DD4C3" name="初診" />
                 <Bar dataKey="再診" fill="#FFB8C8" name="再診" />
               </BarChart>
@@ -1263,7 +1288,7 @@ ${response.url}`);
                       return order[item.name as keyof typeof order] ?? 999;
                     }}
                   />
-                  <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                  <Legend wrapperStyle={{ paddingTop: "10px" }} content={<VisitLegend />} />
                   <Line
                     type="monotone"
                     dataKey="初診"
