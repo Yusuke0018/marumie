@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { ChevronDown, RefreshCw, Upload } from "lucide-react";
+import { RefreshCw, Upload } from "lucide-react";
 import Papa from "papaparse";
 import {
   Bar,
@@ -416,7 +416,8 @@ export default function HomePage() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [diffMonthly, setDiffMonthly] = useState<MonthlyBucket[] | null>(null);
-  const [openDepartment, setOpenDepartment] = useState<string | null>(null);
+  const [departmentOrder, setDepartmentOrder] = useState<string[]>([]);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [sortMode, setSortMode] = useState<"priority" | "alphabetical" | "volume">(
     "priority",
   );
@@ -488,6 +489,45 @@ export default function HomePage() {
     }
     return base;
   }, [departmentHourly, sortMode]);
+
+  const displayedDepartments = useMemo(() => {
+    if (departmentOrder.length === 0) {
+      return sortedDepartmentHourly;
+    }
+    const orderMap = new Map(departmentOrder.map((dept, idx) => [dept, idx]));
+    return [...sortedDepartmentHourly].sort((a, b) => {
+      const aIndex = orderMap.get(a.department) ?? 9999;
+      const bIndex = orderMap.get(b.department) ?? 9999;
+      return aIndex - bIndex;
+    });
+  }, [sortedDepartmentHourly, departmentOrder]);
+
+  useEffect(() => {
+    if (sortedDepartmentHourly.length > 0 && departmentOrder.length === 0) {
+      setDepartmentOrder(sortedDepartmentHourly.map(d => d.department));
+    }
+  }, [sortedDepartmentHourly, departmentOrder.length]);
+
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+    
+    const newOrder = [...departmentOrder];
+    const draggedItem = newOrder[draggedIndex];
+    newOrder.splice(draggedIndex, 1);
+    newOrder.splice(index, 0, draggedItem);
+    
+    setDepartmentOrder(newOrder);
+    setDraggedIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+  };
 
   const monthlyOverview = useMemo(
     () => aggregateMonthly(reservations),
@@ -783,38 +823,43 @@ export default function HomePage() {
             </label>
           }
         >
-          <div className="flex flex-col gap-4">
-            {sortedDepartmentHourly.map(({ department, data, total }) => (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {displayedDepartments.map(({ department, data, total }, index) => (
               <div
                 key={department}
-                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-brand-200"
+                draggable
+                onDragStart={() => handleDragStart(index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDragEnd={handleDragEnd}
+                className={`aspect-square cursor-move rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-brand-400 ${
+                  draggedIndex === index ? "opacity-50" : ""
+                }`}
               >
-                <button
-                  type="button"
-                  onClick={() =>
-                    setOpenDepartment((prev) => (prev === department ? null : department))
-                  }
-                  className="flex w-full items-center justify-between text-left text-sm font-semibold text-slate-800 outline-none transition hover:text-brand-600"
-                >
-                  <span>{department}</span>
-                  <ChevronDown
-                    className={`h-4 w-4 transition-transform ${
-                      openDepartment === department ? "rotate-180 text-brand-500" : ""
-                    }`}
-                  />
-                </button>
-                <p className="mt-1 text-xs text-slate-500">
-                  総予約数: {total.toLocaleString("ja-JP")}
-                </p>
-                {openDepartment === department && (
-                  <div className="mt-4 h-72">
+                <div className="flex h-full flex-col">
+                  <div className="mb-2 flex items-start justify-between">
+                    <h3 className="text-sm font-semibold text-slate-800 line-clamp-2">
+                      {department}
+                    </h3>
+                  </div>
+                  <p className="mb-3 text-xs text-slate-500">
+                    総予約数: {total.toLocaleString("ja-JP")}
+                  </p>
+                  <div className="flex-1 min-h-0">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={data}>
-                        <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
-                        <XAxis dataKey="hour" stroke="#64748B" />
-                        <YAxis stroke="#64748B" />
-                        <Tooltip formatter={tooltipFormatter} />
-                        <Legend />
+                        <CartesianGrid stroke="rgba(148, 163, 184, 0.15)" vertical={false} />
+                        <XAxis 
+                          dataKey="hour" 
+                          stroke="#94A3B8" 
+                          tick={{ fontSize: 10 }}
+                          interval="preserveStartEnd"
+                        />
+                        <YAxis 
+                          stroke="#94A3B8" 
+                          tick={{ fontSize: 10 }}
+                          width={30}
+                        />
+                        <Tooltip formatter={tooltipFormatter} contentStyle={{ fontSize: 12 }} />
                         <Line
                           type="monotone"
                           dataKey="初診"
@@ -834,11 +879,11 @@ export default function HomePage() {
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-                )}
+                </div>
               </div>
             ))}
-            {sortedDepartmentHourly.length === 0 && (
-              <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+            {displayedDepartments.length === 0 && (
+              <p className="col-span-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
                 集計対象のデータがありません。CSVをアップロードしてください。
               </p>
             )}
