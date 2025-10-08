@@ -66,24 +66,30 @@ const TIMESTAMP_KEY = "clinic-analytics/last-updated/v1";
 const ORDER_KEY = "clinic-analytics/department-order/v1";
 const HOURS = Array.from({ length: 24 }, (_, index) => index);
 const DEPARTMENT_PRIORITIES = [
-  "内科外科外来",
-  "内科外来",
-  "発熱外来",
+  "内科・外科外来（大岩医師）",
+  "内科外来（担当医師）",
+  "発熱・風邪症状外来",
+  "予防接種",
+  "ワクチン予約（インフルエンザ・新型コロナウイルス）",
+  "フルミスト（経鼻インフルエンザワクチン）",
   "胃カメラ",
-  "人間ドックA",
-  "大腸カメラ",
-  "人間ドックB",
+  "大腸カメラ（胃カメラ併用もこちら）",
+  "大腸カメラ（４日以内の直前枠）",
   "内視鏡ドック",
+  "人間ドックA",
+  "人間ドックB",
+  "健康診断（A,B,特定健診）",
+  "健康診断C",
+  "睡眠ドック",
+  "★胃カメラ",
+  "企業健診（健診）",
+  "企業健診（人間ドック）",
   "オンライン診療（保険診療その他）",
   "オンライン診療（AGA/ED）",
-  "健康診断（A",
-  "健康診断（B",
-  "特定健診",
-  "健康診断C",
 ];
 
 const normalizeDepartment = (name: string) =>
-  name.replace(/[（）()]/g, "").replace(/\s+/g, "");
+  name.replace(/[（）()●]/g, "").replace(/\s+/g, "");
 
 const getPriority = (name: string) => {
   const normalized = normalizeDepartment(name);
