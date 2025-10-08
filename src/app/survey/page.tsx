@@ -25,6 +25,7 @@ type SurveyData = {
   youtube: number;
   libertyCity: number;
   aiSearch: number;
+  fileType: "外来" | "内視鏡";
 };
 
 
@@ -50,7 +51,7 @@ const CHANNEL_LABELS: Record<string, string> = {
   aiSearch: "AI検索",
 };
 
-const parseSurveyCSV = (content: string): SurveyData[] => {
+const parseSurveyCSV = (content: string, fileType: "外来" | "内視鏡"): SurveyData[] => {
   const parsed = Papa.parse<string[]>(content, {
     skipEmptyLines: true,
   });
@@ -82,6 +83,7 @@ const parseSurveyCSV = (content: string): SurveyData[] => {
       youtube: Number(row[8]) || 0,
       libertyCity: Number(row[9]) || 0,
       aiSearch: Number(row[10]) || 0,
+      fileType,
     });
   }
 
@@ -115,12 +117,19 @@ export default function SurveyPage() {
     return Array.from(months).sort();
   }, [surveyData]);
 
-  const filteredData = useMemo(() => {
-    if (selectedMonth === "all") return surveyData;
-    return surveyData.filter(d => d.month === selectedMonth);
+  const gairaiData = useMemo(() => {
+    const data = surveyData.filter(d => d.fileType === "外来");
+    if (selectedMonth === "all") return data;
+    return data.filter(d => d.month === selectedMonth);
   }, [surveyData, selectedMonth]);
 
-  const chartData = useMemo(() => {
+  const naishikyoData = useMemo(() => {
+    const data = surveyData.filter(d => d.fileType === "内視鏡");
+    if (selectedMonth === "all") return data;
+    return data.filter(d => d.month === selectedMonth);
+  }, [surveyData, selectedMonth]);
+
+  const gairaiChartData = useMemo(() => {
     const totals: Record<string, number> = {
       googleSearch: 0,
       yahooSearch: 0,
@@ -134,20 +143,49 @@ export default function SurveyPage() {
       aiSearch: 0,
     };
 
-    for (const item of filteredData) {
+    for (const item of gairaiData) {
       Object.keys(totals).forEach(key => {
         totals[key] += item[key as keyof SurveyData] as number;
       });
     }
 
-return Object.entries(totals)
+    return Object.entries(totals)
       .filter(([, value]) => value > 0)
       .map(([key, value]) => ({
         name: CHANNEL_LABELS[key] || key,
         value,
       }))
       .sort((a, b) => b.value - a.value);
-  }, [filteredData]);
+  }, [gairaiData]);
+
+  const naishikyoChartData = useMemo(() => {
+    const totals: Record<string, number> = {
+      googleSearch: 0,
+      yahooSearch: 0,
+      googleMap: 0,
+      signboard: 0,
+      medicalReferral: 0,
+      friendReferral: 0,
+      flyer: 0,
+      youtube: 0,
+      libertyCity: 0,
+      aiSearch: 0,
+    };
+
+    for (const item of naishikyoData) {
+      Object.keys(totals).forEach(key => {
+        totals[key] += item[key as keyof SurveyData] as number;
+      });
+    }
+
+    return Object.entries(totals)
+      .filter(([, value]) => value > 0)
+      .map(([key, value]) => ({
+        name: CHANNEL_LABELS[key] || key,
+        value,
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [naishikyoData]);
 
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -159,22 +197,18 @@ return Object.entries(totals)
       
       for (const file of Array.from(files)) {
         const text = await file.text();
-        const parsed = parseSurveyCSV(text);
+        
+        // ファイル名から種類を判定
+        const fileType = file.name.includes("内視鏡") ? "内視鏡" : "外来";
+        const parsed = parseSurveyCSV(text, fileType);
         allData.push(...parsed);
       }
       
-      // Remove duplicates by date and merge data
+      // 重複排除（日付+種類でユニーク）
       const uniqueData = allData.reduce((acc, curr) => {
-        const exists = acc.find(item => item.date === curr.date);
+        const exists = acc.find(item => item.date === curr.date && item.fileType === curr.fileType);
         if (!exists) {
           acc.push(curr);
-        } else {
-          // Merge data for same date
-          Object.keys(curr).forEach(key => {
-            if (key !== 'date' && key !== 'month') {
-              (exists[key as keyof SurveyData] as number) += (curr[key as keyof SurveyData] as number);
-            }
-          });
         }
         return acc;
       }, [] as SurveyData[]);
@@ -204,7 +238,7 @@ return Object.entries(totals)
     setSelectedMonth("all");
   };
 
-  const totalResponses = chartData.reduce((sum, item) => sum + item.value, 0);
+
 
   return (
     <main className="min-h-screen bg-background">
@@ -270,79 +304,172 @@ return Object.entries(totals)
               </select>
             </div>
 
-            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold text-slate-900">来院経路の内訳</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  総回答数: {totalResponses.toLocaleString("ja-JP")}件
-                </p>
-              </div>
-              <div className="h-[500px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={chartData}
-                      cx="35%"
-                      cy="50%"
-                      labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
-                      label={(props: PieLabelRenderProps) => {
-                        const RADIAN = Math.PI / 180;
-                        const radius = (props.outerRadius as number) + 30;
-                        const x = (props.cx as number) + radius * Math.cos(-(props.midAngle as number) * RADIAN);
-                        const y = (props.cy as number) + radius * Math.sin(-(props.midAngle as number) * RADIAN);
-                        
-                        return (
-                          <text
-                            x={x}
-                            y={y}
-                            fill="#334155"
-                            textAnchor={x > (props.cx as number) ? 'start' : 'end'}
-                            dominantBaseline="central"
-                            fontSize={13}
-                            fontWeight={500}
-                          >
-                            {`${props.name}: ${props.value}件`}
-                          </text>
-                        );
-                      }}
-                      outerRadius={100}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {chartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value: number) => [value.toLocaleString("ja-JP"), "回答数"]} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </section>
+            {gairaiChartData.length > 0 && (
+              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
+                <div className="mb-4">
+                  <h2 className="text-lg font-semibold text-slate-900">外来 - 来院経路の内訳</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    総回答数: {gairaiChartData.reduce((sum, item) => sum + item.value, 0).toLocaleString("ja-JP")}件
+                  </p>
+                </div>
+                <div className="h-[600px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={gairaiChartData}
+                        cx="35%"
+                        cy="50%"
+                        labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
+                        label={(props: PieLabelRenderProps) => {
+                          const RADIAN = Math.PI / 180;
+                          const radius = (props.outerRadius as number) + 35;
+                          const x = (props.cx as number) + radius * Math.cos(-(props.midAngle as number) * RADIAN);
+                          const y = (props.cy as number) + radius * Math.sin(-(props.midAngle as number) * RADIAN);
+                          
+                          return (
+                            <text
+                              x={x}
+                              y={y}
+                              fill="#334155"
+                              textAnchor={x > (props.cx as number) ? 'start' : 'end'}
+                              dominantBaseline="central"
+                              fontSize={12}
+                              fontWeight={500}
+                            >
+                              {`${props.name}: ${props.value}件`}
+                            </text>
+                          );
+                        }}
+                        outerRadius={120}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {gairaiChartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value: number) => [value.toLocaleString("ja-JP"), "回答数"]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </section>
+            )}
+
+            {naishikyoChartData.length > 0 && (
+              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
+                <div className="mb-4">
+                  <h2 className="text-lg font-semibold text-slate-900">内視鏡 - 来院経路の内訳</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    総回答数: {naishikyoChartData.reduce((sum, item) => sum + item.value, 0).toLocaleString("ja-JP")}件
+                  </p>
+                </div>
+                <div className="h-[600px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={naishikyoChartData}
+                        cx="35%"
+                        cy="50%"
+                        labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
+                        label={(props: PieLabelRenderProps) => {
+                          const RADIAN = Math.PI / 180;
+                          const radius = (props.outerRadius as number) + 35;
+                          const x = (props.cx as number) + radius * Math.cos(-(props.midAngle as number) * RADIAN);
+                          const y = (props.cy as number) + radius * Math.sin(-(props.midAngle as number) * RADIAN);
+                          
+                          return (
+                            <text
+                              x={x}
+                              y={y}
+                              fill="#334155"
+                              textAnchor={x > (props.cx as number) ? 'start' : 'end'}
+                              dominantBaseline="central"
+                              fontSize={12}
+                              fontWeight={500}
+                            >
+                              {`${props.name}: ${props.value}件`}
+                            </text>
+                          );
+                        }}
+                        outerRadius={120}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {naishikyoChartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value: number) => [value.toLocaleString("ja-JP"), "回答数"]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </section>
+            )}
 
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
               <h2 className="mb-4 text-lg font-semibold text-slate-900">詳細データ</h2>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200 text-sm">
-                  <thead>
-                    <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                      <th className="px-3 py-2">チャネル</th>
-                      <th className="px-3 py-2">回答数</th>
-                      <th className="px-3 py-2">割合</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {chartData.map((item) => (
-                      <tr key={item.name} className="hover:bg-slate-50">
-                        <td className="px-3 py-2 font-medium text-slate-900">{item.name}</td>
-                        <td className="px-3 py-2">{item.value.toLocaleString("ja-JP")}</td>
-                        <td className="px-3 py-2">
-                          {((item.value / totalResponses) * 100).toFixed(1)}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              
+              {gairaiChartData.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="mb-3 text-sm font-semibold text-brand-600">外来</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-slate-200 text-sm">
+                      <thead>
+                        <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                          <th className="px-3 py-2">チャネル</th>
+                          <th className="px-3 py-2">回答数</th>
+                          <th className="px-3 py-2">割合</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {gairaiChartData.map((item) => {
+                          const total = gairaiChartData.reduce((sum, i) => sum + i.value, 0);
+                          return (
+                            <tr key={item.name} className="hover:bg-slate-50">
+                              <td className="px-3 py-2 font-medium text-slate-900">{item.name}</td>
+                              <td className="px-3 py-2">{item.value.toLocaleString("ja-JP")}</td>
+                              <td className="px-3 py-2">
+                                {((item.value / total) * 100).toFixed(1)}%
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {naishikyoChartData.length > 0 && (
+                <div>
+                  <h3 className="mb-3 text-sm font-semibold text-brand-600">内視鏡</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-slate-200 text-sm">
+                      <thead>
+                        <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                          <th className="px-3 py-2">チャネル</th>
+                          <th className="px-3 py-2">回答数</th>
+                          <th className="px-3 py-2">割合</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {naishikyoChartData.map((item) => {
+                          const total = naishikyoChartData.reduce((sum, i) => sum + i.value, 0);
+                          return (
+                            <tr key={item.name} className="hover:bg-slate-50">
+                              <td className="px-3 py-2 font-medium text-slate-900">{item.name}</td>
+                              <td className="px-3 py-2">{item.value.toLocaleString("ja-JP")}</td>
+                              <td className="px-3 py-2">
+                                {((item.value / total) * 100).toFixed(1)}%
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </section>
           </>
         )}

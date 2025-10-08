@@ -153,6 +153,55 @@ export default function CorrelationPage() {
     return filtered;
   }, [reservations, selectedCategory, selectedMonth]);
 
+  const dailyData = useMemo(() => {
+    // 日付ごとにデータを集計
+    const dateMap = new Map<string, { cvByHour: number[]; reservationsByHour: number[]; date: string }>();
+    
+    currentListingData.forEach(day => {
+      if (!dateMap.has(day.date)) {
+        dateMap.set(day.date, {
+          date: day.date,
+          cvByHour: Array(24).fill(0),
+          reservationsByHour: Array(24).fill(0)
+        });
+      }
+      const entry = dateMap.get(day.date)!;
+      day.hourlyCV.forEach((cv, hour) => {
+        entry.cvByHour[hour] += cv;
+      });
+    });
+    
+    currentReservations.forEach(reservation => {
+      // 予約の年月日を取得（reservationMonthはYYYY/MM形式）
+      const resMonth = reservation.reservationMonth.replace('/', '-');
+      // その月のすべての日付に対して予約を振り分け
+      for (const [date, entry] of dateMap.entries()) {
+        if (date.startsWith(resMonth)) {
+          entry.reservationsByHour[reservation.reservationHour]++;
+        }
+      }
+    });
+    
+    // 各日付の相関係数を計算
+    const dailyCorrelations: { date: string; correlation: number; cvTotal: number; resTotal: number }[] = [];
+    
+    for (const entry of dateMap.values()) {
+      const cvTotal = entry.cvByHour.reduce((a, b) => a + b, 0);
+      const resTotal = entry.reservationsByHour.reduce((a, b) => a + b, 0);
+      
+      if (cvTotal > 0 && resTotal > 0) {
+        // 正規化（割合化）
+        const cvRatio = entry.cvByHour.map(v => cvTotal > 0 ? (v / cvTotal) * 100 : 0);
+        const resRatio = entry.reservationsByHour.map(v => resTotal > 0 ? (v / resTotal) * 100 : 0);
+        
+        const corr = calculateCorrelation(cvRatio, resRatio);
+        dailyCorrelations.push({ date: entry.date, correlation: corr, cvTotal, resTotal });
+      }
+    }
+    
+    return dailyCorrelations.sort((a, b) => a.date.localeCompare(b.date));
+  }, [currentListingData, currentReservations]);
+
   const hourlyData = useMemo(() => {
     const cvByHour = Array(24).fill(0);
     const reservationsByHour = Array(24).fill(0);
@@ -183,10 +232,11 @@ export default function CorrelationPage() {
   }, [currentListingData, currentReservations]);
 
   const correlation = useMemo(() => {
-    const cvValues = hourlyData.map(d => d.CV割合);
-    const resValues = hourlyData.map(d => d.初診割合);
-    return calculateCorrelation(cvValues, resValues);
-  }, [hourlyData]);
+    if (dailyData.length === 0) return 0;
+    // 全日の平均相関係数を計算
+    const avgCorr = dailyData.reduce((sum, d) => sum + d.correlation, 0) / dailyData.length;
+    return avgCorr;
+  }, [dailyData]);
 
   const interpretation = useMemo(() => {
     return getCorrelationInterpretation(correlation);
@@ -346,11 +396,11 @@ export default function CorrelationPage() {
           <>
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
               <div className="mb-6">
-                <h2 className="text-lg font-semibold text-slate-900">相関係数分析</h2>
+                <h2 className="text-lg font-semibold text-slate-900">日別相関係数分析</h2>
                 <div className="mt-4 rounded-2xl border-2 border-brand-200 bg-brand-50 p-6">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-sm font-medium text-slate-600">ピアソン相関係数</p>
+                      <p className="text-sm font-medium text-slate-600">平均相関係数（日別）</p>
                       <p className={`mt-1 text-4xl font-bold ${interpretation.color}`}>
                         {correlation.toFixed(3)}
                       </p>
@@ -366,10 +416,28 @@ export default function CorrelationPage() {
                   </p>
                   <div className="mt-4 border-t border-brand-200 pt-4">
                     <p className="text-xs text-slate-500">
-                      <strong>相関係数とは：</strong>2つのデータの「形の似ている度合い」を-1〜1の数値で表したもの。
-                      1に近いほど強い正の相関（同じ動き）、-1に近いほど強い負の相関（逆の動き）、0に近いほど無相関を意味します。
+                      <strong>日別相関とは：</strong>各日ごとにCV発生時間帯と予約時間帯の相関を計算し、その平均値を表示。
+                      総数での比較ではなく、毎日のパターンの一致度を評価することで、時間のズレを検出できます。
                     </p>
                   </div>
+                </div>
+
+                <div className="mt-4">
+                  <h3 className="text-base font-semibold text-slate-800 mb-3">日別相関係数の推移</h3>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={dailyData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                        <XAxis dataKey="date" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={80} />
+                        <YAxis domain={[-1, 1]} label={{ value: '相関係数', angle: -90, position: 'insideLeft', style: { fontSize: 12 } }} tick={{ fontSize: 12 }} />
+                        <Tooltip formatter={(value: number) => [value.toFixed(3), "相関係数"]} />
+                        <Line type="monotone" dataKey="correlation" stroke="#3FBFAA" strokeWidth={2} dot={{ r: 3 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    各日のCV時間帯パターンと予約時間帯パターンの相関。変動が大きい場合、日によって広告効果が異なる可能性があります。
+                  </p>
                 </div>
               </div>
 
