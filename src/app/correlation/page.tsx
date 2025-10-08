@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { filterByPeriod, type PeriodType } from "@/lib/dateUtils";
+import { filterByDateRange, filterByPeriod, getMonthKey, type PeriodType } from "@/lib/dateUtils";
 import {
   ComposedChart,
   Bar,
@@ -37,6 +37,45 @@ type Reservation = {
   visitType: "初診" | "再診" | "未設定";
   reservationHour: number;
   reservationMonth: string;
+  reservationDate?: string;
+  appointmentIso?: string | null;
+  receivedAtIso?: string;
+};
+
+type PeriodFilter = PeriodType | "custom";
+
+const extractDatePart = (value?: string | null): string | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const withoutTime = trimmed.includes("T") ? trimmed.split("T")[0] : trimmed.split(" ")[0] ?? trimmed;
+  const normalized = withoutTime.replace(/\./g, "-").replace(/\//g, "-");
+
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(normalized)) {
+    const [year, month, day] = normalized.split("-");
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+
+  if (/^\d{4}-\d{1,2}$/.test(normalized)) {
+    const [year, month] = normalized.split("-");
+    return `${year}-${month.padStart(2, "0")}-01`;
+  }
+
+  return normalized;
+};
+
+const resolveReservationDate = (reservation: Reservation): string | undefined => {
+  return (
+    extractDatePart(reservation.reservationDate) ??
+    extractDatePart(reservation.appointmentIso ?? undefined) ??
+    extractDatePart(reservation.receivedAtIso) ??
+    extractDatePart(reservation.reservationMonth)
+  );
 };
 
 const LISTING_STORAGE_KEY = "clinic-analytics/listing/v1";
@@ -102,12 +141,14 @@ export default function CorrelationPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<"内科" | "胃カメラ" | "大腸カメラ">("内科");
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("all");
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilter>("all");
+  const [customStartDate, setCustomStartDate] = useState<string>("");
+  const [customEndDate, setCustomEndDate] = useState<string>("");
   const [lambda, setLambda] = useState<number>(0.5);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    
+
     try {
       const storedListing = window.localStorage.getItem(LISTING_STORAGE_KEY);
       if (storedListing) {
@@ -116,7 +157,13 @@ export default function CorrelationPage() {
       
       const storedReservations = window.localStorage.getItem(RESERVATION_STORAGE_KEY);
       if (storedReservations) {
-        setReservations(JSON.parse(storedReservations));
+        const parsed = JSON.parse(storedReservations) as Reservation[];
+        setReservations(
+          parsed.map((item) => ({
+            ...item,
+            reservationDate: resolveReservationDate(item),
+          })),
+        );
       }
     } catch (error) {
       console.error(error);
@@ -128,38 +175,71 @@ export default function CorrelationPage() {
     if (!categoryData) return [];
 
     let data = categoryData.data;
-    if (selectedPeriod !== "all") {
+    if (selectedPeriod === "custom") {
+      data = filterByDateRange(data, {
+        startDate: customStartDate || undefined,
+        endDate: customEndDate || undefined,
+        getDate: (item) => item.date,
+      });
+    } else if (selectedPeriod !== "all") {
       data = filterByPeriod(data, selectedPeriod);
     }
     if (selectedMonth !== "all") {
-      data = data.filter(d => d.date.startsWith(selectedMonth));
+      data = data.filter(d => getMonthKey(d.date) === selectedMonth);
     }
     return data;
-  }, [listingData, selectedCategory, selectedMonth, selectedPeriod]);
+  }, [listingData, selectedCategory, selectedMonth, selectedPeriod, customStartDate, customEndDate]);
 
   const availableMonths = useMemo(() => {
+    const category = listingData.find((c) => c.category === selectedCategory);
+    if (!category) {
+      return [];
+    }
     const months = new Set<string>();
-    currentListingData.forEach(d => {
-      const parts = d.date.split("-");
-      if (parts.length >= 2) {
-        months.add(`${parts[0]}-${parts[1]}`);
+    category.data.forEach((day) => {
+      const key = getMonthKey(day.date);
+      if (key) {
+        months.add(key);
       }
     });
     return Array.from(months).sort();
-  }, [currentListingData]);
+  }, [listingData, selectedCategory]);
+
+  useEffect(() => {
+    if (selectedMonth !== "all" && !availableMonths.includes(selectedMonth)) {
+      setSelectedMonth("all");
+    }
+  }, [availableMonths, selectedMonth]);
 
   const currentReservations = useMemo(() => {
     const departments = CATEGORY_MAPPING[selectedCategory];
     let filtered = reservations.filter(r => 
       r && departments.includes(r.department) && r.visitType === "初診"
     );
+
+    if (selectedPeriod === "custom") {
+      filtered = filterByDateRange(filtered, {
+        startDate: customStartDate || undefined,
+        endDate: customEndDate || undefined,
+        getDate: resolveReservationDate,
+      });
+    } else if (selectedPeriod !== "all") {
+      filtered = filterByPeriod(filtered, selectedPeriod);
+    }
     
     if (selectedMonth !== "all") {
       filtered = filtered.filter(r => r.reservationMonth && r.reservationMonth === selectedMonth);
     }
     
     return filtered;
-  }, [reservations, selectedCategory, selectedMonth]);
+  }, [
+    reservations,
+    selectedCategory,
+    selectedMonth,
+    selectedPeriod,
+    customStartDate,
+    customEndDate,
+  ]);
 
   const dailyData = useMemo(() => {
     // 日付ごとにデータを集計
@@ -360,7 +440,7 @@ export default function CorrelationPage() {
                   <li>• <strong>日別相関推移</strong>: 各日ごとの相関係数の変化を折れ線グラフで表示</li>
                   <li>• <strong>ラグ相関</strong>: 0〜24時間のタイムラグごとの相関係数を折れ線グラフで表示</li>
                   <li>• <strong>散布図</strong>: CV割合と初診割合の関係を点で表示し、回帰直線を引いたグラフ</li>
-                  <li>• <strong>期間フィルター</strong>: 直近3ヶ月/6ヶ月/1年/全期間から分析対象期間を選択可能</li>
+                  <li>• <strong>期間フィルター</strong>: 直近3ヶ月/6ヶ月/1年/全期間に加え、任意の日付範囲と月別で絞り込み可能</li>
                 </ul>
                 <p className="mt-3 text-xs text-amber-700">
                   💡 補足: 相関係数は統計的な類似度を示す数値です。高い値でも因果関係を意味するとは限りません。
@@ -389,20 +469,38 @@ export default function CorrelationPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-3">
               <label className="text-sm font-semibold text-slate-700">期間範囲:</label>
               <select
                 value={selectedPeriod}
-                onChange={(e) => setSelectedPeriod(e.target.value as PeriodType)}
+                onChange={(e) => setSelectedPeriod(e.target.value as PeriodFilter)}
                 className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
               >
                 <option value="all">全期間</option>
                 <option value="3months">直近3ヶ月</option>
                 <option value="6months">直近6ヶ月</option>
                 <option value="1year">直近1年</option>
+                <option value="custom">カスタム</option>
               </select>
             </div>
+            {selectedPeriod === "custom" && (
+              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="rounded-full border border-slate-200 px-3 py-2 shadow-sm focus:border-brand-400 focus:outline-none"
+                />
+                <span className="text-slate-500">〜</span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="rounded-full border border-slate-200 px-3 py-2 shadow-sm focus:border-brand-400 focus:outline-none"
+                />
+              </div>
+            )}
             {availableMonths.length > 0 && (
               <div className="flex items-center gap-3">
                 <label className="text-sm font-semibold text-slate-700">月別絞り込み:</label>

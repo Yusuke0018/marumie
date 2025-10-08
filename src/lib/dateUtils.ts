@@ -200,3 +200,115 @@ export const filterByPeriod = <T extends { date?: string; reservationDate?: stri
     return itemDate >= cutoffStr;
   });
 };
+
+const normalizeDateInput = (raw: string): string => {
+  let normalized = raw.trim();
+  if (normalized.length === 0) {
+    return normalized;
+  }
+
+  if (normalized.includes(".")) {
+    normalized = normalized.replace(/\./g, "-");
+  }
+
+  if (/^\d{4}\/\d{1,2}\/\d{1,2}/.test(normalized)) {
+    normalized = normalized.replace(/\//g, "-");
+  } else if (/^\d{4}\/\d{1,2}$/.test(normalized)) {
+    normalized = normalized.replace(/\//g, "-") + "-01";
+  } else if (/^\d{4}-\d{1,2}$/.test(normalized)) {
+    normalized = normalized + "-01";
+  } else if (/^\d{4}\d{2}\d{2}$/.test(normalized)) {
+    normalized = `${normalized.slice(0, 4)}-${normalized.slice(4, 6)}-${normalized.slice(6, 8)}`;
+  }
+
+  if (/^\d{4}-\d{1,2}-\d{1,2} /.test(normalized)) {
+    normalized = normalized.replace(" ", "T");
+  }
+
+  return normalized;
+};
+
+const parseFlexibleDate = (raw?: string): Date | null => {
+  if (!raw) {
+    return null;
+  }
+
+  const normalized = normalizeDateInput(raw);
+  if (normalized.length === 0) {
+    return null;
+  }
+
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
+};
+
+export const getMonthKey = (value: string | undefined): string | null => {
+  const date = parseFlexibleDate(value);
+  if (!date) {
+    return null;
+  }
+
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  return `${date.getFullYear()}-${month}`;
+};
+
+type DateRangeOptions<T> = {
+  startDate?: string;
+  endDate?: string;
+  getDate?: (item: T) => string | undefined;
+};
+
+export const filterByDateRange = <T>(
+  data: T[],
+  options: DateRangeOptions<T> = {},
+): T[] => {
+  const { startDate, endDate, getDate } = options;
+  let start = parseFlexibleDate(startDate);
+  let end = parseFlexibleDate(endDate);
+
+  if (!start && !end) {
+    return data;
+  }
+
+  if (start && end && start.getTime() > end.getTime()) {
+    const swap = start;
+    start = end;
+    end = swap;
+  }
+
+  const resolveDate =
+    getDate ??
+    ((item: unknown) => {
+      const candidate = item as {
+        date?: string;
+        reservationDate?: string;
+        reservationMonth?: string;
+      } | null;
+      return (
+        candidate?.date ??
+        candidate?.reservationDate ??
+        (candidate?.reservationMonth
+          ? `${candidate.reservationMonth.replace("/", "-")}-01`
+          : undefined)
+      );
+    });
+
+  return data.filter((item) => {
+    const raw = resolveDate(item);
+    const parsed = parseFlexibleDate(raw);
+    if (!parsed) {
+      return false;
+    }
+    if (start && parsed.getTime() < start.getTime()) {
+      return false;
+    }
+    if (end && parsed.getTime() > end.getTime()) {
+      return false;
+    }
+    return true;
+  });
+};

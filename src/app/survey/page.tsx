@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { filterByPeriod, type PeriodType } from "@/lib/dateUtils";
+import { filterByDateRange, filterByPeriod, type PeriodType } from "@/lib/dateUtils";
 import { Upload, RefreshCw } from "lucide-react";
 import Papa from "papaparse";
 import {
@@ -28,7 +28,7 @@ type SurveyData = {
   fileType: "外来" | "内視鏡";
 };
 
-
+type PeriodFilter = PeriodType | "custom";
 
 const STORAGE_KEY = "clinic-analytics/survey/v1";
 const TIMESTAMP_KEY = "clinic-analytics/survey-updated/v1";
@@ -95,7 +95,9 @@ export default function SurveyPage() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("all");
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilter>("all");
+  const [customStartDate, setCustomStartDate] = useState<string>("");
+  const [customEndDate, setCustomEndDate] = useState<string>("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -118,27 +120,45 @@ export default function SurveyPage() {
     return Array.from(months).sort();
   }, [surveyData]);
 
+  useEffect(() => {
+    if (selectedMonth !== "all" && !availableMonths.includes(selectedMonth)) {
+      setSelectedMonth("all");
+    }
+  }, [availableMonths, selectedMonth]);
+
   const gairaiData = useMemo(() => {
     let data = surveyData.filter(d => d.fileType === "外来");
-    if (selectedPeriod !== "all") {
+    if (selectedPeriod === "custom") {
+      data = filterByDateRange(data, {
+        startDate: customStartDate || undefined,
+        endDate: customEndDate || undefined,
+        getDate: (item) => item.date,
+      });
+    } else if (selectedPeriod !== "all") {
       data = filterByPeriod(data, selectedPeriod);
     }
     if (selectedMonth !== "all") {
       data = data.filter(d => d.month === selectedMonth);
     }
     return data;
-  }, [surveyData, selectedMonth, selectedPeriod]);
+  }, [surveyData, selectedMonth, selectedPeriod, customStartDate, customEndDate]);
 
   const naishikyoData = useMemo(() => {
     let data = surveyData.filter(d => d.fileType === "内視鏡");
-    if (selectedPeriod !== "all") {
+    if (selectedPeriod === "custom") {
+      data = filterByDateRange(data, {
+        startDate: customStartDate || undefined,
+        endDate: customEndDate || undefined,
+        getDate: (item) => item.date,
+      });
+    } else if (selectedPeriod !== "all") {
       data = filterByPeriod(data, selectedPeriod);
     }
     if (selectedMonth !== "all") {
       data = data.filter(d => d.month === selectedMonth);
     }
     return data;
-  }, [surveyData, selectedMonth, selectedPeriod]);
+  }, [surveyData, selectedMonth, selectedPeriod, customStartDate, customEndDate]);
 
   const gairaiChartData = useMemo(() => {
     const totals: Record<string, number> = {
@@ -247,6 +267,9 @@ export default function SurveyPage() {
     setSurveyData([]);
     setLastUpdated(null);
     setSelectedMonth("all");
+    setSelectedPeriod("all");
+    setCustomStartDate("");
+    setCustomEndDate("");
   };
 
 
@@ -271,7 +294,7 @@ export default function SurveyPage() {
                   <li>• <strong>外来・内視鏡</strong>: それぞれ別々のグラフで、来院経路の分布を表示</li>
                   <li>• <strong>件数と割合</strong>: 右側の表に各チャネルの回答数（件）と全体に占める割合（%）を表示</li>
                   <li>• <strong>詳細テーブル</strong>: ページ下部に全チャネルの回答数と割合を一覧表で表示</li>
-                  <li>• <strong>期間フィルター</strong>: 直近3ヶ月/6ヶ月/1年/全期間から分析対象期間を選択可能</li>
+                  <li>• <strong>期間フィルター</strong>: 直近3ヶ月/6ヶ月/1年/全期間に加え、任意の日付範囲と月別で絞り込み可能</li>
                 </ul>
               </div>
             </div>
@@ -311,20 +334,38 @@ export default function SurveyPage() {
 
         {surveyData.length > 0 && (
           <>
-            <div className="flex items-center gap-6">
+            <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-3">
                 <label className="text-sm font-semibold text-slate-700">期間範囲:</label>
                 <select
                   value={selectedPeriod}
-                  onChange={(e) => setSelectedPeriod(e.target.value as PeriodType)}
+                  onChange={(e) => setSelectedPeriod(e.target.value as PeriodFilter)}
                   className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
                 >
                   <option value="all">全期間</option>
                   <option value="3months">直近3ヶ月</option>
                   <option value="6months">直近6ヶ月</option>
                   <option value="1year">直近1年</option>
+                  <option value="custom">カスタム</option>
                 </select>
               </div>
+              {selectedPeriod === "custom" && (
+                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="rounded-full border border-slate-200 px-3 py-2 shadow-sm focus:border-brand-400 focus:outline-none"
+                  />
+                  <span className="text-slate-500">〜</span>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="rounded-full border border-slate-200 px-3 py-2 shadow-sm focus:border-brand-400 focus:outline-none"
+                  />
+                </div>
+              )}
               <div className="flex items-center gap-3">
                 <label className="text-sm font-semibold text-slate-700">月別絞り込み:</label>
                 <select
