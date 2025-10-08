@@ -107,9 +107,16 @@ const parseJstDateTime = (raw: string | undefined): ParsedDateTime | null => {
     return null;
   }
 
-  const [datePart, timePartRaw = "00:00"] = trimmed.split(" ");
+  const parts = trimmed.split(" ");
+  const datePart = parts[0];
+  if (!datePart || datePart.split("/").length < 3) {
+    return null;
+  }
+  const timePartRaw = parts[1] ?? "00:00";
   const [yearStr, monthStr, dayStr] = datePart.split("/");
-  const [hourStr, minuteStr = "00"] = timePartRaw.split(":");
+  const timeParts = timePartRaw.split(":");
+  const hourStr = timeParts[0];
+  const minuteStr = timeParts[1] ?? "00";
 
   const year = Number(yearStr);
   const month = Number(monthStr);
@@ -309,7 +316,14 @@ const tooltipFormatter = (value: unknown, name: string): [string, string] => {
 
 const formatMonthLabel = (month: string) => {
   const [year, monthStr] = month.split("-");
-  return `${year}年${Number(monthStr)}月`;
+  if (!year || !monthStr) {
+    return month;
+  }
+  const numericMonth = Number(monthStr);
+  if (Number.isNaN(numericMonth)) {
+    return month;
+  }
+  return `${year}年${numericMonth}月`;
 };
 
 type SectionCardProps = {
