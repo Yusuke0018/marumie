@@ -65,7 +65,9 @@ export default {
 					uploadedAt: new Date().toISOString(),
 				}));
 
-				return new Response(JSON.stringify({ id, url: `${url.origin}?data=${id}` }), {
+				// Next.jsアプリのURLを返す
+				const appUrl = origin || 'https://yusuke0018.github.io/marumie';
+				return new Response(JSON.stringify({ id, url: `${appUrl}?data=${id}` }), {
 					headers: {
 						'Content-Type': 'application/json',
 						...corsHeaders(origin),
