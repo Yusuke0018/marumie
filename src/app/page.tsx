@@ -459,15 +459,15 @@ type SectionCardProps = {
 };
 
 const SectionCard = ({ title, description, action, children }: SectionCardProps) => (
-  <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
-    <header className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+  <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft sm:rounded-3xl sm:p-6">
+    <header className="mb-3 flex flex-col gap-2 sm:mb-4 md:flex-row md:items-center md:justify-between">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-        {description && <p className="text-sm text-slate-500">{description}</p>}
+        <h2 className="text-base font-semibold text-slate-900 sm:text-lg">{title}</h2>
+        {description && <p className="text-xs leading-relaxed text-slate-500 sm:text-sm">{description}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </header>
-    {children}
+    <div className="sm:pt-1">{children}</div>
   </section>
 );
 
@@ -490,11 +490,11 @@ const StatCard = ({
           : "text-slate-900";
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card">
-      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+    <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-card sm:p-4">
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:text-xs">
         {label}
       </dt>
-      <dd className={`mt-2 text-2xl font-bold ${toneClass}`}>{value}</dd>
+      <dd className={`mt-1 text-xl font-bold sm:mt-2 sm:text-2xl ${toneClass}`}>{value}</dd>
     </div>
   );
 };
@@ -796,20 +796,23 @@ ${response.url}`);
                 マルミエ
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                予約ログCSVをアップロードすると、受付時刻を基準に初診・再診や診療科別の傾向を自動集計します。
+                予約ログCSVをアップロードすると、受付時刻を基準に初診・再診や診療科別の傾向を自動集計します。曜日や日付タイプ、期間フィルターを切り替えて複数の視点から比較し、最新アップロードとの差分も追跡できます。
               </p>
-              <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4">
-                <p className="text-sm font-semibold text-blue-900 mb-2">📊 表示されているデータ</p>
-                <ul className="space-y-1 text-sm text-blue-800">
-                  <li>• <strong>時間帯別グラフ</strong>: 0時〜23時の各時間に何件の予約があったか（初診・再診の内訳付き）</li>
-                  <li>• <strong>日別推移</strong>: 毎日の予約件数の合計を折れ線グラフで表示</li>
-                  <li>• <strong>月次サマリ</strong>: 月ごとの総予約数、初診数、再診数、当日予約数の一覧表</li>
-                  <li>• <strong>診療科別カード</strong>: 各診療科の時間帯別の予約分布を個別のグラフで表示</li>
+              <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 sm:p-5">
+                <p className="mb-2 text-sm font-semibold text-blue-900">📊 ダッシュボードのみどころ</p>
+                <ul className="space-y-1 text-sm leading-relaxed text-blue-800">
+                  <li>• <strong>曜日別／日付タイプ別</strong>: 平日・土日・祝日・連休の傾向を比較。</li>
+                  <li>• <strong>時間帯別グラフ</strong>: 0時〜23時の受付集中帯と初診・再診の内訳を可視化。</li>
+                  <li>• <strong>日別・月次サマリ</strong>: 期間全体の推移と最新アップロードとの差分を一覧表示。</li>
+                  <li>• <strong>診療科カード</strong>: ドラッグで順番を変えながら各診療科のピーク時間をチェック。</li>
                 </ul>
+                <p className="mt-3 text-xs text-blue-700 sm:text-[13px]">
+                  スマホでは横スクロールやピンチアウトでグラフを拡大できます。
+                </p>
               </div>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-400 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-500">
+              <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-400 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-500 sm:w-auto">
                 <Upload className="h-4 w-4" />
                 CSVを選択
                 <input
@@ -823,7 +826,7 @@ ${response.url}`);
                 type="button"
                 onClick={handleShare}
                 disabled={isSharing || reservations.length === 0}
-                className="flex items-center justify-center gap-2 rounded-full bg-brand-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
                 {isSharing ? (
                   <>
@@ -840,7 +843,7 @@ ${response.url}`);
               <button
                 type="button"
                 onClick={handleReset}
-                className="flex items-center justify-center gap-2 rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-brand-200 hover:text-brand-600"
+                className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-brand-200 hover:text-brand-600 sm:w-auto"
               >
                 <RefreshCw className="h-4 w-4" />
                 保存内容をリセット
@@ -906,7 +909,7 @@ ${response.url}`);
           </div>
         )}
 
-        <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <section className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
           <StatCard
             label="総予約数"
             value={totalReservations.toLocaleString("ja-JP")}
@@ -933,25 +936,30 @@ ${response.url}`);
           title="曜日別 予約傾向"
           description="曜日ごとの予約件数の分布を表示しています。"
         >
-          <div className="h-[380px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={weekdayData}>
-                <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
-                <XAxis dataKey="weekday" stroke="#64748B" />
-                <YAxis stroke="#64748B" />
-                <Tooltip
-                  formatter={tooltipFormatter}
-                  itemSorter={(item) => {
-                    const order = { '初診': 0, '再診': 1, '当日予約': 2 };
-                    return order[item.name as keyof typeof order] ?? 999;
-                  }}
-                />
-                <Legend wrapperStyle={{ paddingTop: "10px" }} itemSorter={visitLegendSorter} />
-                <Bar dataKey="初診" fill="#5DD4C3" name="初診" />
-                <Bar dataKey="再診" fill="#FFB8C8" name="再診" />
-                <Bar dataKey="当日予約" fill="#FFA500" name="当日予約" />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="-mx-2 sm:mx-0">
+            <div className="h-[280px] sm:h-[340px] md:h-[380px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={weekdayData}>
+                  <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
+                  <XAxis dataKey="weekday" stroke="#64748B" tick={{ fontSize: 12 }} />
+                  <YAxis stroke="#64748B" tick={{ fontSize: 12 }} />
+                  <Tooltip
+                    formatter={tooltipFormatter}
+                    itemSorter={(item) => {
+                      const order = { '初診': 0, '再診': 1, '当日予約': 2 };
+                      return order[item.name as keyof typeof order] ?? 999;
+                    }}
+                  />
+                  <Legend
+                    wrapperStyle={{ paddingTop: 10, fontSize: 12 }}
+                    itemSorter={visitLegendSorter}
+                  />
+                  <Bar dataKey="初診" fill="#5DD4C3" name="初診" />
+                  <Bar dataKey="再診" fill="#FFB8C8" name="再診" />
+                  <Bar dataKey="当日予約" fill="#FFA500" name="当日予約" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </SectionCard>
 
@@ -1006,24 +1014,29 @@ ${response.url}`);
           title="時間帯別 予約数（受付基準）"
           description="1時間単位で予約受付が集中する時間帯を大きく表示しています。"
         >
-          <div className="h-[380px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={overallHourly}>
-                <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
-                <XAxis dataKey="hour" stroke="#64748B" />
-                <YAxis stroke="#64748B" />
-                <Tooltip
-                  formatter={tooltipFormatter}
-                  itemSorter={(item) => {
-                    const order = { '初診': 0, '再診': 1 };
-                    return order[item.name as keyof typeof order] ?? 999;
-                  }}
-                />
-                <Legend wrapperStyle={{ paddingTop: "10px" }} itemSorter={visitLegendSorter} />
-                <Bar dataKey="初診" fill="#5DD4C3" name="初診" />
-                <Bar dataKey="再診" fill="#FFB8C8" name="再診" />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="-mx-2 sm:mx-0">
+            <div className="h-[280px] sm:h-[340px] md:h-[380px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={overallHourly}>
+                  <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
+                  <XAxis dataKey="hour" stroke="#64748B" tick={{ fontSize: 12 }} />
+                  <YAxis stroke="#64748B" tick={{ fontSize: 12 }} />
+                  <Tooltip
+                    formatter={tooltipFormatter}
+                    itemSorter={(item) => {
+                      const order = { '初診': 0, '再診': 1 };
+                      return order[item.name as keyof typeof order] ?? 999;
+                    }}
+                  />
+                  <Legend
+                    wrapperStyle={{ paddingTop: 10, fontSize: 12 }}
+                    itemSorter={visitLegendSorter}
+                  />
+                  <Bar dataKey="初診" fill="#5DD4C3" name="初診" />
+                  <Bar dataKey="再診" fill="#FFB8C8" name="再診" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </SectionCard>
 
@@ -1031,7 +1044,7 @@ ${response.url}`);
           title="日別 予約推移（受付基準）"
           description="日ごとの予約受付件数の推移を確認できます。"
         >
-          <div className="h-72">
+          <div className="-mx-2 h-[240px] sm:mx-0 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={overallDaily}>
                 <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
@@ -1160,7 +1173,7 @@ ${response.url}`);
             </label>
           }
         >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-2 md:gap-4 md:overflow-visible lg:grid-cols-3">
             {displayedDepartments.map(({ department, data, total }, index) => (
               <div
                 key={department}
@@ -1169,7 +1182,7 @@ ${response.url}`);
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDragEnd={handleDragEnd}
                 onClick={() => setExpandedDepartment(department)}
-                className={`aspect-square cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-brand-400 hover:shadow-lg ${
+                className={`aspect-[4/5] min-w-[240px] cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-brand-400 hover:shadow-lg sm:aspect-square sm:min-w-0 ${
                   draggedIndex === index ? "opacity-50" : ""
                 }`}
               >
@@ -1228,7 +1241,7 @@ ${response.url}`);
               </div>
             ))}
 {displayedDepartments.length === 0 && (
-              <p className="col-span-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+              <p className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
                 集計対象のデータがありません。CSVをアップロードしてください。
               </p>
             )}
@@ -1242,10 +1255,10 @@ ${response.url}`);
           onClick={() => setExpandedDepartment(null)}
         >
           <div
-            className="w-full max-w-4xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl"
+            className="w-full max-w-4xl rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-4 flex items-start justify-between">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">
                   {expandedDepartment}
@@ -1263,12 +1276,12 @@ ${response.url}`);
                 </svg>
               </button>
             </div>
-            <div className="h-96">
+            <div className="h-[260px] sm:h-[340px] md:h-96">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={displayedDepartments.find(d => d.department === expandedDepartment)?.data}>
                   <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
-                  <XAxis dataKey="hour" stroke="#64748B" />
-                  <YAxis stroke="#64748B" />
+                  <XAxis dataKey="hour" stroke="#64748B" tick={{ fontSize: 12 }} />
+                  <YAxis stroke="#64748B" tick={{ fontSize: 12 }} />
                   <Tooltip
                     formatter={tooltipFormatter}
                     itemSorter={(item) => {
@@ -1276,7 +1289,10 @@ ${response.url}`);
                       return order[item.name as keyof typeof order] ?? 999;
                     }}
                   />
-                  <Legend wrapperStyle={{ paddingTop: "10px" }} itemSorter={visitLegendSorter} />
+                  <Legend
+                    wrapperStyle={{ paddingTop: 10, fontSize: 12 }}
+                    itemSorter={visitLegendSorter}
+                  />
                   <Line
                     type="monotone"
                     dataKey="初診"
