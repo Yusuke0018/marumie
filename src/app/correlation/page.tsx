@@ -143,11 +143,11 @@ export default function CorrelationPage() {
   const currentReservations = useMemo(() => {
     const departments = CATEGORY_MAPPING[selectedCategory];
     let filtered = reservations.filter(r => 
-      departments.includes(r.department) && r.visitType === "初診"
+      r && departments.includes(r.department) && r.visitType === "初診"
     );
     
     if (selectedMonth !== "all") {
-      filtered = filtered.filter(r => r.reservationMonth === selectedMonth);
+      filtered = filtered.filter(r => r.reservationMonth && r.reservationMonth === selectedMonth);
     }
     
     return filtered;
@@ -172,6 +172,9 @@ export default function CorrelationPage() {
     });
     
     currentReservations.forEach(reservation => {
+      // 予約データの安全性チェック
+      if (!reservation.reservationMonth || typeof reservation.reservationHour !== 'number') return;
+      
       // 予約の年月日を取得（reservationMonthはYYYY/MM形式）
       const resMonth = reservation.reservationMonth.replace('/', '-');
       // その月のすべての日付に対して予約を振り分け
