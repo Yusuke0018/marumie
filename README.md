@@ -29,5 +29,6 @@ npm start # 本番構成のサーバーモード
 
 ## Vercel デプロイ
 
-ビルドコマンドは `npm run build`（静的サイト出力 = `out/`）。  
-環境変数や追加のビルドステップは不要です。
+ビルドコマンドは `npm run build`、出力は Next.js の既定（/.next）を利用します。  
+GitHub Pages 用の静的書き出しは CI 側で `GITHUB_PAGES=true npm run build` を実行してください。  
+それ以外の環境変数や追加ステップは不要です。
