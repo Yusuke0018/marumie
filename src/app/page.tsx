@@ -691,12 +691,12 @@ ${response.url}`);
                 予約ログCSVをアップロードすると、受付時刻を基準に初診・再診や診療科別の傾向を自動集計します。
               </p>
               <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4">
-                <p className="text-sm font-semibold text-blue-900 mb-2">📊 データの見方</p>
+                <p className="text-sm font-semibold text-blue-900 mb-2">📊 表示されているデータ</p>
                 <ul className="space-y-1 text-sm text-blue-800">
-                  <li>• <strong>時間帯別グラフ</strong>: どの時間に予約が集中しているかがわかります。ピークタイムに合わせた人員配置の参考に</li>
-                  <li>• <strong>日別推移</strong>: 曜日や日付による予約数の変動を確認できます。繁忙期の予測に役立ちます</li>
-                  <li>• <strong>月次サマリ</strong>: 初診・再診・当日予約の内訳から、患者さんの行動パターンが見えてきます</li>
-                  <li>• <strong>診療科別カード</strong>: 各診療科の時間帯ごとの予約傾向を比較して、運営の改善ポイントを発見できます</li>
+                  <li>• <strong>時間帯別グラフ</strong>: 0時〜23時の各時間に何件の予約があったか（初診・再診の内訳付き）</li>
+                  <li>• <strong>日別推移</strong>: 毎日の予約件数の合計を折れ線グラフで表示</li>
+                  <li>• <strong>月次サマリ</strong>: 月ごとの総予約数、初診数、再診数、当日予約数の一覧表</li>
+                  <li>• <strong>診療科別カード</strong>: 各診療科の時間帯別の予約分布を個別のグラフで表示</li>
                 </ul>
               </div>
             </div>

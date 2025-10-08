@@ -345,15 +345,16 @@ export default function CorrelationPage() {
                 リスティング広告のCV（予約ページ遷移）が、実際の初診予約にどの程度つながっているかを統計的に分析します。
               </p>
               <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                <p className="text-sm font-semibold text-amber-900 mb-2">📊 データの見方</p>
+                <p className="text-sm font-semibold text-amber-900 mb-2">📊 表示されているデータ</p>
                 <ul className="space-y-1 text-sm text-amber-800">
-                  <li>• <strong>相関係数</strong>: 0.7以上なら広告と予約の時間帯パターンがよく似ています。広告が効いている可能性が高いです</li>
-                  <li>• <strong>グラフの重なり</strong>: CV（水色の棒）と予約（赤い線）の形が似ているほど、広告が予約につながっている証拠です</li>
-                  <li>• <strong>ラグ相関</strong>: 広告を見てから予約まで何時間かかるかがわかります。即決型か検討型かの判断材料に</li>
-                  <li>• <strong>アドストック</strong>: 広告効果がどれくらい持続するかを示します。短期的な効果か長期的な効果かが見えます</li>
+                  <li>• <strong>相関係数</strong>: -1〜1の数値。CVと予約の時間帯パターンがどれだけ似ているかを表す指標</li>
+                  <li>• <strong>重ね合わせグラフ</strong>: CV割合（青い棒）と初診割合（赤い線）を時間帯ごとに並べて表示</li>
+                  <li>• <strong>日別相関推移</strong>: 各日ごとの相関係数の変化を折れ線グラフで表示</li>
+                  <li>• <strong>ラグ相関</strong>: 0〜24時間のタイムラグごとの相関係数を折れ線グラフで表示</li>
+                  <li>• <strong>散布図</strong>: CV割合と初診割合の関係を点で表示し、回帰直線を引いたグラフ</li>
                 </ul>
                 <p className="mt-3 text-xs text-amber-700">
-                  💡 ヒント: 相関が高くても、それが本当に広告のおかげかは慎重に判断を。診療時間など他の要因も考えましょう。
+                  💡 補足: 相関係数は統計的な類似度を示す数値です。高い値でも因果関係を意味するとは限りません。
                 </p>
               </div>
           </div>

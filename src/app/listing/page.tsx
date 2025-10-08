@@ -174,12 +174,12 @@ export default function ListingPage() {
                 リスティング広告（Google広告など）のパフォーマンスデータを分析し、広告効果を可視化します。
               </p>
               <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 p-4">
-                <p className="text-sm font-semibold text-green-900 mb-2">📊 データの見方</p>
+                <p className="text-sm font-semibold text-green-900 mb-2">📊 表示されているデータ</p>
                 <ul className="space-y-1 text-sm text-green-800">
-                  <li>• <strong>CVR（コンバージョン率）</strong>: 広告を見た人のうち、何%が予約ページに進んだか。高いほど広告の質が良い証拠です</li>
-                  <li>• <strong>CPA（獲得単価）</strong>: 1件の予約ページ遷移にいくらかかったか。低いほど効率的です</li>
-                  <li>• <strong>時間帯別のCV</strong>: どの時間に広告経由の反応があるかがわかります。広告配信の最適化に使えます</li>
-                  <li>• <strong>日別の推移</strong>: 曜日や時期による効果の変動を見て、広告予算の配分を考えられます</li>
+                  <li>• <strong>金額・CV推移</strong>: 日ごとの広告費（円）と、予約ページへの遷移数（CV）の折れ線グラフ</li>
+                  <li>• <strong>CVR・CPA推移</strong>: 日ごとのコンバージョン率（%）と1件あたりの獲得単価（円）の折れ線グラフ</li>
+                  <li>• <strong>時間帯別CV</strong>: 0時〜23時の各時間に発生したCV（予約ページ遷移）の件数を棒グラフで表示</li>
+                  <li>• <strong>カテゴリ別</strong>: 内科・胃カメラ・大腸カメラのデータを個別に表示</li>
                 </ul>
               </div>
             </div>
