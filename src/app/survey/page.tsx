@@ -312,17 +312,17 @@ export default function SurveyPage() {
                     総回答数: {gairaiChartData.reduce((sum, item) => sum + item.value, 0).toLocaleString("ja-JP")}件
                   </p>
                 </div>
-                <div className="h-[600px]">
+                <div className="h-[700px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={gairaiChartData}
-                        cx="35%"
+                        cx="30%"
                         cy="50%"
                         labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
                         label={(props: PieLabelRenderProps) => {
                           const RADIAN = Math.PI / 180;
-                          const radius = (props.outerRadius as number) + 35;
+                          const radius = (props.outerRadius as number) + 40;
                           const x = (props.cx as number) + radius * Math.cos(-(props.midAngle as number) * RADIAN);
                           const y = (props.cy as number) + radius * Math.sin(-(props.midAngle as number) * RADIAN);
                           
@@ -333,14 +333,14 @@ export default function SurveyPage() {
                               fill="#334155"
                               textAnchor={x > (props.cx as number) ? 'start' : 'end'}
                               dominantBaseline="central"
-                              fontSize={12}
+                              fontSize={11}
                               fontWeight={500}
                             >
                               {`${props.name}: ${props.value}件`}
                             </text>
                           );
                         }}
-                        outerRadius={120}
+                        outerRadius={130}
                         fill="#8884d8"
                         dataKey="value"
                       >
@@ -363,17 +363,17 @@ export default function SurveyPage() {
                     総回答数: {naishikyoChartData.reduce((sum, item) => sum + item.value, 0).toLocaleString("ja-JP")}件
                   </p>
                 </div>
-                <div className="h-[600px]">
+                <div className="h-[700px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={naishikyoChartData}
-                        cx="35%"
+                        cx="30%"
                         cy="50%"
                         labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
                         label={(props: PieLabelRenderProps) => {
                           const RADIAN = Math.PI / 180;
-                          const radius = (props.outerRadius as number) + 35;
+                          const radius = (props.outerRadius as number) + 40;
                           const x = (props.cx as number) + radius * Math.cos(-(props.midAngle as number) * RADIAN);
                           const y = (props.cy as number) + radius * Math.sin(-(props.midAngle as number) * RADIAN);
                           
@@ -384,14 +384,14 @@ export default function SurveyPage() {
                               fill="#334155"
                               textAnchor={x > (props.cx as number) ? 'start' : 'end'}
                               dominantBaseline="central"
-                              fontSize={12}
+                              fontSize={11}
                               fontWeight={500}
                             >
                               {`${props.name}: ${props.value}件`}
                             </text>
                           );
                         }}
-                        outerRadius={120}
+                        outerRadius={130}
                         fill="#8884d8"
                         dataKey="value"
                       >
