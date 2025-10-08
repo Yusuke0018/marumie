@@ -9,7 +9,6 @@ import {
   Cell,
   ResponsiveContainer,
   Tooltip,
-  Legend,
 } from "recharts";
 
 type SurveyData = {
@@ -31,8 +30,8 @@ const STORAGE_KEY = "clinic-analytics/survey/v1";
 const TIMESTAMP_KEY = "clinic-analytics/survey-updated/v1";
 
 const COLORS = [
-  "#5DD4C3", "#FFB8C8", "#3FBFAA", "#FF9999", "#75DBC3",
-  "#E65C5C", "#A3E7D7", "#FFC3CF", "#2A9D8F", "#FF7B7B"
+  "#2A9D8F", "#FF7B7B", "#5DD4C3", "#E65C5C", "#75DBC3",
+  "#FFB8C8", "#3FBFAA", "#FF9999", "#A3E7D7", "#FFC3CF"
 ];
 
 const CHANNEL_LABELS: Record<string, string> = {
@@ -258,20 +257,19 @@ return Object.entries(totals)
                   <PieChart>
                     <Pie
                       data={chartData}
-                      cx="50%"
+                      cx="40%"
                       cy="50%"
-                      labelLine={false}
-
-                      outerRadius={120}
+                      labelLine
+                      label
+                      outerRadius={110}
                       fill="#8884d8"
                       dataKey="value"
                     >
-{chartData.map((entry, index) => (
+                      {chartData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
                     <Tooltip formatter={(value: number) => [value.toLocaleString("ja-JP"), "回答数"]} />
-                    <Legend />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
