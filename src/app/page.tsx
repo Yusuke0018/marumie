@@ -199,7 +199,17 @@ const parseCsv = (content: string): Reservation[] => {
 const aggregateHourly = (reservations: Reservation[]): HourlyBucket[] => {
   const buckets = createEmptyHourlyBuckets();
   for (const reservation of reservations) {
+    if (
+      Number.isNaN(reservation.reservationHour) ||
+      reservation.reservationHour < 0 ||
+      reservation.reservationHour > 23
+    ) {
+      continue;
+    }
     const bucket = buckets[reservation.reservationHour];
+    if (!bucket) {
+      continue;
+    }
     if (!bucket) {
       continue;
     }
@@ -265,7 +275,17 @@ const aggregateDepartmentHourly = (
     if (!buckets) {
       continue;
     }
+    if (
+      Number.isNaN(reservation.reservationHour) ||
+      reservation.reservationHour < 0 ||
+      reservation.reservationHour > 23
+    ) {
+      continue;
+    }
     const bucket = buckets[reservation.reservationHour];
+    if (!bucket) {
+      continue;
+    }
     bucket.total += 1;
     if (reservation.visitType === "初診" || reservation.visitType === "再診") {
       bucket[reservation.visitType] += 1;
