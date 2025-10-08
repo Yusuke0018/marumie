@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { filterByPeriod, type PeriodType } from "@/lib/dateUtils";
 import { Upload, RefreshCw } from "lucide-react";
 import Papa from "papaparse";
 import {
@@ -94,6 +95,7 @@ export default function SurveyPage() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("all");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -117,16 +119,26 @@ export default function SurveyPage() {
   }, [surveyData]);
 
   const gairaiData = useMemo(() => {
-    const data = surveyData.filter(d => d.fileType === "外来");
-    if (selectedMonth === "all") return data;
-    return data.filter(d => d.month === selectedMonth);
-  }, [surveyData, selectedMonth]);
+    let data = surveyData.filter(d => d.fileType === "外来");
+    if (selectedPeriod !== "all") {
+      data = filterByPeriod(data, selectedPeriod);
+    }
+    if (selectedMonth !== "all") {
+      data = data.filter(d => d.month === selectedMonth);
+    }
+    return data;
+  }, [surveyData, selectedMonth, selectedPeriod]);
 
   const naishikyoData = useMemo(() => {
-    const data = surveyData.filter(d => d.fileType === "内視鏡");
-    if (selectedMonth === "all") return data;
-    return data.filter(d => d.month === selectedMonth);
-  }, [surveyData, selectedMonth]);
+    let data = surveyData.filter(d => d.fileType === "内視鏡");
+    if (selectedPeriod !== "all") {
+      data = filterByPeriod(data, selectedPeriod);
+    }
+    if (selectedMonth !== "all") {
+      data = data.filter(d => d.month === selectedMonth);
+    }
+    return data;
+  }, [surveyData, selectedMonth, selectedPeriod]);
 
   const gairaiChartData = useMemo(() => {
     const totals: Record<string, number> = {
@@ -259,6 +271,7 @@ export default function SurveyPage() {
                   <li>• <strong>外来・内視鏡</strong>: それぞれ別々のグラフで、来院経路の分布を表示</li>
                   <li>• <strong>件数と割合</strong>: 右側の表に各チャネルの回答数（件）と全体に占める割合（%）を表示</li>
                   <li>• <strong>詳細テーブル</strong>: ページ下部に全チャネルの回答数と割合を一覧表で表示</li>
+                  <li>• <strong>期間フィルター</strong>: 直近3ヶ月/6ヶ月/1年/全期間から分析対象期間を選択可能</li>
                 </ul>
               </div>
             </div>
@@ -298,18 +311,33 @@ export default function SurveyPage() {
 
         {surveyData.length > 0 && (
           <>
-            <div className="flex items-center gap-4">
-              <label className="text-sm font-semibold text-slate-700">期間:</label>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
-              >
-                <option value="all">全期間</option>
-                {availableMonths.map(month => (
-                  <option key={month} value={month}>{month}</option>
-                ))}
-              </select>
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-semibold text-slate-700">期間範囲:</label>
+                <select
+                  value={selectedPeriod}
+                  onChange={(e) => setSelectedPeriod(e.target.value as PeriodType)}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+                >
+                  <option value="all">全期間</option>
+                  <option value="3months">直近3ヶ月</option>
+                  <option value="6months">直近6ヶ月</option>
+                  <option value="1year">直近1年</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-semibold text-slate-700">月別絞り込み:</label>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+                >
+                  <option value="all">全月</option>
+                  {availableMonths.map(month => (
+                    <option key={month} value={month}>{month}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {gairaiChartData.length > 0 && (

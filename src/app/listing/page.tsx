@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { filterByPeriod, type PeriodType } from "@/lib/dateUtils";
 import { Upload, RefreshCw } from "lucide-react";
 import Papa from "papaparse";
 import {
@@ -76,6 +77,7 @@ export default function ListingPage() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<"内科" | "胃カメラ" | "大腸カメラ">("内科");
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("all");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -94,8 +96,12 @@ export default function ListingPage() {
   }, []);
 
   const currentData = useMemo(() => {
-    return categoryData.find(c => c.category === selectedCategory)?.data || [];
-  }, [categoryData, selectedCategory]);
+    let data = categoryData.find(c => c.category === selectedCategory)?.data || [];
+    if (selectedPeriod !== "all") {
+      data = filterByPeriod(data, selectedPeriod);
+    }
+    return data;
+  }, [categoryData, selectedCategory, selectedPeriod]);
 
   const dailyMetricsData = useMemo(() => {
     return currentData.map(d => ({
@@ -180,6 +186,7 @@ export default function ListingPage() {
                   <li>• <strong>CVR・CPA推移</strong>: 日ごとのコンバージョン率（%）と1件あたりの獲得単価（円）の折れ線グラフ</li>
                   <li>• <strong>時間帯別CV</strong>: 0時〜23時の各時間に発生したCV（予約ページ遷移）の件数を棒グラフで表示</li>
                   <li>• <strong>カテゴリ別</strong>: 内科・胃カメラ・大腸カメラのデータを個別に表示</li>
+                  <li>• <strong>期間フィルター</strong>: 直近3ヶ月/6ヶ月/1年/全期間から分析対象期間を選択可能</li>
                 </ul>
               </div>
             </div>
@@ -220,22 +227,37 @@ export default function ListingPage() {
 
         {categoryData.length > 0 && (
           <>
-            <div className="flex items-center gap-4">
-              <label className="text-sm font-semibold text-slate-700">カテゴリ:</label>
-              <div className="flex gap-2">
-                {categories.map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                      selectedCategory === cat
-                        ? "bg-brand-500 text-white"
-                        : "bg-white text-slate-600 hover:bg-brand-50"
-                    } border border-slate-200`}
-                  >
-                    {cat}
-                  </button>
-                ))}
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-semibold text-slate-700">期間範囲:</label>
+                <select
+                  value={selectedPeriod}
+                  onChange={(e) => setSelectedPeriod(e.target.value as PeriodType)}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+                >
+                  <option value="all">全期間</option>
+                  <option value="3months">直近3ヶ月</option>
+                  <option value="6months">直近6ヶ月</option>
+                  <option value="1year">直近1年</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-semibold text-slate-700">カテゴリ:</label>
+                <div className="flex gap-2">
+                  {categories.map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                        selectedCategory === cat
+                          ? "bg-brand-500 text-white"
+                          : "bg-white text-slate-600 hover:bg-brand-50"
+                      } border border-slate-200`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 

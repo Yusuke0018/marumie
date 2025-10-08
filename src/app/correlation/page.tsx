@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { filterByPeriod, type PeriodType } from "@/lib/dateUtils";
 import {
   ComposedChart,
   Bar,
@@ -101,6 +102,7 @@ export default function CorrelationPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<"内科" | "胃カメラ" | "大腸カメラ">("内科");
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("all");
   const [lambda, setLambda] = useState<number>(0.5);
 
   useEffect(() => {
@@ -124,10 +126,16 @@ export default function CorrelationPage() {
   const currentListingData = useMemo(() => {
     const categoryData = listingData.find(c => c.category === selectedCategory);
     if (!categoryData) return [];
-    
-    if (selectedMonth === "all") return categoryData.data;
-    return categoryData.data.filter(d => d.date.startsWith(selectedMonth));
-  }, [listingData, selectedCategory, selectedMonth]);
+
+    let data = categoryData.data;
+    if (selectedPeriod !== "all") {
+      data = filterByPeriod(data, selectedPeriod);
+    }
+    if (selectedMonth !== "all") {
+      data = data.filter(d => d.date.startsWith(selectedMonth));
+    }
+    return data;
+  }, [listingData, selectedCategory, selectedMonth, selectedPeriod]);
 
   const availableMonths = useMemo(() => {
     const months = new Set<string>();
@@ -352,6 +360,7 @@ export default function CorrelationPage() {
                   <li>• <strong>日別相関推移</strong>: 各日ごとの相関係数の変化を折れ線グラフで表示</li>
                   <li>• <strong>ラグ相関</strong>: 0〜24時間のタイムラグごとの相関係数を折れ線グラフで表示</li>
                   <li>• <strong>散布図</strong>: CV割合と初診割合の関係を点で表示し、回帰直線を引いたグラフ</li>
+                  <li>• <strong>期間フィルター</strong>: 直近3ヶ月/6ヶ月/1年/全期間から分析対象期間を選択可能</li>
                 </ul>
                 <p className="mt-3 text-xs text-amber-700">
                   💡 補足: 相関係数は統計的な類似度を示す数値です。高い値でも因果関係を意味するとは限りません。
@@ -380,21 +389,36 @@ export default function CorrelationPage() {
             </div>
           </div>
 
-          {availableMonths.length > 0 && (
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-semibold text-slate-700">期間:</label>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-semibold text-slate-700">期間範囲:</label>
               <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value as PeriodType)}
                 className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
               >
                 <option value="all">全期間</option>
-                {availableMonths.map(month => (
-                  <option key={month} value={month}>{month}</option>
-                ))}
+                <option value="3months">直近3ヶ月</option>
+                <option value="6months">直近6ヶ月</option>
+                <option value="1year">直近1年</option>
               </select>
             </div>
-          )}
+            {availableMonths.length > 0 && (
+              <div className="flex items-center gap-3">
+                <label className="text-sm font-semibold text-slate-700">月別絞り込み:</label>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+                >
+                  <option value="all">全月</option>
+                  {availableMonths.map(month => (
+                    <option key={month} value={month}>{month}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
         </div>
 
         {!hasData && (
