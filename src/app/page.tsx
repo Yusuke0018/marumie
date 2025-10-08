@@ -682,8 +682,7 @@ export default function HomePage() {
                 <YAxis stroke="#64748B" />
                 <Tooltip formatter={tooltipFormatter} />
                 <Legend />
-                <Bar dataKey="total" fill="#5DD4C3" name="総数" />
-                <Bar dataKey="初診" fill="#3FBFAA" name="初診" />
+                <Bar dataKey="初診" fill="#5DD4C3" name="初診" />
                 <Bar dataKey="再診" fill="#FFB8C8" name="再診" />
               </BarChart>
             </ResponsiveContainer>
