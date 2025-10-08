@@ -60,6 +60,7 @@ type ParsedDateTime = {
 
 const STORAGE_KEY = "clinic-analytics/reservations/v1";
 const TIMESTAMP_KEY = "clinic-analytics/last-updated/v1";
+const ORDER_KEY = "clinic-analytics/department-order/v1";
 const HOURS = Array.from({ length: 24 }, (_, index) => index);
 const DEPARTMENT_PRIORITIES = [
   "内科外科外来",
@@ -418,11 +419,12 @@ export default function HomePage() {
   const [diffMonthly, setDiffMonthly] = useState<MonthlyBucket[] | null>(null);
   const [departmentOrder, setDepartmentOrder] = useState<string[]>([]);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [expandedDepartment, setExpandedDepartment] = useState<string | null>(null);
   const [sortMode, setSortMode] = useState<"priority" | "alphabetical" | "volume">(
     "priority",
   );
 
-  useEffect(() => {
+useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
@@ -435,6 +437,10 @@ export default function HomePage() {
       const storedTimestamp = window.localStorage.getItem(TIMESTAMP_KEY);
       if (storedTimestamp) {
         setLastUpdated(storedTimestamp);
+      }
+      const storedOrder = window.localStorage.getItem(ORDER_KEY);
+      if (storedOrder) {
+        setDepartmentOrder(JSON.parse(storedOrder));
       }
     } catch (error) {
       console.error(error);
@@ -525,8 +531,11 @@ export default function HomePage() {
     setDraggedIndex(index);
   };
 
-  const handleDragEnd = () => {
+const handleDragEnd = () => {
     setDraggedIndex(null);
+    if (typeof window !== "undefined" && departmentOrder.length > 0) {
+      window.localStorage.setItem(ORDER_KEY, JSON.stringify(departmentOrder));
+    }
   };
 
   const monthlyOverview = useMemo(
@@ -830,11 +839,12 @@ export default function HomePage() {
                 onDragStart={() => handleDragStart(index)}
                 onDragOver={(e) => handleDragOver(e, index)}
                 onDragEnd={handleDragEnd}
-                className={`aspect-square cursor-move rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-brand-400 ${
+                onClick={() => setExpandedDepartment(department)}
+                className={`aspect-square cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-brand-400 hover:shadow-lg ${
                   draggedIndex === index ? "opacity-50" : ""
                 }`}
               >
-                <div className="flex h-full flex-col">
+                <div className="flex h-full flex-col pointer-events-none">
                   <div className="mb-2 flex items-start justify-between">
                     <h3 className="text-sm font-semibold text-slate-800 line-clamp-2">
                       {department}
@@ -881,7 +891,7 @@ export default function HomePage() {
                 </div>
               </div>
             ))}
-            {displayedDepartments.length === 0 && (
+{displayedDepartments.length === 0 && (
               <p className="col-span-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
                 集計対象のデータがありません。CSVをアップロードしてください。
               </p>
@@ -889,6 +899,64 @@ export default function HomePage() {
           </div>
         </SectionCard>
       </div>
+
+      {expandedDepartment && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setExpandedDepartment(null)}
+        >
+          <div
+            className="w-full max-w-4xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">
+                  {expandedDepartment}
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  総予約数: {displayedDepartments.find(d => d.department === expandedDepartment)?.total.toLocaleString("ja-JP")}
+                </p>
+              </div>
+              <button
+                onClick={() => setExpandedDepartment(null)}
+                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+              >
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="h-96">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={displayedDepartments.find(d => d.department === expandedDepartment)?.data}>
+                  <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
+                  <XAxis dataKey="hour" stroke="#64748B" />
+                  <YAxis stroke="#64748B" />
+                  <Tooltip formatter={tooltipFormatter} />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="初診"
+                    stroke="#5DD4C3"
+                    strokeWidth={3}
+                    dot={false}
+                    name="初診"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="再診"
+                    stroke="#FFB8C8"
+                    strokeWidth={3}
+                    dot={false}
+                    name="再診"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
