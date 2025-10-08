@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { RefreshCw, Upload, Share2, Link as LinkIcon } from "lucide-react";
 import { uploadDataToR2, fetchDataFromR2 } from "@/lib/dataShare";
+import { getDayType, getWeekdayName, type PeriodType, filterByPeriod } from "@/lib/dateUtils";
 import Papa from "papaparse";
 import {
   Bar,
@@ -304,6 +305,72 @@ type DepartmentHourly = {
   total: number;
 };
 
+type WeekdayBucket = {
+  weekday: string;
+  total: number;
+  初診: number;
+  再診: number;
+};
+
+type DayTypeBucket = {
+  dayType: string;
+  total: number;
+  初診: number;
+  再診: number;
+  avgPerDay: number;
+};
+
+const aggregateByWeekday = (reservations: Reservation[]): WeekdayBucket[] => {
+  const weekdays = ["日曜", "月曜", "火曜", "水曜", "木曜", "金曜", "土曜"];
+  const buckets = weekdays.map(weekday => ({
+    weekday,
+    total: 0,
+    初診: 0,
+    再診: 0,
+  }));
+
+  for (const reservation of reservations) {
+    const weekdayName = getWeekdayName(reservation.reservationDate);
+    const bucket = buckets.find(b => b.weekday === weekdayName);
+    if (!bucket) continue;
+
+    bucket.total += 1;
+    if (reservation.visitType === "初診" || reservation.visitType === "再診") {
+      bucket[reservation.visitType] += 1;
+    }
+  }
+
+  return buckets;
+};
+
+const aggregateByDayType = (reservations: Reservation[]): DayTypeBucket[] => {
+  const dayTypeCounts = new Map<string, { total: number; 初診: number; 再診: number; days: Set<string> }>();
+
+  for (const reservation of reservations) {
+    const dayType = getDayType(reservation.reservationDate);
+    
+    if (!dayTypeCounts.has(dayType)) {
+      dayTypeCounts.set(dayType, { total: 0, 初診: 0, 再診: 0, days: new Set() });
+    }
+    
+    const bucket = dayTypeCounts.get(dayType)!;
+    bucket.total += 1;
+    bucket.days.add(reservation.reservationDate);
+    
+    if (reservation.visitType === "初診" || reservation.visitType === "再診") {
+      bucket[reservation.visitType] += 1;
+    }
+  }
+
+  return Array.from(dayTypeCounts.entries()).map(([dayType, data]) => ({
+    dayType,
+    total: data.total,
+    初診: data["初診"],
+    再診: data["再診"],
+    avgPerDay: data.total / data.days.size,
+  })).sort((a, b) => b.total - a.total);
+};
+
 const aggregateDepartmentHourly = (
   reservations: Reservation[],
 ): DepartmentHourly[] => {
@@ -425,6 +492,7 @@ const [departmentOrder, setDepartmentOrder] = useState<string[]>([]);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [expandedDepartment, setExpandedDepartment] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("all");
   const [sortMode, setSortMode] = useState<"priority" | "alphabetical" | "volume">(
     "priority",
   );
@@ -482,9 +550,20 @@ const availableMonths = useMemo(() => {
   }, [reservations]);
 
   const filteredReservations = useMemo(() => {
-    if (selectedMonth === "all") return reservations;
-    return reservations.filter(r => r.reservationMonth === selectedMonth);
-  }, [reservations, selectedMonth]);
+    let filtered = reservations;
+    
+    // 期間フィルター
+    if (selectedPeriod !== "all") {
+      filtered = filterByPeriod(filtered, selectedPeriod);
+    }
+    
+    // 月フィルター
+    if (selectedMonth !== "all") {
+      filtered = filtered.filter(r => r.reservationMonth === selectedMonth);
+    }
+    
+    return filtered;
+  }, [reservations, selectedMonth, selectedPeriod]);
 
   const overallHourly = useMemo(
     () => aggregateHourly(filteredReservations),
@@ -584,8 +663,18 @@ const monthlyOverview = useMemo(
   const totalReservations = filteredReservations.length;
   const initialCount = filteredReservations.filter((item) => item.visitType === "初診").length;
   const followupCount = filteredReservations.filter((item) => item.visitType === "再診").length;
-const departmentCount = useMemo(
+  const departmentCount = useMemo(
     () => new Set(filteredReservations.map((item) => item.department)).size,
+    [filteredReservations],
+  );
+
+  const weekdayData = useMemo(
+    () => aggregateByWeekday(filteredReservations),
+    [filteredReservations],
+  );
+
+  const dayTypeData = useMemo(
+    () => aggregateByDayType(filteredReservations),
     [filteredReservations],
   );
 
@@ -768,18 +857,33 @@ ${response.url}`);
         </section>
 
 {reservations.length > 0 && (
-          <div className="flex items-center gap-4">
-            <label className="text-sm font-semibold text-slate-700">期間:</label>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
-            >
-              <option value="all">全期間</option>
-              {availableMonths.map(month => (
-                <option key={month} value={month}>{month}</option>
-              ))}
-            </select>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-semibold text-slate-700">分析期間:</label>
+              <select
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value as PeriodType)}
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+              >
+                <option value="all">全期間</option>
+                <option value="3months">直近3ヶ月</option>
+                <option value="6months">直近6ヶ月</option>
+                <option value="1year">直近1年</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-semibold text-slate-700">月別:</label>
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+              >
+                <option value="all">全て</option>
+                {availableMonths.map(month => (
+                  <option key={month} value={month}>{month}</option>
+                ))}
+              </select>
+            </div>
           </div>
         )}
 
@@ -805,6 +909,72 @@ ${response.url}`);
             tone="muted"
           />
         </section>
+
+        <SectionCard
+          title="曜日別 予約傾向"
+          description="曜日ごとの予約件数の分布を表示しています。"
+        >
+          <div className="h-[380px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={weekdayData}>
+                <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
+                <XAxis dataKey="weekday" stroke="#64748B" />
+                <YAxis stroke="#64748B" />
+                <Tooltip formatter={tooltipFormatter} />
+                <Legend />
+                <Bar dataKey="初診" fill="#5DD4C3" name="初診" />
+                <Bar dataKey="再診" fill="#FFB8C8" name="再診" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </SectionCard>
+
+        <SectionCard
+          title="日付タイプ別 予約傾向"
+          description="平日・休日・祝日・連休など、日付のタイプごとの予約パターンを表示しています。"
+        >
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className="px-3 py-2">日付タイプ</th>
+                  <th className="px-3 py-2">総数</th>
+                  <th className="px-3 py-2">初診</th>
+                  <th className="px-3 py-2">再診</th>
+                  <th className="px-3 py-2">1日平均</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700">
+                {dayTypeData.map((row) => (
+                  <tr key={row.dayType} className="hover:bg-slate-50">
+                    <td className="px-3 py-2 font-medium text-slate-900">
+                      {row.dayType}
+                    </td>
+                    <td className="px-3 py-2">
+                      {row.total.toLocaleString("ja-JP")}
+                    </td>
+                    <td className="px-3 py-2">
+                      {row["初診"].toLocaleString("ja-JP")}
+                    </td>
+                    <td className="px-3 py-2">
+                      {row["再診"].toLocaleString("ja-JP")}
+                    </td>
+                    <td className="px-3 py-2">
+                      {row.avgPerDay.toFixed(1)}
+                    </td>
+                  </tr>
+                ))}
+                {dayTypeData.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+                      集計対象のデータがありません。
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </SectionCard>
 
         <SectionCard
           title="時間帯別 予約数（受付基準）"
