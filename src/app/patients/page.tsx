@@ -492,7 +492,6 @@ export default function PatientAnalysisPage() {
 
   const hasAnyRecords = records.length > 0;
   const hasPeriodRecords = periodFilteredRecords.length > 0;
-  const disableDataActions = isReadOnly;
 
   const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -807,30 +806,25 @@ export default function PatientAnalysisPage() {
         >
           <div className="space-y-3">
             <p className="text-xs text-slate-500">
-              {disableDataActions
-                ? "共有URLから閲覧中のため操作は無効化されています。元データの管理はオリジナル環境から実行してください。"
+              {isReadOnly
+                ? "共有URLから閲覧中です。操作内容は公開データに即時反映されるため取り扱いにご注意ください。"
                 : "最新のCSVをアップロードすると集計結果が更新されます。共有URLはコピーして関係者へ連携できます。"}
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              <label
-                className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-emerald-200 px-4 py-2 text-xs font-semibold text-emerald-700 transition sm:w-auto ${
-                  disableDataActions ? "cursor-not-allowed opacity-50" : "hover:bg-emerald-50"
-                }`}
-              >
+              <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-emerald-200 px-4 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 sm:w-auto">
                 <Upload className="h-4 w-4" />
                 CSVを選択
                 <input
                   type="file"
                   accept=".csv,text/csv"
                   onChange={handleUpload}
-                  disabled={disableDataActions}
                   className="hidden"
                 />
               </label>
               <button
                 type="button"
                 onClick={handleShare}
-                disabled={disableDataActions || isSharing || records.length === 0}
+                disabled={isSharing || records.length === 0}
                 className="flex w-full items-center justify-center gap-2 rounded-full border border-emerald-200 px-4 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
                 {isSharing ? (
@@ -848,7 +842,7 @@ export default function PatientAnalysisPage() {
               <button
                 type="button"
                 onClick={handleReset}
-                disabled={disableDataActions || records.length === 0}
+                disabled={records.length === 0}
                 className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
                 <RefreshCw className="h-4 w-4" />
