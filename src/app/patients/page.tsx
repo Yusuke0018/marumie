@@ -494,26 +494,30 @@ export default function PatientAnalysisPage() {
   const hasPeriodRecords = periodFilteredRecords.length > 0;
 
   const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
+    const files = event.target.files;
+    if (!files || files.length === 0) {
       return;
     }
 
     setUploadError(null);
     try {
-      const text = await file.text();
-      const parsed = parseKarteCsv(text);
-
-      // 既存データとマージ（重複排除）
       const existingMap = new Map<string, KarteRecord>();
+
+      // 既存データを先に追加
       for (const record of records) {
         const key = `${record.dateIso}|${record.visitType}|${record.patientNumber}|${record.department}`;
         existingMap.set(key, record);
       }
 
-      for (const record of parsed) {
-        const key = `${record.dateIso}|${record.visitType}|${record.patientNumber}|${record.department}`;
-        existingMap.set(key, record);
+      // 複数ファイルを処理
+      for (const file of Array.from(files)) {
+        const text = await file.text();
+        const parsed = parseKarteCsv(text);
+
+        for (const record of parsed) {
+          const key = `${record.dateIso}|${record.visitType}|${record.patientNumber}|${record.department}`;
+          existingMap.set(key, record);
+        }
       }
 
       const merged = Array.from(existingMap.values()).sort((a, b) =>
@@ -831,6 +835,7 @@ export default function PatientAnalysisPage() {
                   type="file"
                   accept=".csv,text/csv"
                   onChange={handleUpload}
+                  multiple
                   className="hidden"
                 />
               </label>

@@ -808,25 +808,34 @@ const monthlyOverview = useMemo(
 
 
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
+    const files = event.target.files;
+    if (!files || files.length === 0) {
       return;
     }
 
     setUploadError(null);
     try {
-      const text = await file.text();
-      const parsed = parseCsv(text);
-
-      const existingKeys = new Set(reservations.map((item) => item.key));
-      const newlyAdded = parsed.filter((item) => !existingKeys.has(item.key));
-
       const mergedMap = new Map<string, Reservation>();
+
+      // 既存データを先に追加
       for (const item of reservations) {
         mergedMap.set(item.key, item);
       }
-      for (const item of parsed) {
-        mergedMap.set(item.key, item);
+
+      const allNewlyAdded: Reservation[] = [];
+
+      // 複数ファイルを順次処理
+      for (const file of Array.from(files)) {
+        const text = await file.text();
+        const parsed = parseCsv(text);
+
+        const existingKeys = new Set(reservations.map((item) => item.key));
+        const newlyAdded = parsed.filter((item) => !existingKeys.has(item.key));
+        allNewlyAdded.push(...newlyAdded);
+
+        for (const item of parsed) {
+          mergedMap.set(item.key, item);
+        }
       }
 
       const merged = Array.from(mergedMap.values()).sort((a, b) =>
@@ -834,7 +843,7 @@ const monthlyOverview = useMemo(
       );
 
       setReservations(merged);
-      setDiffMonthly(newlyAdded.length > 0 ? aggregateMonthly(newlyAdded) : []);
+      setDiffMonthly(allNewlyAdded.length > 0 ? aggregateMonthly(allNewlyAdded) : []);
 
       const timestamp = new Date().toISOString();
       setLastUpdated(timestamp);
@@ -1338,6 +1347,7 @@ const monthlyOverview = useMemo(
                   type="file"
                   accept=".csv,text/csv"
                   onChange={handleFileUpload}
+                  multiple
                   className="hidden"
                 />
               </label>
