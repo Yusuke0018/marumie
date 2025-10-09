@@ -1,0 +1,15 @@
+timestamp: 2025-10-09T11:12:39+0900
+branch: main
+commit: 7037bd83f75cff470f3d90b38f744c6c35b604e7
+diffstat:
+  cloudflare-worker/src/index.ts |   4 +-
+  src/app/page.tsx               | 423 +++++++++++++++++++++++++++++++++++++++--
+  src/lib/dataShare.ts           |   2 +-
+  src/lib/karteAnalytics.ts      | 144 ++++++++++++++
+  4 files changed, 557 insertions(+), 16 deletions(-)
+commands:
+  - npm run lint -- --fix (success)
+  - npm run build (success)
+push: success (origin/main)
+notes:
+  - カルテ集計CSVをもとに純初診判定と月次指標のUIを追加
