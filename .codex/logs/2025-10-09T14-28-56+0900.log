@@ -7,4 +7,4 @@ changes:
   - 月別選択未設定時のフィルター挙動を見直し、データ集約の信頼性を向上
 lint:
   - npm run lint (pass)
-push: 未実施
+push: origin/main にプッシュ完了
