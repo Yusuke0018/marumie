@@ -31,10 +31,6 @@ import {
 import { saveSurveyDataToStorage } from "@/lib/surveyData";
 import { saveListingDataToStorage } from "@/lib/listingData";
 import type { SharedDataBundle } from "@/lib/sharedBundle";
-import {
-  aggregateLeadtimeMetrics,
-  saveLeadtimeMetricsToStorage,
-} from "@/lib/leadtimeMetrics";
 
 // グラフコンポーネントをReact.lazyで遅延ロード（初期バンドルサイズを削減）
 const WeekdayChartSection = lazy(() =>
@@ -502,11 +498,6 @@ export default function HomePage() {
           fallbackTimestamp,
         );
         clearReservationDiff();
-        saveLeadtimeMetricsToStorage(
-          reservationsData.length > 0
-            ? aggregateLeadtimeMetrics(reservationsData)
-            : null,
-        );
         setReservations(reservationsData);
         setDiffMonthly(null);
         setLastUpdated(timestamp);
@@ -550,10 +541,6 @@ export default function HomePage() {
           );
         }
 
-        if (bundle.leadtimeMetrics) {
-          saveLeadtimeMetricsToStorage(bundle.leadtimeMetrics);
-        }
-
         if (Array.isArray(bundle.reservations)) {
           const reservationsData = bundle.reservations as Reservation[];
           const reservationsTimestamp = saveReservationsToStorage(
@@ -565,13 +552,6 @@ export default function HomePage() {
           setDiffMonthly(null);
           setLastUpdated(reservationsTimestamp);
           setUploadError(null);
-          if (!bundle.leadtimeMetrics) {
-            saveLeadtimeMetricsToStorage(
-              reservationsData.length > 0
-                ? aggregateLeadtimeMetrics(reservationsData)
-                : null,
-            );
-          }
           return true;
         }
 
@@ -829,18 +809,12 @@ export default function HomePage() {
 
     try {
       const generatedAt = new Date().toISOString();
-      const leadtimeMetrics =
-        reservations.length > 0 ? aggregateLeadtimeMetrics(reservations) : null;
-      if (leadtimeMetrics) {
-        saveLeadtimeMetricsToStorage(leadtimeMetrics);
-      }
       const bundle: SharedDataBundle = {
         version: 1,
         generatedAt,
         karteRecords: [],
         reservations,
         reservationsTimestamp: lastUpdated ?? generatedAt,
-        leadtimeMetrics: leadtimeMetrics ?? undefined,
       };
       const serializedBundle = JSON.stringify(bundle);
 

@@ -1,5 +1,4 @@
 import Papa from "papaparse";
-import { clearLeadtimeMetricsStorage } from "@/lib/leadtimeMetrics";
 
 export type VisitType = "初診" | "再診" | "未設定";
 
@@ -250,7 +249,6 @@ export const clearReservationsStorage = () => {
   try {
     window.localStorage.removeItem(RESERVATION_STORAGE_KEY);
     window.localStorage.removeItem(RESERVATION_TIMESTAMP_KEY);
-    clearLeadtimeMetricsStorage();
   } catch (error) {
     console.error(error);
   }
