@@ -1,0 +1,15 @@
+timestamp: 2025-10-09T12:05:14+0900
+branch: main
+commit: 7131d6015336a1ec9a7706f7cec0f9ce718e8119
+diffstat:
+  src/app/page.tsx              | 1386 ----------------------------------------
+  src/app/patients/page.tsx     |  276 ++++++--
+  src/app/reservations/page.tsx | 1385 ++++++++++++++++++++++++++++++++++++++++
+  src/components/Navigation.tsx |    9 +-
+  4 files changed, 1612 insertions(+), 1444 deletions(-)
+commands:
+  - npm run lint -- --fix (success)
+  - npm run build (success)
+push: pending
+notes:
+  - 患者分析をホーム画面化し期間・月フィルターと診療科カードを追加、旧トップは /reservations へ移動
