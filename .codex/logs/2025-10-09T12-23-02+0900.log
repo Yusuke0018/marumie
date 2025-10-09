@@ -1,0 +1,14 @@
+timestamp: 2025-10-09T12:23:02+0900
+branch: main
+commit: 5bd3d47d3a84dd33a07cec19a18c7bdbde2fb1fe
+diffstat:
+  src/app/patients/page.tsx     | 133 ++++++++++++++++++++++-------------------
+  src/app/reservations/page.tsx | 134 +++++++++++++++++++++++-------------------
+  2 files changed, 149 insertions(+), 118 deletions(-)
+commands:
+  - npm run lint -- --fix (success)
+  - npm run build (success)
+push: pending
+notes:
+  - CSV操作系をページ下部のデータ管理セクションへ移動し、共有URL閲覧時もボタン表示を維持
+  - 診療科カードをアイコン付きデザインに刷新
