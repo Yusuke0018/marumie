@@ -11,7 +11,8 @@ diffstat:
 commands:
   - npx prettier --write docs/reservations-leadtime-plan.md src/app/reservations/leadtime/page.tsx src/components/reservations/leadtime/CategoryBreakdownChart.tsx src/components/reservations/leadtime/HourlyLeadtimeChart.tsx src/components/reservations/leadtime/DepartmentLeadtimeChart.tsx (success)
   - npm run lint (success)
-push: 未実施（このログ作成時点）
+<<<<<<< HEAD
+push: origin/main にプッシュ完了
 notes:
   - リードタイムページにハイライトカードとドーナツ／積み上げ棒／横棒チャートを追加
   - グラフはリアクティブに遅延読み込みし、データがない場合は自動的に非表示
