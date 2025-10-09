@@ -352,6 +352,17 @@ export default function PatientAnalysisPage() {
 
     const params = new URLSearchParams(window.location.search);
     const dataId = params.get("data");
+    const fallback = params.get("fallback");
+
+    // fallbackパラメータがある場合は優先的に使用
+    if (fallback) {
+      setIsReadOnly(Boolean(dataId));
+      if (loadFallbackFromParams()) {
+        setIsLoadingShared(false);
+        return;
+      }
+    }
+
     setIsReadOnly(Boolean(dataId));
 
     if (dataId) {
