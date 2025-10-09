@@ -6,6 +6,7 @@ export type KarteRecord = {
   visitType: KarteVisitType;
   patientNumber: number | null;
   birthDateIso: string | null;
+  department?: string | null;
 };
 
 export type KarteMonthlyStat = {
@@ -46,7 +47,13 @@ const toDateFromIso = (iso: string) => {
     : null;
 };
 
-export function aggregateKarteMonthly(records: KarteRecord[]): KarteMonthlyStat[] {
+export type KarteVisitCategory = "pureFirst" | "returningFirst" | "revisit" | "unknown";
+
+export type KarteRecordWithCategory = KarteRecord & {
+  category: KarteVisitCategory;
+};
+
+export function classifyKarteRecords(records: KarteRecord[]): KarteRecordWithCategory[] {
   if (records.length === 0) {
     return [];
   }
@@ -60,11 +67,13 @@ export function aggregateKarteMonthly(records: KarteRecord[]): KarteMonthlyStat[
   }
 
   const months = Array.from(monthMap.keys()).sort(MONTH_SORT);
-  const stats: KarteMonthlyStat[] = [];
+  const classified: KarteRecordWithCategory[] = [];
 
   for (let index = 0; index < months.length; index++) {
     const month = months[index];
-    const currentRecords = monthMap.get(month) ?? [];
+    const currentRecords = [...(monthMap.get(month) ?? [])].sort((a, b) =>
+      a.dateIso.localeCompare(b.dateIso),
+    );
 
     const previousMonth = index > 0 ? months[index - 1] : null;
     const previousRecords = previousMonth ? monthMap.get(previousMonth) ?? [] : [];
@@ -82,18 +91,11 @@ export function aggregateKarteMonthly(records: KarteRecord[]): KarteMonthlyStat[
       }
     }
 
-    let totalPatients = 0;
-    let pureFirstVisits = 0;
-    let returningFirstVisits = 0;
-    let revisitCount = 0;
-    let ageSum = 0;
-    let ageCount = 0;
-
     for (const record of currentRecords) {
-      totalPatients += 1;
+      let category: KarteVisitCategory = "unknown";
 
       if (record.visitType === "再診") {
-        revisitCount += 1;
+        category = "revisit";
       } else if (record.visitType === "初診") {
         const patientNumber = record.patientNumber;
         let isPureFirst = false;
@@ -110,35 +112,84 @@ export function aggregateKarteMonthly(records: KarteRecord[]): KarteMonthlyStat[
           isPureFirst = false;
         }
 
-        if (isPureFirst) {
-          pureFirstVisits += 1;
-        } else {
-          returningFirstVisits += 1;
-        }
+        category = isPureFirst ? "pureFirst" : "returningFirst";
       }
 
-      if (record.birthDateIso) {
-        const birthDate = toDateFromIso(record.birthDateIso);
-        const visitDate = toDateFromIso(record.dateIso);
-        if (birthDate && visitDate) {
-          const age = calcAge(birthDate, visitDate);
-          if (age >= 0 && age < 120) {
-            ageSum += age;
-            ageCount += 1;
-          }
+      classified.push({
+        ...record,
+        category,
+      });
+    }
+  }
+
+  return classified;
+}
+
+export function aggregateKarteMonthly(records: KarteRecord[]): KarteMonthlyStat[] {
+  if (records.length === 0) {
+    return [];
+  }
+
+  const classified = classifyKarteRecords(records);
+
+  const monthStats = new Map<
+    string,
+    {
+      totalPatients: number;
+      pureFirstVisits: number;
+      returningFirstVisits: number;
+      revisitCount: number;
+      ageSum: number;
+      ageCount: number;
+    }
+  >();
+
+  for (const record of classified) {
+    const monthKey = record.monthKey;
+    if (!monthStats.has(monthKey)) {
+      monthStats.set(monthKey, {
+        totalPatients: 0,
+        pureFirstVisits: 0,
+        returningFirstVisits: 0,
+        revisitCount: 0,
+        ageSum: 0,
+        ageCount: 0,
+      });
+    }
+
+    const bucket = monthStats.get(monthKey)!;
+    bucket.totalPatients += 1;
+
+    if (record.category === "pureFirst") {
+      bucket.pureFirstVisits += 1;
+    } else if (record.category === "returningFirst") {
+      bucket.returningFirstVisits += 1;
+    } else if (record.category === "revisit") {
+      bucket.revisitCount += 1;
+    }
+
+    if (record.birthDateIso) {
+      const birthDate = toDateFromIso(record.birthDateIso);
+      const visitDate = toDateFromIso(record.dateIso);
+      if (birthDate && visitDate) {
+        const age = calcAge(birthDate, visitDate);
+        if (age >= 0 && age < 120) {
+          bucket.ageSum += age;
+          bucket.ageCount += 1;
         }
       }
     }
-
-    stats.push({
-      month,
-      totalPatients,
-      pureFirstVisits,
-      returningFirstVisits,
-      revisitCount,
-      averageAge: ageCount > 0 ? clampToOneDecimal(ageSum / ageCount) : null,
-    });
   }
 
-  return stats;
+  return Array.from(monthStats.entries())
+    .sort((a, b) => MONTH_SORT(a[0], b[0]))
+    .map(([month, bucket]) => ({
+      month,
+      totalPatients: bucket.totalPatients,
+      pureFirstVisits: bucket.pureFirstVisits,
+      returningFirstVisits: bucket.returningFirstVisits,
+      revisitCount: bucket.revisitCount,
+      averageAge:
+        bucket.ageCount > 0 ? clampToOneDecimal(bucket.ageSum / bucket.ageCount) : null,
+    }));
 }

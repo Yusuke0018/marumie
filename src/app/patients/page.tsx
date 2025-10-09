@@ -6,8 +6,10 @@ import Papa from "papaparse";
 import { uploadDataToR2, fetchDataFromR2 } from "@/lib/dataShare";
 import {
   aggregateKarteMonthly,
+  classifyKarteRecords,
   type KarteMonthlyStat,
   type KarteRecord,
+  type KarteRecordWithCategory,
 } from "@/lib/karteAnalytics";
 
 const KARTE_STORAGE_KEY = "clinic-analytics/karte-records/v1";
@@ -107,6 +109,7 @@ const parseKarteCsv = (text: string): KarteRecord[] => {
     const patientNumber = parsePatientNumber(row["患者番号"]);
     const birthDate = parseSlashDate(row["患者生年月日"]);
     const birthDateIso = birthDate ? formatDateKey(birthDate) : null;
+    const department = row["診療科"]?.trim() ?? "";
 
     records.push({
       dateIso,
@@ -114,6 +117,7 @@ const parseKarteCsv = (text: string): KarteRecord[] => {
       visitType,
       patientNumber,
       birthDateIso,
+      department,
     });
   }
 
@@ -258,6 +262,60 @@ export default function PatientAnalysisPage() {
   }, [records]);
 
   const latestStat: KarteMonthlyStat | null = stats.length > 0 ? stats[stats.length - 1] : null;
+  const classifiedRecords = useMemo<KarteRecordWithCategory[]>(() => {
+    if (records.length === 0) {
+      return [];
+    }
+    return classifyKarteRecords(records);
+  }, [records]);
+  const departmentStats = useMemo(() => {
+    if (classifiedRecords.length === 0) {
+      return [];
+    }
+
+    const map = new Map<
+      string,
+      { total: number; pureFirst: number; returningFirst: number; revisit: number }
+    >();
+
+    for (const record of classifiedRecords) {
+      const departmentRaw = record.department?.trim() ?? "";
+      if (departmentRaw.includes("外国人自費")) {
+        continue;
+      }
+      const department = departmentRaw.length > 0 ? departmentRaw : "診療科未分類";
+      if (!map.has(department)) {
+        map.set(department, { total: 0, pureFirst: 0, returningFirst: 0, revisit: 0 });
+      }
+
+      const bucket = map.get(department)!;
+      bucket.total += 1;
+
+      if (record.category === "pureFirst") {
+        bucket.pureFirst += 1;
+      } else if (record.category === "returningFirst") {
+        bucket.returningFirst += 1;
+      } else if (record.category === "revisit") {
+        bucket.revisit += 1;
+      }
+    }
+
+    return Array.from(map.entries())
+      .sort((a, b) => {
+        const diff = b[1].total - a[1].total;
+        if (diff !== 0) {
+          return diff;
+        }
+        return a[0].localeCompare(b[0], "ja");
+      })
+      .map(([department, bucket]) => ({
+        department,
+        total: bucket.total,
+        pureFirst: bucket.pureFirst,
+        returningFirst: bucket.returningFirst,
+        revisit: bucket.revisit,
+      }));
+  }, [classifiedRecords]);
 
   const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -521,6 +579,44 @@ export default function PatientAnalysisPage() {
             </p>
           </SectionCard>
         )}
+
+        <SectionCard
+          title="診療科別 集計"
+          description="診療科ごとの総患者・純初診・再初診・再診の件数です（「外国人自費」を含む診療科は除外しています）。"
+        >
+          {departmentStats.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="px-3 py-2">診療科</th>
+                    <th className="px-3 py-2">総患者</th>
+                    <th className="px-3 py-2">純初診</th>
+                    <th className="px-3 py-2">再初診</th>
+                    <th className="px-3 py-2">再診</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {departmentStats.map((row) => (
+                    <tr key={row.department} className="hover:bg-slate-50">
+                      <td className="px-3 py-2 font-medium text-slate-900">{row.department}</td>
+                      <td className="px-3 py-2">{row.total.toLocaleString("ja-JP")}</td>
+                      <td className="px-3 py-2">{row.pureFirst.toLocaleString("ja-JP")}</td>
+                      <td className="px-3 py-2">
+                        {row.returningFirst.toLocaleString("ja-JP")}
+                      </td>
+                      <td className="px-3 py-2">{row.revisit.toLocaleString("ja-JP")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+              診療科別の集計対象データがありません。
+            </p>
+          )}
+        </SectionCard>
       </div>
     </main>
   );
