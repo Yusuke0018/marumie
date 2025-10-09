@@ -1,0 +1,20 @@
+timestamp: 2025-10-09T18-27-28+0900
+branch: main
+commit: 5e0785656ab513738f2abaef899b260b74516867
+diffstat:
+  docs/reservations-leadtime-plan.md     |  78 ++---
+  src/app/reservations/leadtime/page.tsx | 555 ++++++++++++++++++++++++++++++++
+  src/app/reservations/page.tsx          |  42 ++-
+  src/components/Navigation.tsx          |  17 +-
+  src/lib/leadtimeMetrics.ts             | 309 ++++++++++++++++++
+  src/lib/reservationData.ts             |  15 +-
+  src/lib/sharedBundle.ts                |   2 +
+  7 files changed, 973 insertions(+), 45 deletions(-)
+commands:
+  - npx prettier --write src/lib/leadtimeMetrics.ts src/app/reservations/leadtime/page.tsx src/lib/sharedBundle.ts src/lib/reservationData.ts src/app/reservations/page.tsx src/components/Navigation.tsx docs/reservations-leadtime-plan.md (success)
+  - npm run lint (success)
+push: 未実施（ログ作成時点）
+notes:
+  - 新規 leadtimeMetrics モジュールで予約→受診の時間差を集計
+  - 予約リードタイム分析ページを追加し、初診／再診トグルや時間帯・診療科別テーブルを実装
+  - 共有データにリードタイム指標を含め、保存データのクリア時にメトリクスも削除
