@@ -1,9 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, memo, lazy, Suspense } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  memo,
+  lazy,
+  Suspense,
+} from "react";
 import { RefreshCw, Share2, Link as LinkIcon } from "lucide-react";
 import { uploadDataToR2, fetchDataFromR2 } from "@/lib/dataShare";
-import { getDayType, getWeekdayName, type PeriodType, filterByPeriod } from "@/lib/dateUtils";
+import {
+  getDayType,
+  getWeekdayName,
+  type PeriodType,
+  filterByPeriod,
+} from "@/lib/dateUtils";
 import {
   Reservation,
   loadReservationsFromStorage,
@@ -21,13 +34,19 @@ import type { SharedDataBundle } from "@/lib/sharedBundle";
 
 // グラフコンポーネントをReact.lazyで遅延ロード（初期バンドルサイズを削減）
 const WeekdayChartSection = lazy(() =>
-  import('@/components/reservations/WeekdayChartSection').then(m => ({ default: m.WeekdayChartSection }))
+  import("@/components/reservations/WeekdayChartSection").then((m) => ({
+    default: m.WeekdayChartSection,
+  })),
 );
 const HourlyChartSection = lazy(() =>
-  import('@/components/reservations/HourlyChartSection').then(m => ({ default: m.HourlyChartSection }))
+  import("@/components/reservations/HourlyChartSection").then((m) => ({
+    default: m.HourlyChartSection,
+  })),
 );
 const DailyChartSection = lazy(() =>
-  import('@/components/reservations/DailyChartSection').then(m => ({ default: m.DailyChartSection }))
+  import("@/components/reservations/DailyChartSection").then((m) => ({
+    default: m.DailyChartSection,
+  })),
 );
 
 type HourlyBucket = {
@@ -135,7 +154,8 @@ const getPriority = (name: string) => {
     const keywordNormalized = normalizeDepartment(DEPARTMENT_PRIORITIES[index]);
     if (
       keywordNormalized.length > 0 &&
-      (normalized.includes(keywordNormalized) || keywordNormalized.includes(normalized))
+      (normalized.includes(keywordNormalized) ||
+        keywordNormalized.includes(normalized))
     ) {
       return index;
     }
@@ -153,42 +173,6 @@ const createEmptyHourlyBuckets = (): HourlyBucket[] =>
     初診: 0,
     再診: 0,
   }));
-
-const aggregateHourly = (reservations: Reservation[]): HourlyBucket[] => {
-  const buckets = createEmptyHourlyBuckets();
-  for (const reservation of reservations) {
-    if (
-      Number.isNaN(reservation.reservationHour) ||
-      reservation.reservationHour < 0 ||
-      reservation.reservationHour > 23
-    ) {
-      continue;
-    }
-    const bucket = buckets[reservation.reservationHour];
-    if (!bucket) {
-      continue;
-    }
-    bucket.total += 1;
-    if (reservation.visitType === "初診" || reservation.visitType === "再診") {
-      bucket[reservation.visitType] += 1;
-    }
-  }
-  return buckets;
-};
-
-const aggregateDaily = (reservations: Reservation[]): DailyBucket[] => {
-  const counts = new Map<string, number>();
-  for (const reservation of reservations) {
-    counts.set(
-      reservation.reservationDate,
-      (counts.get(reservation.reservationDate) ?? 0) + 1,
-    );
-  }
-
-  return Array.from(counts.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, total]) => ({ date, total }));
-};
 
 const aggregateMonthly = (reservations: Reservation[]): MonthlyBucket[] => {
   const counts = new Map<string, MonthlyBucket>();
@@ -214,7 +198,9 @@ const aggregateMonthly = (reservations: Reservation[]): MonthlyBucket[] => {
     counts.set(key, bucket);
   }
 
-  return Array.from(counts.values()).sort((a, b) => a.month.localeCompare(b.month));
+  return Array.from(counts.values()).sort((a, b) =>
+    a.month.localeCompare(b.month),
+  );
 };
 
 type DepartmentHourly = {
@@ -239,102 +225,171 @@ type DayTypeBucket = {
   avgPerDay: number;
 };
 
-const aggregateByWeekday = (reservations: Reservation[]): WeekdayBucket[] => {
-  const weekdays = ["日曜", "月曜", "火曜", "水曜", "木曜", "金曜", "土曜", "祝日"];
-  const buckets = weekdays.map(weekday => ({
-    weekday,
-    total: 0,
-    初診: 0,
-    再診: 0,
-    当日予約: 0,
-  }));
-
-  for (const reservation of reservations) {
-    const dayType = getDayType(reservation.reservationDate);
-    const weekdayName = dayType === "祝日" ? "祝日" : getWeekdayName(reservation.reservationDate);
-    const bucket = buckets.find(b => b.weekday === weekdayName);
-    if (!bucket) continue;
-
-    bucket.total += 1;
-    if (reservation.visitType === "初診" || reservation.visitType === "再診") {
-      bucket[reservation.visitType] += 1;
-    }
-    if (reservation.isSameDay) {
-      bucket["当日予約"] += 1;
-    }
-  }
-
-  return buckets;
+type AggregatedReservationInsights = {
+  totals: {
+    totalReservations: number;
+    initialCount: number;
+    followupCount: number;
+    departmentCount: number;
+  };
+  weekdayData: WeekdayBucket[];
+  dayTypeData: DayTypeBucket[];
+  departmentHourlyList: DepartmentHourly[];
+  departmentHourlyMap: Map<string, DepartmentHourly>;
+  overallHourly: HourlyBucket[];
+  overallDaily: DailyBucket[];
 };
 
-const aggregateByDayType = (reservations: Reservation[]): DayTypeBucket[] => {
-  const dayTypeCounts = new Map<string, { total: number; 初診: number; 再診: number; days: Set<string> }>();
-
-  for (const reservation of reservations) {
-    const dayType = getDayType(reservation.reservationDate);
-    
-    if (!dayTypeCounts.has(dayType)) {
-      dayTypeCounts.set(dayType, { total: 0, 初診: 0, 再診: 0, days: new Set() });
-    }
-    
-    const bucket = dayTypeCounts.get(dayType)!;
-    bucket.total += 1;
-    bucket.days.add(reservation.reservationDate);
-    
-    if (reservation.visitType === "初診" || reservation.visitType === "再診") {
-      bucket[reservation.visitType] += 1;
-    }
-  }
-
-  return Array.from(dayTypeCounts.entries()).map(([dayType, data]) => ({
-    dayType,
-    total: data.total,
-    初診: data["初診"],
-    再診: data["再診"],
-    avgPerDay: data.total / data.days.size,
-  })).sort((a, b) => b.total - a.total);
-};
-
-const aggregateDepartmentHourly = (
+const aggregateReservationInsights = (
   reservations: Reservation[],
-): DepartmentHourly[] => {
-  const byDepartment = new Map<string, HourlyBucket[]>();
-  const totals = new Map<string, number>();
+): AggregatedReservationInsights => {
+  const weekdayOrder = [
+    "日曜",
+    "月曜",
+    "火曜",
+    "水曜",
+    "木曜",
+    "金曜",
+    "土曜",
+    "祝日",
+  ];
+  const weekdayMap = new Map<string, WeekdayBucket>();
+  weekdayOrder.forEach((weekday) => {
+    weekdayMap.set(weekday, {
+      weekday,
+      total: 0,
+      初診: 0,
+      再診: 0,
+      当日予約: 0,
+    });
+  });
+
+  const dayTypeMap = new Map<
+    string,
+    { total: number; 初診: number; 再診: number; days: Set<string> }
+  >();
+  const overallDailyMap = new Map<string, number>();
+  const overallHourly = createEmptyHourlyBuckets();
+  const departmentHourlyMap = new Map<string, DepartmentHourly>();
+  const dayInfoCache = new Map<string, { weekday: string; dayType: string }>();
+  let initialCount = 0;
+  let followupCount = 0;
+  const departmentSet = new Set<string>();
 
   for (const reservation of reservations) {
-    if (!byDepartment.has(reservation.department)) {
-      byDepartment.set(reservation.department, createEmptyHourlyBuckets());
+    departmentSet.add(reservation.department);
+    if (reservation.visitType === "初診") {
+      initialCount += 1;
+    } else if (reservation.visitType === "再診") {
+      followupCount += 1;
     }
-    const buckets = byDepartment.get(reservation.department);
-    if (!buckets) {
-      continue;
-    }
-    if (
-      Number.isNaN(reservation.reservationHour) ||
-      reservation.reservationHour < 0 ||
-      reservation.reservationHour > 23
-    ) {
-      continue;
-    }
-    const bucket = buckets[reservation.reservationHour];
-    if (!bucket) {
-      continue;
-    }
-    bucket.total += 1;
-    if (reservation.visitType === "初診" || reservation.visitType === "再診") {
-      bucket[reservation.visitType] += 1;
-    }
-    totals.set(
-      reservation.department,
-      (totals.get(reservation.department) ?? 0) + 1,
+
+    overallDailyMap.set(
+      reservation.reservationDate,
+      (overallDailyMap.get(reservation.reservationDate) ?? 0) + 1,
     );
+
+    const hour = reservation.reservationHour;
+    if (!Number.isNaN(hour) && hour >= 0 && hour <= 23) {
+      const overallHourBucket = overallHourly[hour];
+      overallHourBucket.total += 1;
+      if (
+        reservation.visitType === "初診" ||
+        reservation.visitType === "再診"
+      ) {
+        overallHourBucket[reservation.visitType] += 1;
+      }
+
+      let departmentEntry = departmentHourlyMap.get(reservation.department);
+      if (!departmentEntry) {
+        departmentEntry = {
+          department: reservation.department,
+          data: createEmptyHourlyBuckets(),
+          total: 0,
+        };
+        departmentHourlyMap.set(reservation.department, departmentEntry);
+      }
+
+      const departmentBucket = departmentEntry.data[hour];
+      departmentBucket.total += 1;
+      if (
+        reservation.visitType === "初診" ||
+        reservation.visitType === "再診"
+      ) {
+        departmentBucket[reservation.visitType] += 1;
+      }
+      departmentEntry.total += 1;
+    }
+
+    let dayInfo = dayInfoCache.get(reservation.reservationDate);
+    if (!dayInfo) {
+      const dayTypeValue = getDayType(reservation.reservationDate);
+      const weekdayValue =
+        dayTypeValue === "祝日"
+          ? "祝日"
+          : getWeekdayName(reservation.reservationDate);
+      dayInfo = { weekday: weekdayValue, dayType: dayTypeValue };
+      dayInfoCache.set(reservation.reservationDate, dayInfo);
+    }
+
+    const weekdayBucket = weekdayMap.get(dayInfo.weekday);
+    if (weekdayBucket) {
+      weekdayBucket.total += 1;
+      if (
+        reservation.visitType === "初診" ||
+        reservation.visitType === "再診"
+      ) {
+        weekdayBucket[reservation.visitType] += 1;
+      }
+      if (reservation.isSameDay) {
+        weekdayBucket["当日予約"] += 1;
+      }
+    }
+
+    let dayTypeBucket = dayTypeMap.get(dayInfo.dayType);
+    if (!dayTypeBucket) {
+      dayTypeBucket = { total: 0, 初診: 0, 再診: 0, days: new Set<string>() };
+      dayTypeMap.set(dayInfo.dayType, dayTypeBucket);
+    }
+    dayTypeBucket.total += 1;
+    dayTypeBucket.days.add(reservation.reservationDate);
+    if (reservation.visitType === "初診" || reservation.visitType === "再診") {
+      dayTypeBucket[reservation.visitType] += 1;
+    }
   }
 
-  return Array.from(byDepartment.entries()).map(([department, data]) => ({
-    department,
-    data,
-    total: totals.get(department) ?? 0,
-  }));
+  const weekdayData = weekdayOrder.map((weekday) => weekdayMap.get(weekday)!);
+
+  const dayTypeData: DayTypeBucket[] = Array.from(dayTypeMap.entries())
+    .map(([dayType, data]) => ({
+      dayType,
+      total: data.total,
+      初診: data["初診"],
+      再診: data["再診"],
+      avgPerDay: data.days.size === 0 ? 0 : data.total / data.days.size,
+    }))
+    .sort((a, b) => b.total - a.total);
+
+  const departmentHourlyList = Array.from(departmentHourlyMap.values());
+
+  const overallDaily: DailyBucket[] = Array.from(overallDailyMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, total]) => ({ date, total }));
+
+  return {
+    totals: {
+      totalReservations: reservations.length,
+      initialCount,
+      followupCount,
+      departmentCount: departmentSet.size,
+    },
+    weekdayData,
+    dayTypeData,
+    departmentHourlyList,
+    departmentHourlyMap,
+    overallHourly,
+    overallDaily,
+  };
 };
 
 const formatMonthLabel = (month: string) => {
@@ -356,50 +411,64 @@ type SectionCardProps = {
   children: React.ReactNode;
 };
 
-const SectionCard = memo(({ title, description, action, children }: SectionCardProps) => (
-  <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft sm:rounded-3xl sm:p-6">
-    <header className="mb-3 flex flex-col gap-2 sm:mb-4 md:flex-row md:items-center md:justify-between">
-      <div>
-        <h2 className="text-base font-semibold text-slate-900 sm:text-lg">{title}</h2>
-        {description && <p className="text-xs leading-relaxed text-slate-500 sm:text-sm">{description}</p>}
+const SectionCard = memo(
+  ({ title, description, action, children }: SectionCardProps) => (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft sm:rounded-3xl sm:p-6">
+      <header className="mb-3 flex flex-col gap-2 sm:mb-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900 sm:text-lg">
+            {title}
+          </h2>
+          {description && (
+            <p className="text-xs leading-relaxed text-slate-500 sm:text-sm">
+              {description}
+            </p>
+          )}
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
+      </header>
+      <div className="sm:pt-1">{children}</div>
+    </section>
+  ),
+);
+
+SectionCard.displayName = "SectionCard";
+
+const StatCard = memo(
+  ({
+    label,
+    value,
+    tone,
+  }: {
+    label: string;
+    value: string;
+    tone: "brand" | "accent" | "muted" | "emerald";
+  }) => {
+    const toneClass =
+      tone === "brand"
+        ? "text-brand-600"
+        : tone === "accent"
+          ? "text-accent-600"
+          : tone === "emerald"
+            ? "text-emerald-600"
+            : "text-slate-900";
+
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-card sm:p-4">
+        <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:text-xs">
+          {label}
+        </dt>
+        <dd
+          className={`mt-1 text-xl font-bold sm:mt-2 sm:text-2xl ${toneClass}`}
+        >
+          {value}
+        </dd>
       </div>
-      {action && <div className="shrink-0">{action}</div>}
-    </header>
-    <div className="sm:pt-1">{children}</div>
-  </section>
-));
+    );
+  },
+);
 
-SectionCard.displayName = 'SectionCard';
-
-const StatCard = memo(({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: "brand" | "accent" | "muted" | "emerald";
-}) => {
-  const toneClass =
-    tone === "brand"
-      ? "text-brand-600"
-      : tone === "accent"
-        ? "text-accent-600"
-        : tone === "emerald"
-          ? "text-emerald-600"
-          : "text-slate-900";
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-card sm:p-4">
-      <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:text-xs">
-        {label}
-      </dt>
-      <dd className={`mt-1 text-xl font-bold sm:mt-2 sm:text-2xl ${toneClass}`}>{value}</dd>
-    </div>
-  );
-});
-
-StatCard.displayName = 'StatCard';
+StatCard.displayName = "StatCard";
 
 export default function HomePage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -424,7 +493,10 @@ export default function HomePage() {
 
       if (Array.isArray(payload)) {
         const reservationsData = payload as Reservation[];
-        const timestamp = saveReservationsToStorage(reservationsData, fallbackTimestamp);
+        const timestamp = saveReservationsToStorage(
+          reservationsData,
+          fallbackTimestamp,
+        );
         clearReservationDiff();
         setReservations(reservationsData);
         setDiffMonthly(null);
@@ -543,7 +615,10 @@ export default function HomePage() {
           } else if (response.type === "karte") {
             try {
               const parsed = JSON.parse(response.data);
-              if (!applySharedPayload(parsed, response.uploadedAt) && !loadFallbackFromParams()) {
+              if (
+                !applySharedPayload(parsed, response.uploadedAt) &&
+                !loadFallbackFromParams()
+              ) {
                 setUploadError("共有データの読み込みに失敗しました。");
               }
             } catch (error) {
@@ -620,7 +695,7 @@ export default function HomePage() {
   }, []);
 
   const availableMonths = useMemo(() => {
-    const months = new Set(reservations.map(r => r.reservationMonth));
+    const months = new Set(reservations.map((r) => r.reservationMonth));
     return Array.from(months).sort();
   }, [reservations]);
 
@@ -637,49 +712,50 @@ export default function HomePage() {
 
     if (selectedMonth === "") {
       setSelectedMonth(latestMonth);
-    } else if (selectedMonth !== "all" && !availableMonths.includes(selectedMonth)) {
+    } else if (
+      selectedMonth !== "all" &&
+      !availableMonths.includes(selectedMonth)
+    ) {
       setSelectedMonth(latestMonth);
     }
   }, [availableMonths, selectedMonth]);
 
   const filteredReservations = useMemo(() => {
     let filtered = reservations;
-    
+
     // 期間フィルター
     if (selectedPeriod !== "all") {
       filtered = filterByPeriod(filtered, selectedPeriod);
     }
-    
+
     // 月フィルター
     if (selectedMonth !== "" && selectedMonth !== "all") {
-      filtered = filtered.filter(r => r.reservationMonth === selectedMonth);
+      filtered = filtered.filter((r) => r.reservationMonth === selectedMonth);
     }
-    
+
     return filtered;
   }, [reservations, selectedMonth, selectedPeriod]);
 
-  const departmentFilteredReservations = useMemo(() => {
-    if (selectedDepartment === "全体") {
-      return filteredReservations;
-    }
-    return filteredReservations.filter(r => r.department === selectedDepartment);
-  }, [filteredReservations, selectedDepartment]);
-
-  const departmentSpecificHourly = useMemo(
-    () => aggregateHourly(departmentFilteredReservations),
-    [departmentFilteredReservations],
-  );
-
-const overallDaily = useMemo(
-    () => aggregateDaily(filteredReservations),
+  const aggregatedInsights = useMemo(
+    () => aggregateReservationInsights(filteredReservations),
     [filteredReservations],
   );
 
+  const {
+    totals: { totalReservations, initialCount, followupCount, departmentCount },
+    weekdayData,
+    dayTypeData,
+    departmentHourlyList,
+    departmentHourlyMap,
+    overallHourly,
+    overallDaily,
+  } = aggregatedInsights;
+
   const sortedDepartmentHourly = useMemo(() => {
-    const departmentHourly = aggregateDepartmentHourly(filteredReservations);
-    const base = [...departmentHourly];
+    const base = [...departmentHourlyList];
     base.sort((a, b) => {
-      const priorityDiff = getPriority(a.department) - getPriority(b.department);
+      const priorityDiff =
+        getPriority(a.department) - getPriority(b.department);
       if (priorityDiff !== 0) {
         return priorityDiff;
       }
@@ -690,7 +766,23 @@ const overallDaily = useMemo(
       return a.department.localeCompare(b.department, "ja");
     });
     return base;
-  }, [filteredReservations]);
+  }, [departmentHourlyList]);
+
+  const emptyHourlyBuckets = useMemo(() => createEmptyHourlyBuckets(), []);
+
+  const departmentSpecificHourly = useMemo(() => {
+    if (selectedDepartment === "全体") {
+      return overallHourly;
+    }
+    return (
+      departmentHourlyMap.get(selectedDepartment)?.data ?? emptyHourlyBuckets
+    );
+  }, [
+    selectedDepartment,
+    overallHourly,
+    departmentHourlyMap,
+    emptyHourlyBuckets,
+  ]);
 
   const INITIAL_DISPLAY_COUNT = 8;
   const displayedDepartmentButtons = useMemo(() => {
@@ -700,43 +792,9 @@ const overallDaily = useMemo(
     return sortedDepartmentHourly.slice(0, INITIAL_DISPLAY_COUNT);
   }, [sortedDepartmentHourly, showAllDepartments]);
 
-const monthlyOverview = useMemo(
+  const monthlyOverview = useMemo(
     () => aggregateMonthly(reservations),
     [reservations],
-  );
-
-  const { totalReservations, initialCount, followupCount, departmentCount } = useMemo(() => {
-    let total = 0;
-    let initial = 0;
-    let followup = 0;
-    const departments = new Set<string>();
-
-    for (const item of filteredReservations) {
-      total++;
-      departments.add(item.department);
-      if (item.visitType === "初診") {
-        initial++;
-      } else if (item.visitType === "再診") {
-        followup++;
-      }
-    }
-
-    return {
-      totalReservations: total,
-      initialCount: initial,
-      followupCount: followup,
-      departmentCount: departments.size,
-    };
-  }, [filteredReservations]);
-
-  const weekdayData = useMemo(
-    () => aggregateByWeekday(filteredReservations),
-    [filteredReservations],
-  );
-
-  const dayTypeData = useMemo(
-    () => aggregateByDayType(filteredReservations),
-    [filteredReservations],
   );
 
   // データを共有URLとして発行
@@ -751,14 +809,14 @@ const monthlyOverview = useMemo(
 
     try {
       const response = await uploadDataToR2({
-        type: 'reservation',
+        type: "reservation",
         data: JSON.stringify(reservations),
       });
 
       const fallbackPayload = encodeForShare(JSON.stringify(reservations));
       const shareUrlObject = new URL(response.url);
       if (fallbackPayload) {
-        shareUrlObject.searchParams.set('fallback', fallbackPayload);
+        shareUrlObject.searchParams.set("fallback", fallbackPayload);
       }
       const finalUrl = shareUrlObject.toString();
 
@@ -767,7 +825,9 @@ const monthlyOverview = useMemo(
       alert(`共有URLをクリップボードにコピーしました！\n\n${finalUrl}`);
     } catch (error) {
       console.error(error);
-      setUploadError(`共有URLの生成に失敗しました: ${(error as Error).message}`);
+      setUploadError(
+        `共有URLの生成に失敗しました: ${(error as Error).message}`,
+      );
     } finally {
       setIsSharing(false);
     }
@@ -799,12 +859,26 @@ const monthlyOverview = useMemo(
                 予約ログCSVをアップロードすると、受付時刻を基準に初診・再診や診療科別の傾向を自動集計します。曜日や日付タイプ、期間フィルターを切り替えて複数の視点から比較し、最新アップロードとの差分も追跡できます。
               </p>
               <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 sm:p-5">
-                <p className="mb-2 text-sm font-semibold text-blue-900">📊 ダッシュボードのみどころ</p>
+                <p className="mb-2 text-sm font-semibold text-blue-900">
+                  📊 ダッシュボードのみどころ
+                </p>
                 <ul className="space-y-1 text-sm leading-relaxed text-blue-800">
-                  <li>• <strong>曜日別／日付タイプ別</strong>: 平日・土日・祝日・連休の傾向を比較。</li>
-                  <li>• <strong>時間帯別グラフ</strong>: 0時〜23時の受付集中帯と初診・再診の内訳を可視化。</li>
-                  <li>• <strong>日別・月次サマリ</strong>: 期間全体の推移と最新アップロードとの差分を一覧表示。</li>
-                  <li>• <strong>診療科カード</strong>: ドラッグで順番を変えながら各診療科のピーク時間をチェック。</li>
+                  <li>
+                    • <strong>曜日別／日付タイプ別</strong>:
+                    平日・土日・祝日・連休の傾向を比較。
+                  </li>
+                  <li>
+                    • <strong>時間帯別グラフ</strong>:
+                    0時〜23時の受付集中帯と初診・再診の内訳を可視化。
+                  </li>
+                  <li>
+                    • <strong>日別・月次サマリ</strong>:
+                    期間全体の推移と最新アップロードとの差分を一覧表示。
+                  </li>
+                  <li>
+                    • <strong>診療科カード</strong>:
+                    ドラッグで順番を変えながら各診療科のピーク時間をチェック。
+                  </li>
                 </ul>
                 <p className="mt-3 text-xs text-blue-700 sm:text-[13px]">
                   スマホでは横スクロールやピンチアウトでグラフを拡大できます。
@@ -838,10 +912,14 @@ const monthlyOverview = useMemo(
         {reservations.length > 0 && (
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
-              <label className="text-sm font-semibold text-slate-700">分析期間:</label>
+              <label className="text-sm font-semibold text-slate-700">
+                分析期間:
+              </label>
               <select
                 value={selectedPeriod}
-                onChange={(e) => setSelectedPeriod(e.target.value as PeriodType)}
+                onChange={(e) =>
+                  setSelectedPeriod(e.target.value as PeriodType)
+                }
                 className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
               >
                 <option value="all">全期間</option>
@@ -851,15 +929,19 @@ const monthlyOverview = useMemo(
               </select>
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-sm font-semibold text-slate-700">月別:</label>
-                <select
-                  value={selectedMonth === "" ? "all" : selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
-                >
+              <label className="text-sm font-semibold text-slate-700">
+                月別:
+              </label>
+              <select
+                value={selectedMonth === "" ? "all" : selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+              >
                 <option value="all">全て</option>
-                {availableMonths.map(month => (
-                  <option key={month} value={month}>{month}</option>
+                {availableMonths.map((month) => (
+                  <option key={month} value={month}>
+                    {month}
+                  </option>
                 ))}
               </select>
             </div>
@@ -901,7 +983,13 @@ const monthlyOverview = useMemo(
               📊 クリックでグラフを表示
             </button>
           ) : (
-            <Suspense fallback={<div className="h-[280px] sm:h-[340px] md:h-[380px] flex items-center justify-center text-slate-500">読み込み中...</div>}>
+            <Suspense
+              fallback={
+                <div className="h-[280px] sm:h-[340px] md:h-[380px] flex items-center justify-center text-slate-500">
+                  読み込み中...
+                </div>
+              }
+            >
               <WeekdayChartSection weekdayData={weekdayData} />
             </Suspense>
           )}
@@ -937,14 +1025,15 @@ const monthlyOverview = useMemo(
                     <td className="px-3 py-2">
                       {row["再診"].toLocaleString("ja-JP")}
                     </td>
-                    <td className="px-3 py-2">
-                      {row.avgPerDay.toFixed(1)}
-                    </td>
+                    <td className="px-3 py-2">{row.avgPerDay.toFixed(1)}</td>
                   </tr>
                 ))}
                 {dayTypeData.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+                    <td
+                      colSpan={5}
+                      className="px-3 py-8 text-center text-slate-500"
+                    >
                       集計対象のデータがありません。
                     </td>
                   </tr>
@@ -959,7 +1048,9 @@ const monthlyOverview = useMemo(
           description="1時間単位で予約受付が集中する時間帯を診療科別に表示しています。"
         >
           <div className="mb-4 flex flex-wrap items-center gap-3">
-            <label className="text-sm font-semibold text-slate-700">診療科:</label>
+            <label className="text-sm font-semibold text-slate-700">
+              診療科:
+            </label>
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setSelectedDepartment("全体")}
@@ -990,7 +1081,7 @@ const monthlyOverview = useMemo(
                   className="rounded-xl px-4 py-2.5 text-sm font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 transition-colors border-2 border-brand-200"
                 >
                   {showAllDepartments
-                    ? '▲ 閉じる'
+                    ? "▲ 閉じる"
                     : `▼ 他${sortedDepartmentHourly.length - INITIAL_DISPLAY_COUNT}件を表示`}
                 </button>
               )}
@@ -1004,7 +1095,13 @@ const monthlyOverview = useMemo(
               📊 クリックでグラフを表示
             </button>
           ) : (
-            <Suspense fallback={<div className="h-[280px] sm:h-[340px] md:h-[380px] flex items-center justify-center text-slate-500">読み込み中...</div>}>
+            <Suspense
+              fallback={
+                <div className="h-[280px] sm:h-[340px] md:h-[380px] flex items-center justify-center text-slate-500">
+                  読み込み中...
+                </div>
+              }
+            >
               <HourlyChartSection hourlyData={departmentSpecificHourly} />
             </Suspense>
           )}
@@ -1022,7 +1119,13 @@ const monthlyOverview = useMemo(
               📊 クリックでグラフを表示
             </button>
           ) : (
-            <Suspense fallback={<div className="h-[240px] sm:h-72 flex items-center justify-center text-slate-500">読み込み中...</div>}>
+            <Suspense
+              fallback={
+                <div className="h-[240px] sm:h-72 flex items-center justify-center text-slate-500">
+                  読み込み中...
+                </div>
+              }
+            >
               <DailyChartSection dailyData={overallDaily} />
             </Suspense>
           )}
@@ -1065,7 +1168,10 @@ const monthlyOverview = useMemo(
                 ))}
                 {monthlyOverview.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+                    <td
+                      colSpan={5}
+                      className="px-3 py-8 text-center text-slate-500"
+                    >
                       集計対象のデータがありません。
                     </td>
                   </tr>
@@ -1129,7 +1235,9 @@ const monthlyOverview = useMemo(
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex w-full flex-col gap-1 rounded-2xl border border-dashed border-brand-200 bg-white/80 px-4 py-3 text-xs text-brand-700 sm:w-[260px]">
-                <span className="font-semibold text-brand-600">CSVアップロード窓口</span>
+                <span className="font-semibold text-brand-600">
+                  CSVアップロード窓口
+                </span>
                 <p className="leading-relaxed">
                   予約ログCSVは「患者分析（カルテ集計）」ページ下部のデータ管理から登録してください。
                   保存後にこのページを開くと自動で反映されます。
@@ -1167,7 +1275,8 @@ const monthlyOverview = useMemo(
               <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3">
                 <p className="flex items-center gap-2 text-xs text-green-700">
                   <LinkIcon className="h-4 w-4" />
-                  共有URL: <code className="rounded bg-white px-2 py-1">{shareUrl}</code>
+                  共有URL:{" "}
+                  <code className="rounded bg-white px-2 py-1">{shareUrl}</code>
                 </p>
               </div>
             )}
@@ -1179,7 +1288,6 @@ const monthlyOverview = useMemo(
           </div>
         </SectionCard>
       </div>
-
     </main>
   );
 }

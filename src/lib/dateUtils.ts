@@ -2,6 +2,19 @@ import Holidays from "date-holidays";
 
 const hd = new Holidays("JP");
 
+const holidayCache = new Map<string, boolean>();
+const weekdayIndexCache = new Map<string, number>();
+const weekdayNameCache = new Map<string, string>();
+const longWeekendCache = new Map<
+  string,
+  {
+    isLongWeekend: boolean;
+    position?: "first" | "middle" | "last";
+    length?: number;
+  }
+>();
+const dayTypeCache = new Map<string, DayType>();
+
 export type DayType =
   | "平日"
   | "土曜"
@@ -19,25 +32,34 @@ export type PeriodType = "3months" | "6months" | "1year" | "all";
  * 日付が祝日かどうかを判定
  */
 export const isHoliday = (dateStr: string): boolean => {
+  if (holidayCache.has(dateStr)) {
+    return holidayCache.get(dateStr)!;
+  }
   const date = new Date(dateStr);
   const holidays = hd.isHoliday(date);
-  return holidays !== false;
+  const isHolidayDate = holidays !== false;
+  holidayCache.set(dateStr, isHolidayDate);
+  return isHolidayDate;
 };
 
 /**
  * 日付が土曜日かどうかを判定
  */
 export const isSaturday = (dateStr: string): boolean => {
-  const date = new Date(dateStr);
-  return date.getDay() === 6;
+  if (!weekdayIndexCache.has(dateStr)) {
+    weekdayIndexCache.set(dateStr, new Date(dateStr).getDay());
+  }
+  return weekdayIndexCache.get(dateStr) === 6;
 };
 
 /**
  * 日付が日曜日かどうかを判定
  */
 export const isSunday = (dateStr: string): boolean => {
-  const date = new Date(dateStr);
-  return date.getDay() === 0;
+  if (!weekdayIndexCache.has(dateStr)) {
+    weekdayIndexCache.set(dateStr, new Date(dateStr).getDay());
+  }
+  return weekdayIndexCache.get(dateStr) === 0;
 };
 
 /**
@@ -63,12 +85,22 @@ export const isPreHoliday = (dateStr: string): boolean => {
  */
 export const getLongWeekendInfo = (
   dateStr: string,
-): { isLongWeekend: boolean; position?: "first" | "middle" | "last"; length?: number } => {
+): {
+  isLongWeekend: boolean;
+  position?: "first" | "middle" | "last";
+  length?: number;
+} => {
+  if (longWeekendCache.has(dateStr)) {
+    return longWeekendCache.get(dateStr)!;
+  }
+
   const date = new Date(dateStr);
-  
+
   // この日が休日でなければ連休ではない
   if (!isHoliday(dateStr) && !isWeekend(dateStr)) {
-    return { isLongWeekend: false };
+    const result = { isLongWeekend: false };
+    longWeekendCache.set(dateStr, result);
+    return result;
   }
 
   // 前後の休日を数える
@@ -112,59 +144,76 @@ export const getLongWeekendInfo = (
       position = "middle";
     }
 
-    return {
+    const result = {
       isLongWeekend: true,
       position,
       length: totalLength,
     };
+    longWeekendCache.set(dateStr, result);
+    return result;
   }
 
-  return { isLongWeekend: false };
+  const result = { isLongWeekend: false };
+  longWeekendCache.set(dateStr, result);
+  return result;
 };
 
 /**
  * 日付の種類を判定
  */
 export const getDayType = (dateStr: string): DayType => {
+  if (dayTypeCache.has(dateStr)) {
+    return dayTypeCache.get(dateStr)!;
+  }
+
   const longWeekendInfo = getLongWeekendInfo(dateStr);
 
   // 大型連休（5日以上）
   if (longWeekendInfo.isLongWeekend && (longWeekendInfo.length ?? 0) >= 5) {
+    dayTypeCache.set(dateStr, "大型連休");
     return "大型連休";
   }
 
   // 連休の位置
   if (longWeekendInfo.isLongWeekend) {
     if (longWeekendInfo.position === "first") {
+      dayTypeCache.set(dateStr, "連休初日");
       return "連休初日";
     } else if (longWeekendInfo.position === "last") {
+      dayTypeCache.set(dateStr, "連休最終日");
       return "連休最終日";
     } else {
+      dayTypeCache.set(dateStr, "連休中日");
       return "連休中日";
     }
   }
 
   // 祝日前日（平日のみ）
   if (!isHoliday(dateStr) && !isWeekend(dateStr) && isPreHoliday(dateStr)) {
+    dayTypeCache.set(dateStr, "祝日前日");
     return "祝日前日";
   }
 
   // 祝日
   if (isHoliday(dateStr)) {
+    dayTypeCache.set(dateStr, "祝日");
     return "祝日";
   }
 
   // 日曜
   if (isSunday(dateStr)) {
+    dayTypeCache.set(dateStr, "日曜");
     return "日曜";
   }
 
   // 土曜
   if (isSaturday(dateStr)) {
+    dayTypeCache.set(dateStr, "土曜");
     return "土曜";
   }
 
   // 平日
+  dayTypeCache.set(dateStr, "平日");
   return "平日";
 };
 
@@ -172,15 +221,24 @@ export const getDayType = (dateStr: string): DayType => {
  * 曜日の日本語名を取得
  */
 export const getWeekdayName = (dateStr: string): string => {
-  const date = new Date(dateStr);
+  if (weekdayNameCache.has(dateStr)) {
+    return weekdayNameCache.get(dateStr)!;
+  }
+  if (!weekdayIndexCache.has(dateStr)) {
+    weekdayIndexCache.set(dateStr, new Date(dateStr).getDay());
+  }
   const weekdays = ["日曜", "月曜", "火曜", "水曜", "木曜", "金曜", "土曜"];
-  return weekdays[date.getDay()];
+  const name = weekdays[weekdayIndexCache.get(dateStr)!];
+  weekdayNameCache.set(dateStr, name);
+  return name;
 };
 
 /**
  * 期間フィルタリング
  */
-export const filterByPeriod = <T extends { date?: string; reservationDate?: string }>(
+export const filterByPeriod = <
+  T extends { date?: string; reservationDate?: string },
+>(
   data: T[],
   period: PeriodType,
 ): T[] => {
@@ -189,12 +247,12 @@ export const filterByPeriod = <T extends { date?: string; reservationDate?: stri
   const now = new Date();
   const monthsMap = { "3months": 3, "6months": 6, "1year": 12 };
   const months = monthsMap[period];
-  
+
   const cutoffDate = new Date(now);
   cutoffDate.setMonth(cutoffDate.getMonth() - months);
   const cutoffStr = cutoffDate.toISOString().split("T")[0];
 
-  return data.filter(item => {
+  return data.filter((item) => {
     const itemDate = item.date || item.reservationDate;
     if (!itemDate) return false;
     return itemDate >= cutoffStr;
