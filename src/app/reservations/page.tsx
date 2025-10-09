@@ -517,6 +517,9 @@ export default function HomePage() {
   const [sortMode, setSortMode] = useState<"priority" | "alphabetical" | "volume">(
     "priority",
   );
+  const [showWeekdayChart, setShowWeekdayChart] = useState(false);
+  const [showHourlyChart, setShowHourlyChart] = useState(false);
+  const [showDailyChart, setShowDailyChart] = useState(false);
 
   const applySharedPayload = useCallback(
     (payload: unknown, uploadedAt?: string): boolean => {
@@ -1050,31 +1053,40 @@ const monthlyOverview = useMemo(
           title="曜日別 予約傾向"
           description="曜日ごとの予約件数の分布を表示しています。"
         >
-          <div className="-mx-2 sm:mx-0">
-            <div className="h-[280px] sm:h-[340px] md:h-[380px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={weekdayData}>
-                  <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
-                  <XAxis dataKey="weekday" stroke="#64748B" tick={{ fontSize: 12 }} />
-                  <YAxis stroke="#64748B" tick={{ fontSize: 12 }} />
-                  <Tooltip
-                    formatter={tooltipFormatter}
-                    itemSorter={(item) => {
-                      const order = { '初診': 0, '再診': 1, '当日予約': 2 };
-                      return order[item.name as keyof typeof order] ?? 999;
-                    }}
-                  />
-                  <Legend
-                    wrapperStyle={{ paddingTop: 10, fontSize: 12 }}
-                    itemSorter={visitLegendSorter}
-                  />
-                  <Bar dataKey="初診" fill="#5DD4C3" name="初診" isAnimationActive={false} />
-                  <Bar dataKey="再診" fill="#FFB8C8" name="再診" isAnimationActive={false} />
-                  <Bar dataKey="当日予約" fill="#FFA500" name="当日予約" isAnimationActive={false} />
-                </BarChart>
-              </ResponsiveContainer>
+          {!showWeekdayChart ? (
+            <button
+              onClick={() => setShowWeekdayChart(true)}
+              className="w-full py-8 px-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-brand-400 hover:bg-brand-50/30 transition text-slate-600 hover:text-brand-600 font-medium"
+            >
+              📊 クリックでグラフを表示
+            </button>
+          ) : (
+            <div className="-mx-2 sm:mx-0">
+              <div className="h-[280px] sm:h-[340px] md:h-[380px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={weekdayData}>
+                    <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
+                    <XAxis dataKey="weekday" stroke="#64748B" tick={{ fontSize: 12 }} />
+                    <YAxis stroke="#64748B" tick={{ fontSize: 12 }} />
+                    <Tooltip
+                      formatter={tooltipFormatter}
+                      itemSorter={(item) => {
+                        const order = { '初診': 0, '再診': 1, '当日予約': 2 };
+                        return order[item.name as keyof typeof order] ?? 999;
+                      }}
+                    />
+                    <Legend
+                      wrapperStyle={{ paddingTop: 10, fontSize: 12 }}
+                      itemSorter={visitLegendSorter}
+                    />
+                    <Bar dataKey="初診" fill="#5DD4C3" name="初診" isAnimationActive={false} />
+                    <Bar dataKey="再診" fill="#FFB8C8" name="再診" isAnimationActive={false} />
+                    <Bar dataKey="当日予約" fill="#FFA500" name="当日予約" isAnimationActive={false} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-          </div>
+          )}
         </SectionCard>
 
         <SectionCard
@@ -1128,55 +1140,73 @@ const monthlyOverview = useMemo(
           title="時間帯別 予約数（受付基準）"
           description="1時間単位で予約受付が集中する時間帯を大きく表示しています。"
         >
-          <div className="-mx-2 sm:mx-0">
-            <div className="h-[280px] sm:h-[340px] md:h-[380px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={overallHourly}>
-                  <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
-                  <XAxis dataKey="hour" stroke="#64748B" tick={{ fontSize: 12 }} />
-                  <YAxis stroke="#64748B" tick={{ fontSize: 12 }} />
-                  <Tooltip
-                    formatter={tooltipFormatter}
-                    itemSorter={(item) => {
-                      const order = { '初診': 0, '再診': 1 };
-                      return order[item.name as keyof typeof order] ?? 999;
-                    }}
-                  />
-                  <Legend
-                    wrapperStyle={{ paddingTop: 10, fontSize: 12 }}
-                    itemSorter={visitLegendSorter}
-                  />
-                  <Bar dataKey="初診" fill="#5DD4C3" name="初診" isAnimationActive={false} />
-                  <Bar dataKey="再診" fill="#FFB8C8" name="再診" isAnimationActive={false} />
-                </BarChart>
-              </ResponsiveContainer>
+          {!showHourlyChart ? (
+            <button
+              onClick={() => setShowHourlyChart(true)}
+              className="w-full py-8 px-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-brand-400 hover:bg-brand-50/30 transition text-slate-600 hover:text-brand-600 font-medium"
+            >
+              📊 クリックでグラフを表示
+            </button>
+          ) : (
+            <div className="-mx-2 sm:mx-0">
+              <div className="h-[280px] sm:h-[340px] md:h-[380px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={overallHourly}>
+                    <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
+                    <XAxis dataKey="hour" stroke="#64748B" tick={{ fontSize: 12 }} />
+                    <YAxis stroke="#64748B" tick={{ fontSize: 12 }} />
+                    <Tooltip
+                      formatter={tooltipFormatter}
+                      itemSorter={(item) => {
+                        const order = { '初診': 0, '再診': 1 };
+                        return order[item.name as keyof typeof order] ?? 999;
+                      }}
+                    />
+                    <Legend
+                      wrapperStyle={{ paddingTop: 10, fontSize: 12 }}
+                      itemSorter={visitLegendSorter}
+                    />
+                    <Bar dataKey="初診" fill="#5DD4C3" name="初診" isAnimationActive={false} />
+                    <Bar dataKey="再診" fill="#FFB8C8" name="再診" isAnimationActive={false} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-          </div>
+          )}
         </SectionCard>
 
         <SectionCard
           title="日別 予約推移（受付基準）"
           description="日ごとの予約受付件数の推移を確認できます。"
         >
-          <div className="-mx-2 h-[240px] sm:mx-0 sm:h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={overallDaily}>
-                <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
-                <XAxis dataKey="date" stroke="#64748B" />
-                <YAxis stroke="#64748B" />
-                <Tooltip formatter={tooltipFormatter} />
-                <Line
-                  type="monotone"
-                  dataKey="total"
-                  stroke="#5DD4C3"
-                  strokeWidth={2}
-                  dot={false}
-                  name="総数"
-                  isAnimationActive={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          {!showDailyChart ? (
+            <button
+              onClick={() => setShowDailyChart(true)}
+              className="w-full py-8 px-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-brand-400 hover:bg-brand-50/30 transition text-slate-600 hover:text-brand-600 font-medium"
+            >
+              📊 クリックでグラフを表示
+            </button>
+          ) : (
+            <div className="-mx-2 h-[240px] sm:mx-0 sm:h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={overallDaily}>
+                  <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
+                  <XAxis dataKey="date" stroke="#64748B" />
+                  <YAxis stroke="#64748B" />
+                  <Tooltip formatter={tooltipFormatter} />
+                  <Line
+                    type="monotone"
+                    dataKey="total"
+                    stroke="#5DD4C3"
+                    strokeWidth={2}
+                    dot={false}
+                    name="総数"
+                    isAnimationActive={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </SectionCard>
 
         <SectionCard
