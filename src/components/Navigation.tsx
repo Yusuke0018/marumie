@@ -58,25 +58,33 @@ export default function Navigation() {
         </button>
       </div>
 
-      {/* モバイル全画面メニュー */}
+      {/* モバイルメニュー背景オーバーレイ */}
+      {isOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/30 z-40"
+          onClick={closeMenu}
+        />
+      )}
+
+      {/* モバイル半画面メニュー */}
       <div
-        className={`md:hidden fixed inset-0 bg-white z-50 transform transition-transform duration-300 ease-in-out ${
+        className={`md:hidden fixed inset-y-0 right-0 w-[50vw] bg-white z-50 shadow-2xl transform transition-transform duration-300 ease-in-out ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
         <div className="flex flex-col h-full">
-          <div className="flex items-center justify-between p-6 border-b border-slate-200">
-            <h2 className="text-xl font-bold text-brand-600">マルミエ</h2>
+          <div className="flex items-center justify-between p-4 border-b border-slate-200">
+            <h2 className="text-lg font-bold text-brand-600">メニュー</h2>
             <button
               onClick={closeMenu}
               className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition"
               aria-label="閉じる"
             >
-              <X className="h-6 w-6" />
+              <X className="h-5 w-5" />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-6">
-            <nav className="space-y-3">
+          <div className="flex-1 overflow-y-auto p-4">
+            <nav className="space-y-2">
               {links.map((link) => {
                 const isActive =
                   link.href === "/"
@@ -87,7 +95,7 @@ export default function Navigation() {
                     key={link.href}
                     href={link.href}
                     onClick={closeMenu}
-                    className={`flex items-center justify-center px-6 py-4 text-base font-semibold rounded-xl transition ${
+                    className={`flex items-center justify-center px-4 py-3 text-sm font-semibold rounded-xl transition ${
                       isActive
                         ? "bg-brand-500 text-white shadow-lg"
                         : "bg-slate-100 text-slate-700 hover:bg-brand-50 hover:text-brand-600"
