@@ -1,0 +1,13 @@
+timestamp: 2025-10-09T12:48:07+0900
+branch: main
+commit: 43c72268c1cc95894ed4a7464207f854f1ecc6a7
+diffstat:
+  src/app/patients/page.tsx     |  92 +++++++++++++++++++++++++++++++-
+  src/app/reservations/page.tsx |  48 ++++++++++++++--
+  2 files changed, 140 insertions(+), 20 deletions(-)
+commands:
+  - npm run lint -- --fix (success)
+  - npm run build (success)
+push: pending
+notes:
+  - 共有URLにfallbackパラメータを付与し、Cloudflareから404でもローカルにデータを復元できるように対応
