@@ -749,6 +749,8 @@ const monthlyOverview = useMemo(
     [filteredReservations],
   );
 
+  const disableDataActions = isReadOnly;
+
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
@@ -868,52 +870,9 @@ ${response.url}`);
                 </p>
               )}
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              {!isReadOnly ? (
-                <>
-                  <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-400 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-500 sm:w-auto">
-                    <Upload className="h-4 w-4" />
-                    CSVを選択
-                    <input
-                      type="file"
-                      accept=".csv,text/csv"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleShare}
-                    disabled={isSharing || reservations.length === 0}
-                    className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                  >
-                    {isSharing ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                        生成中...
-                      </>
-                    ) : (
-                      <>
-                        <Share2 className="h-4 w-4" />
-                        共有URLを発行
-                      </>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleReset}
-                    className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-brand-200 hover:text-brand-600 sm:w-auto"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    保存内容をリセット
-                  </button>
-                </>
-              ) : (
-                <div className="rounded-2xl border border-dashed border-brand-300 bg-white/70 px-5 py-3 text-center text-sm font-semibold text-brand-600">
-                  共有URL経由の閲覧モードです。CSVのアップロードや共有操作は利用できません。
-                </div>
-              )}
-            </div>
+            <p className="text-xs text-slate-500">
+              CSVのアップロードや共有操作はページ下部の「データ管理」セクションから行えます。
+            </p>
           </div>
           {isLoadingShared && (
             <div className="mt-6 rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3">
@@ -926,19 +885,6 @@ ${response.url}`);
           {lastUpdated && (
             <p className="mt-6 text-xs font-medium text-slate-500">
               最終更新: {new Date(lastUpdated).toLocaleString("ja-JP")}
-            </p>
-          )}
-          {shareUrl && (
-            <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3">
-              <p className="flex items-center gap-2 text-sm text-green-700">
-                <LinkIcon className="h-4 w-4" />
-                共有URL: <code className="rounded bg-white px-2 py-1 text-xs">{shareUrl}</code>
-              </p>
-            </div>
-          )}
-          {uploadError && (
-            <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {uploadError}
             </p>
           )}
         </section>
@@ -1308,6 +1254,76 @@ ${response.url}`);
 {displayedDepartments.length === 0 && (
               <p className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
                 集計対象のデータがありません。CSVをアップロードしてください。
+              </p>
+            )}
+          </div>
+        </SectionCard>
+
+        <SectionCard
+          title="データ管理"
+          description="予約CSVのアップロードや共有URLの発行を行います。"
+        >
+          <div className="space-y-3">
+            <p className="text-xs text-slate-500">
+              {disableDataActions
+                ? "共有URLから閲覧中のため操作は無効化されています。オリジナル環境で操作してください。"
+                : "必要時のみCSVを差し替え、共有URLは安全な場所に保管してください。"}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <label
+                className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-brand-200 px-4 py-2 text-xs font-semibold text-brand-600 transition sm:w-auto ${
+                  disableDataActions ? "cursor-not-allowed opacity-50" : "hover:bg-brand-50"
+                }`}
+              >
+                <Upload className="h-4 w-4" />
+                CSVを選択
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={handleFileUpload}
+                  disabled={disableDataActions}
+                  className="hidden"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={handleShare}
+                disabled={disableDataActions || isSharing || reservations.length === 0}
+                className="flex w-full items-center justify-center gap-2 rounded-full border border-brand-200 px-4 py-2 text-xs font-semibold text-brand-600 transition hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              >
+                {isSharing ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    生成中...
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="h-4 w-4" />
+                    共有URLを発行
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleReset}
+                disabled={disableDataActions || reservations.length === 0}
+                className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              >
+                <RefreshCw className="h-4 w-4" />
+                保存内容をリセット
+              </button>
+            </div>
+            {shareUrl && (
+              <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3">
+                <p className="flex items-center gap-2 text-xs text-green-700">
+                  <LinkIcon className="h-4 w-4" />
+                  共有URL: <code className="rounded bg-white px-2 py-1">{shareUrl}</code>
+                </p>
+              </div>
+            )}
+            {uploadError && (
+              <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+                {uploadError}
               </p>
             )}
           </div>
