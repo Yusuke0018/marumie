@@ -66,9 +66,9 @@ export default function Navigation() {
         />
       )}
 
-      {/* モバイル左側スライドメニュー */}
+      {/* モバイル左側全画面メニュー */}
       <div
-        className={`md:hidden fixed inset-y-0 left-0 w-[85vw] max-w-sm bg-white z-50 shadow-2xl transform transition-transform duration-300 ease-in-out ${
+        className={`md:hidden fixed inset-0 bg-white z-50 transform transition-transform duration-300 ease-in-out ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
