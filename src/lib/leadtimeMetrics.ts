@@ -123,8 +123,18 @@ export const getTopCategory = (
   return topCategory;
 };
 
-export const getLeadtimeCategory = (diffHours: number): LeadtimeCategory => {
-  if (diffHours < 24) {
+export const getLeadtimeCategory = (
+  diffHours: number,
+  receivedDate: Date,
+  appointmentDate: Date,
+): LeadtimeCategory => {
+  // 当日以内：同じ日付（24時間以内ではなく日付で判定）
+  const isSameDay =
+    receivedDate.getFullYear() === appointmentDate.getFullYear() &&
+    receivedDate.getMonth() === appointmentDate.getMonth() &&
+    receivedDate.getDate() === appointmentDate.getDate();
+  
+  if (isSameDay) {
     return "当日以内";
   }
   if (diffHours < 48) {
@@ -172,9 +182,9 @@ export const aggregateLeadtimeMetrics = (
     overall.sum += diffHours;
     overall.total += 1;
 
-    const category = getLeadtimeCategory(diffHours);
+    const category = getLeadtimeCategory(diffHours, receivedDate, appointmentDate);
     overall.categoryCounts[category] += 1;
-    if (diffHours < 24) {
+    if (category === "当日以内") {
       overall.sameDayCount += 1;
     }
 
@@ -188,7 +198,7 @@ export const aggregateLeadtimeMetrics = (
       hourAccumulator.sum += diffHours;
       hourAccumulator.total += 1;
       hourAccumulator.categoryCounts[category] += 1;
-      if (diffHours < 24) {
+      if (category === "当日以内") {
         hourAccumulator.sameDayCount += 1;
       }
     }
@@ -206,7 +216,7 @@ export const aggregateLeadtimeMetrics = (
     departmentAccumulator.sum += diffHours;
     departmentAccumulator.total += 1;
     departmentAccumulator.categoryCounts[category] += 1;
-    if (diffHours < 24) {
+    if (category === "当日以内") {
       departmentAccumulator.sameDayCount += 1;
     }
 
@@ -223,7 +233,7 @@ export const aggregateLeadtimeMetrics = (
       departmentHourAccumulator.sum += diffHours;
       departmentHourAccumulator.total += 1;
       departmentHourAccumulator.categoryCounts[category] += 1;
-      if (diffHours < 24) {
+      if (category === "当日以内") {
         departmentHourAccumulator.sameDayCount += 1;
       }
     }
