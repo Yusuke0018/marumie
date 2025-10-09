@@ -1,7 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { useEffect, useMemo, useState, lazy, Suspense } from "react";
+import type { ReactNode } from "react";
+import {
+  RefreshCw,
+  Clock,
+  PieChart as PieChartIcon,
+  BarChart3,
+  TrendingUp,
+  Zap,
+} from "lucide-react";
 import { filterByPeriod, type PeriodType } from "@/lib/dateUtils";
 import {
   loadReservationsFromStorage,
@@ -17,6 +25,24 @@ import {
   type LeadtimeHourStat,
   type LeadtimeSummary,
 } from "@/lib/leadtimeMetrics";
+
+const CategoryBreakdownChart = lazy(() =>
+  import("@/components/reservations/leadtime/CategoryBreakdownChart").then(
+    (mod) => ({ default: mod.CategoryBreakdownChart }),
+  ),
+);
+
+const HourlyLeadtimeChart = lazy(() =>
+  import("@/components/reservations/leadtime/HourlyLeadtimeChart").then(
+    (mod) => ({ default: mod.HourlyLeadtimeChart }),
+  ),
+);
+
+const DepartmentLeadtimeChart = lazy(() =>
+  import("@/components/reservations/leadtime/DepartmentLeadtimeChart").then(
+    (mod) => ({ default: mod.DepartmentLeadtimeChart }),
+  ),
+);
 
 type VisitTypeFilter = "all" | "初診" | "再診";
 
@@ -66,19 +92,6 @@ const formatRate = (value: number | null) => {
   return `${(value * 100).toFixed(1)}%`;
 };
 
-const formatCategoryRate = (
-  counts: LeadtimeCategoryCounts,
-  total: number,
-  category: LeadtimeCategory,
-) => {
-  if (total === 0) {
-    return "0件 (0.0%)";
-  }
-  const count = counts[category] ?? 0;
-  const rate = (count / total) * 100;
-  return `${count.toLocaleString("ja-JP")}件 (${rate.toFixed(1)}%)`;
-};
-
 const getMostFrequentCategory = (
   counts: LeadtimeCategoryCounts,
 ): LeadtimeCategory | null => {
@@ -97,15 +110,17 @@ const getMostFrequentCategory = (
 const SectionCard = ({
   title,
   description,
+  action,
   children,
 }: {
   title: string;
   description?: string;
-  children: React.ReactNode;
+  action?: ReactNode;
+  children: ReactNode;
 }) => (
   <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft sm:rounded-3xl sm:p-6">
-    <header className="mb-3 flex flex-col gap-2 sm:mb-4 md:flex-row md:items-center md:justify-between">
-      <div>
+    <header className="mb-3 flex flex-col gap-3 sm:mb-4 md:flex-row md:items-center md:justify-between">
+      <div className="space-y-1">
         <h2 className="text-base font-semibold text-slate-900 sm:text-lg">
           {title}
         </h2>
@@ -115,34 +130,59 @@ const SectionCard = ({
           </p>
         )}
       </div>
+      {action && <div className="flex-shrink-0">{action}</div>}
     </header>
     <div className="sm:pt-1">{children}</div>
   </section>
 );
 
-const StatCard = ({
-  label,
+const HighlightCard = ({
+  title,
   value,
-  subtitle,
+  description,
+  icon,
+  accent,
 }: {
-  label: string;
+  title: string;
   value: string;
-  subtitle?: string;
-}) => (
-  <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-card sm:p-4">
-    <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:text-xs">
-      {label}
-    </dt>
-    <dd className="mt-1 text-xl font-bold text-slate-900 sm:mt-2 sm:text-2xl">
-      {value}
-    </dd>
-    {subtitle && (
-      <p className="mt-1 whitespace-pre-line text-xs font-medium text-slate-500 sm:text-sm">
-        {subtitle}
-      </p>
-    )}
-  </div>
-);
+  description?: string;
+  icon: ReactNode;
+  accent: "emerald" | "sky" | "amber" | "rose";
+}) => {
+  const accentClasses =
+    accent === "emerald"
+      ? "border-emerald-200 bg-emerald-50/60 text-emerald-700"
+      : accent === "sky"
+        ? "border-sky-200 bg-sky-50/60 text-sky-700"
+        : accent === "amber"
+          ? "border-amber-200 bg-amber-50/60 text-amber-700"
+          : "border-rose-200 bg-rose-50/60 text-rose-700";
+
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white shadow-card transition hover:-translate-y-0.5 hover:shadow-lg">
+      <div className="flex items-start gap-4 p-5 sm:p-6">
+        <div
+          className={`flex h-12 w-12 items-center justify-center rounded-2xl ${accentClasses}`}
+        >
+          {icon}
+        </div>
+        <div className="flex-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {title}
+          </p>
+          <p className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl">
+            {value}
+          </p>
+          {description && (
+            <p className="mt-2 text-xs text-slate-500 sm:text-sm">
+              {description}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const VISIT_TYPE_OPTIONS: { label: string; value: VisitTypeFilter }[] = [
   { label: "全て", value: "all" },
@@ -158,6 +198,9 @@ export default function LeadtimePage() {
   const [selectedDepartment, setSelectedDepartment] = useState<string>("全体");
   const [visitTypeFilter, setVisitTypeFilter] =
     useState<VisitTypeFilter>("all");
+  const [showCategoryChart, setShowCategoryChart] = useState(false);
+  const [showHourlyChart, setShowHourlyChart] = useState(false);
+  const [showDepartmentChart, setShowDepartmentChart] = useState(false);
 
   useEffect(() => {
     const stored = loadReservationsFromStorage();
@@ -259,18 +302,61 @@ export default function LeadtimePage() {
     return target;
   }, [leadtimeMetrics, selectedDepartment]);
 
+  const hourRows = useMemo(
+    () => displayedHourStats.filter((item) => item.summary.total > 0),
+    [displayedHourStats],
+  );
+
   const categoryBreakdown = useMemo(() => {
-    return LEADTIME_CATEGORIES.map((category) => ({
-      category,
-      label: formatCategoryRate(
-        selectedSummary.categoryCounts,
-        selectedSummary.total,
+    if (selectedSummary.total === 0) {
+      return [];
+    }
+    return LEADTIME_CATEGORIES.map((category) => {
+      const count = selectedSummary.categoryCounts[category] ?? 0;
+      const percentage =
+        selectedSummary.total === 0 ? 0 : (count / selectedSummary.total) * 100;
+      return {
         category,
-      ),
-    }));
+        count,
+        percentage,
+      };
+    }).filter((item) => item.count > 0);
   }, [selectedSummary]);
 
+  const dominantCategory = useMemo(() => {
+    if (categoryBreakdown.length === 0) {
+      return null;
+    }
+    return categoryBreakdown.reduce((prev, current) =>
+      current.percentage > prev.percentage ? current : prev,
+    );
+  }, [categoryBreakdown]);
+
   const totalReservations = selectedSummary.total;
+
+  const departmentRows = useMemo(
+    () =>
+      leadtimeMetrics.departmentStats.filter((item) => item.summary.total > 0),
+    [leadtimeMetrics.departmentStats],
+  );
+
+  useEffect(() => {
+    if (totalReservations === 0 && showCategoryChart) {
+      setShowCategoryChart(false);
+    }
+  }, [totalReservations, showCategoryChart]);
+
+  useEffect(() => {
+    if (hourRows.length === 0 && showHourlyChart) {
+      setShowHourlyChart(false);
+    }
+  }, [hourRows, showHourlyChart]);
+
+  useEffect(() => {
+    if (departmentRows.length === 0 && showDepartmentChart) {
+      setShowDepartmentChart(false);
+    }
+  }, [departmentRows, showDepartmentChart]);
 
   return (
     <main className="min-h-screen bg-background">
@@ -388,24 +474,42 @@ export default function LeadtimePage() {
           )}
         </section>
 
-        <section className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-          <StatCard
-            label="平均リードタイム"
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <HighlightCard
+            title="平均リードタイム"
             value={formatHours(selectedSummary.averageHours)}
-            subtitle="予約→受診までの平均所要時間"
+            description={`P90: ${formatHours(selectedSummary.p90Hours)}`}
+            icon={<Clock className="h-6 w-6 text-sky-700" />}
+            accent="sky"
           />
-          <StatCard
-            label="中央値"
-            value={formatHours(selectedSummary.medianHours)}
-          />
-          <StatCard
-            label="P90（90%がこの時間以内）"
-            value={formatHours(selectedSummary.p90Hours)}
-          />
-          <StatCard
-            label="当日完了率"
+          <HighlightCard
+            title="当日完了率"
             value={formatRate(selectedSummary.sameDayRate)}
-            subtitle={`総数: ${totalReservations.toLocaleString("ja-JP")}件`}
+            description={`当日予約: ${selectedSummary.sameDayCount.toLocaleString(
+              "ja-JP",
+            )}件 / 総数 ${totalReservations.toLocaleString("ja-JP")}件`}
+            icon={<Zap className="h-6 w-6 text-emerald-700" />}
+            accent="emerald"
+          />
+          <HighlightCard
+            title="中央値"
+            value={formatHours(selectedSummary.medianHours)}
+            description="全体のちょうど真ん中に位置するリードタイム"
+            icon={<TrendingUp className="h-6 w-6 text-amber-700" />}
+            accent="amber"
+          />
+          <HighlightCard
+            title="最多カテゴリ"
+            value={dominantCategory ? dominantCategory.category : "ー"}
+            description={
+              dominantCategory
+                ? `${dominantCategory.percentage.toFixed(1)}% / ${dominantCategory.count.toLocaleString(
+                    "ja-JP",
+                  )}件`
+                : "十分なデータがありません"
+            }
+            icon={<PieChartIcon className="h-6 w-6 text-rose-700" />}
+            accent="rose"
           />
         </section>
 
@@ -416,36 +520,76 @@ export default function LeadtimePage() {
               ? "全体の予約に対するリードタイムのカテゴリ別割合です。"
               : `${selectedDepartment} に絞ったリードタイムカテゴリの割合です。`
           }
+          action={
+            <button
+              type="button"
+              onClick={() => setShowCategoryChart((prev) => !prev)}
+              disabled={totalReservations === 0}
+              className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                totalReservations === 0
+                  ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                  : "border-brand-300 text-brand-600 hover:bg-brand-50"
+              }`}
+            >
+              {showCategoryChart ? "グラフを閉じる" : "グラフを表示"}
+            </button>
+          }
         >
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2">カテゴリ</th>
-                  <th className="px-3 py-2">件数と構成比</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {categoryBreakdown.map((item) => (
-                  <tr key={item.category} className="hover:bg-slate-50">
-                    <td className="px-3 py-2 font-medium text-slate-900">
-                      {item.category}
-                    </td>
-                    <td className="px-3 py-2">{item.label}</td>
+          <div className="space-y-6">
+            {showCategoryChart ? (
+              <Suspense
+                fallback={
+                  <div className="flex h-64 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-sm text-slate-500">
+                    読み込み中です...
+                  </div>
+                }
+              >
+                <CategoryBreakdownChart summary={selectedSummary} />
+              </Suspense>
+            ) : (
+              <div className="flex h-48 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">
+                <PieChartIcon className="h-8 w-8 text-slate-400" />
+                <p>
+                  グラフでカテゴリ構成を確認するには「グラフを表示」をクリックしてください。
+                </p>
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="px-3 py-2">カテゴリ</th>
+                    <th className="px-3 py-2">件数</th>
+                    <th className="px-3 py-2">構成比</th>
                   </tr>
-                ))}
-                {totalReservations === 0 && (
-                  <tr>
-                    <td
-                      colSpan={2}
-                      className="px-3 py-6 text-center text-slate-500"
-                    >
-                      集計対象のデータがありません。
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {categoryBreakdown.map((item) => (
+                    <tr key={item.category} className="hover:bg-slate-50">
+                      <td className="px-3 py-2 font-medium text-slate-900">
+                        {item.category}
+                      </td>
+                      <td className="px-3 py-2">
+                        {item.count.toLocaleString("ja-JP")}件
+                      </td>
+                      <td className="px-3 py-2">
+                        {item.percentage.toFixed(1)}%
+                      </td>
+                    </tr>
+                  ))}
+                  {totalReservations === 0 && (
+                    <tr>
+                      <td
+                        colSpan={3}
+                        className="px-3 py-6 text-center text-slate-500"
+                      >
+                        集計対象のデータがありません。
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </SectionCard>
 
@@ -456,97 +600,173 @@ export default function LeadtimePage() {
               ? "予約を受け付けた時間帯ごとのリードタイム分布です。"
               : `${selectedDepartment} の予約時間帯ごとの傾向です。`
           }
+          action={
+            <button
+              type="button"
+              onClick={() => setShowHourlyChart((prev) => !prev)}
+              disabled={hourRows.length === 0}
+              className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                hourRows.length === 0
+                  ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                  : "border-brand-300 text-brand-600 hover:bg-brand-50"
+              }`}
+            >
+              {showHourlyChart ? "グラフを閉じる" : "グラフを表示"}
+            </button>
+          }
         >
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2">時間帯</th>
-                  <th className="px-3 py-2">件数</th>
-                  <th className="px-3 py-2">平均</th>
-                  <th className="px-3 py-2">中央値</th>
-                  <th className="px-3 py-2">当日完了率</th>
-                  <th className="px-3 py-2">最多カテゴリ</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {displayedHourStats.map((stat) => (
-                  <tr key={stat.hour} className="hover:bg-slate-50">
-                    <td className="px-3 py-2 font-medium text-slate-900">
-                      {hourLabel(stat.hour)}
-                    </td>
-                    <td className="px-3 py-2">
-                      {stat.summary.total.toLocaleString("ja-JP")}
-                    </td>
-                    <td className="px-3 py-2">
-                      {formatHours(stat.summary.averageHours)}
-                    </td>
-                    <td className="px-3 py-2">
-                      {formatHours(stat.summary.medianHours)}
-                    </td>
-                    <td className="px-3 py-2">
-                      {formatRate(stat.summary.sameDayRate)}
-                    </td>
-                    <td className="px-3 py-2">{stat.topCategory ?? "ー"}</td>
+          <div className="space-y-6">
+            {showHourlyChart ? (
+              <Suspense
+                fallback={
+                  <div className="flex h-64 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-sm text-slate-500">
+                    読み込み中です...
+                  </div>
+                }
+              >
+                <HourlyLeadtimeChart hourStats={displayedHourStats} />
+              </Suspense>
+            ) : (
+              <div className="flex h-48 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">
+                <BarChart3 className="h-8 w-8 text-slate-400" />
+                <p>
+                  積み上げ棒＋折れ線グラフで時間帯ごとの傾向を確認できます。
+                </p>
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="px-3 py-2">時間帯</th>
+                    <th className="px-3 py-2">件数</th>
+                    <th className="px-3 py-2">平均</th>
+                    <th className="px-3 py-2">中央値</th>
+                    <th className="px-3 py-2">当日完了率</th>
+                    <th className="px-3 py-2">最多カテゴリ</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {hourRows.map((stat) => (
+                    <tr key={stat.hour} className="hover:bg-slate-50">
+                      <td className="px-3 py-2 font-medium text-slate-900">
+                        {hourLabel(stat.hour)}
+                      </td>
+                      <td className="px-3 py-2">
+                        {stat.summary.total.toLocaleString("ja-JP")}
+                      </td>
+                      <td className="px-3 py-2">
+                        {formatHours(stat.summary.averageHours)}
+                      </td>
+                      <td className="px-3 py-2">
+                        {formatHours(stat.summary.medianHours)}
+                      </td>
+                      <td className="px-3 py-2">
+                        {formatRate(stat.summary.sameDayRate)}
+                      </td>
+                      <td className="px-3 py-2">{stat.topCategory ?? "ー"}</td>
+                    </tr>
+                  ))}
+                  {hourRows.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-3 py-6 text-center text-slate-500"
+                      >
+                        集計対象のデータがありません。
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </SectionCard>
 
         <SectionCard
           title="診療科別 リードタイムサマリー"
           description="各診療科のリードタイム平均・中央値・カテゴリ構成を一覧で比較できます。"
+          action={
+            <button
+              type="button"
+              onClick={() => setShowDepartmentChart((prev) => !prev)}
+              disabled={departmentRows.length === 0}
+              className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                departmentRows.length === 0
+                  ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                  : "border-brand-300 text-brand-600 hover:bg-brand-50"
+              }`}
+            >
+              {showDepartmentChart ? "グラフを閉じる" : "グラフを表示"}
+            </button>
+          }
         >
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2">診療科</th>
-                  <th className="px-3 py-2">件数</th>
-                  <th className="px-3 py-2">平均</th>
-                  <th className="px-3 py-2">中央値</th>
-                  <th className="px-3 py-2">当日完了率</th>
-                  <th className="px-3 py-2">最多カテゴリ</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {leadtimeMetrics.departmentStats.map((item) => (
-                  <tr key={item.department} className="hover:bg-slate-50">
-                    <td className="px-3 py-2 font-medium text-slate-900">
-                      {item.department}
-                    </td>
-                    <td className="px-3 py-2">
-                      {item.summary.total.toLocaleString("ja-JP")}
-                    </td>
-                    <td className="px-3 py-2">
-                      {formatHours(item.summary.averageHours)}
-                    </td>
-                    <td className="px-3 py-2">
-                      {formatHours(item.summary.medianHours)}
-                    </td>
-                    <td className="px-3 py-2">
-                      {formatRate(item.summary.sameDayRate)}
-                    </td>
-                    <td className="px-3 py-2">
-                      {getMostFrequentCategory(item.summary.categoryCounts) ??
-                        "ー"}
-                    </td>
+          <div className="space-y-6">
+            {showDepartmentChart ? (
+              <Suspense
+                fallback={
+                  <div className="flex h-64 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-sm text-slate-500">
+                    読み込み中です...
+                  </div>
+                }
+              >
+                <DepartmentLeadtimeChart departmentStats={departmentRows} />
+              </Suspense>
+            ) : (
+              <div className="flex h-48 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">
+                <BarChart3 className="h-8 w-8 text-slate-400" />
+                <p>平均リードタイムと当日完了率を診療科別に比較できます。</p>
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="px-3 py-2">診療科</th>
+                    <th className="px-3 py-2">件数</th>
+                    <th className="px-3 py-2">平均</th>
+                    <th className="px-3 py-2">中央値</th>
+                    <th className="px-3 py-2">当日完了率</th>
+                    <th className="px-3 py-2">最多カテゴリ</th>
                   </tr>
-                ))}
-                {leadtimeMetrics.departmentStats.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-3 py-6 text-center text-slate-500"
-                    >
-                      集計対象のデータがありません。
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {departmentRows.map((item) => (
+                    <tr key={item.department} className="hover:bg-slate-50">
+                      <td className="px-3 py-2 font-medium text-slate-900">
+                        {item.department}
+                      </td>
+                      <td className="px-3 py-2">
+                        {item.summary.total.toLocaleString("ja-JP")}
+                      </td>
+                      <td className="px-3 py-2">
+                        {formatHours(item.summary.averageHours)}
+                      </td>
+                      <td className="px-3 py-2">
+                        {formatHours(item.summary.medianHours)}
+                      </td>
+                      <td className="px-3 py-2">
+                        {formatRate(item.summary.sameDayRate)}
+                      </td>
+                      <td className="px-3 py-2">
+                        {getMostFrequentCategory(item.summary.categoryCounts) ??
+                          "ー"}
+                      </td>
+                    </tr>
+                  ))}
+                  {departmentRows.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-3 py-6 text-center text-slate-500"
+                      >
+                        集計対象のデータがありません。
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </SectionCard>
       </div>
