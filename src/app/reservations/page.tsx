@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, memo } from "react";
 import { RefreshCw, Share2, Link as LinkIcon } from "lucide-react";
 import { uploadDataToR2, fetchDataFromR2 } from "@/lib/dataShare";
 import { getDayType, getWeekdayName, type PeriodType, filterByPeriod } from "@/lib/dateUtils";
@@ -381,7 +381,7 @@ type SectionCardProps = {
   children: React.ReactNode;
 };
 
-const SectionCard = ({ title, description, action, children }: SectionCardProps) => (
+const SectionCard = memo(({ title, description, action, children }: SectionCardProps) => (
   <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-soft sm:rounded-3xl sm:p-6">
     <header className="mb-3 flex flex-col gap-2 sm:mb-4 md:flex-row md:items-center md:justify-between">
       <div>
@@ -392,9 +392,11 @@ const SectionCard = ({ title, description, action, children }: SectionCardProps)
     </header>
     <div className="sm:pt-1">{children}</div>
   </section>
-);
+));
 
-const StatCard = ({
+SectionCard.displayName = 'SectionCard';
+
+const StatCard = memo(({
   label,
   value,
   tone,
@@ -420,7 +422,100 @@ const StatCard = ({
       <dd className={`mt-1 text-xl font-bold sm:mt-2 sm:text-2xl ${toneClass}`}>{value}</dd>
     </div>
   );
-};
+});
+
+StatCard.displayName = 'StatCard';
+
+// 診療科カードコンポーネント（メモ化で不要な再レンダリングを防ぐ）
+const DepartmentCard = memo(({
+  department,
+  data,
+  total,
+  index,
+  isDragged,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  onClick,
+}: {
+  department: string;
+  data: HourlyBucket[];
+  total: number;
+  index: number;
+  isDragged: boolean;
+  onDragStart: (index: number) => void;
+  onDragOver: (e: React.DragEvent, index: number) => void;
+  onDragEnd: () => void;
+  onClick: (department: string) => void;
+}) => {
+  return (
+    <div
+      draggable
+      onDragStart={() => onDragStart(index)}
+      onDragOver={(e) => onDragOver(e, index)}
+      onDragEnd={onDragEnd}
+      onClick={() => onClick(department)}
+      className={`aspect-[4/5] min-w-[240px] cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-brand-400 hover:shadow-lg sm:aspect-square sm:min-w-0 ${
+        isDragged ? "opacity-50" : ""
+      }`}
+    >
+      <div className="flex h-full flex-col pointer-events-none">
+        <div className="mb-2 flex items-start justify-between">
+          <h3 className="text-sm font-semibold text-slate-800 line-clamp-2">
+            {department}
+          </h3>
+        </div>
+        <p className="mb-3 text-xs text-slate-500">
+          総予約数: {total.toLocaleString("ja-JP")}
+        </p>
+        <div className="flex-1 min-h-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data}>
+              <CartesianGrid stroke="rgba(148, 163, 184, 0.15)" vertical={false} />
+              <XAxis
+                dataKey="hour"
+                stroke="#94A3B8"
+                tick={{ fontSize: 10 }}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                stroke="#94A3B8"
+                tick={{ fontSize: 10 }}
+                width={30}
+              />
+              <Tooltip
+                formatter={tooltipFormatter}
+                contentStyle={{ fontSize: 12 }}
+                itemSorter={(item) => {
+                  const order = { '初診': 0, '再診': 1 };
+                  return order[item.name as keyof typeof order] ?? 999;
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="初診"
+                stroke="#5DD4C3"
+                strokeWidth={2}
+                dot={false}
+                name="初診"
+              />
+              <Line
+                type="monotone"
+                dataKey="再診"
+                stroke="#FFB8C8"
+                strokeWidth={2}
+                dot={false}
+                name="再診"
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+DepartmentCard.displayName = 'DepartmentCard';
 
 export default function HomePage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -659,12 +754,11 @@ export default function HomePage() {
     }
 
     const latestMonth = availableMonths[availableMonths.length - 1];
+    if (!latestMonth) return;
+
     if (selectedMonth === "") {
       setSelectedMonth(latestMonth);
-      return;
-    }
-
-    if (selectedMonth !== "all" && !availableMonths.includes(selectedMonth)) {
+    } else if (selectedMonth !== "all" && !availableMonths.includes(selectedMonth)) {
       setSelectedMonth(latestMonth);
     }
   }, [availableMonths, selectedMonth]);
@@ -751,42 +845,59 @@ const overallDaily = useMemo(
     }
   }, [sortedDepartmentHourly, departmentOrder.length]);
 
-  const handleDragStart = (index: number) => {
+  const handleDragStart = useCallback((index: number) => {
     setDraggedIndex(index);
-  };
+  }, []);
 
-  const handleDragOver = (e: React.DragEvent, index: number) => {
+  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
     e.preventDefault();
     if (draggedIndex === null || draggedIndex === index) return;
-    
-    const newOrder = [...departmentOrder];
-    const draggedItem = newOrder[draggedIndex];
-    newOrder.splice(draggedIndex, 1);
-    newOrder.splice(index, 0, draggedItem);
-    
-    setDepartmentOrder(newOrder);
-    setDraggedIndex(index);
-  };
 
-const handleDragEnd = () => {
+    setDepartmentOrder(prevOrder => {
+      const newOrder = [...prevOrder];
+      const draggedItem = newOrder[draggedIndex];
+      newOrder.splice(draggedIndex, 1);
+      newOrder.splice(index, 0, draggedItem);
+      return newOrder;
+    });
+    setDraggedIndex(index);
+  }, [draggedIndex]);
+
+  const handleDragEnd = useCallback(() => {
     setDraggedIndex(null);
     if (typeof window !== "undefined" && departmentOrder.length > 0) {
       window.localStorage.setItem(ORDER_KEY, JSON.stringify(departmentOrder));
     }
-  };
+  }, [departmentOrder]);
 
 const monthlyOverview = useMemo(
     () => aggregateMonthly(reservations),
     [reservations],
   );
 
-  const totalReservations = filteredReservations.length;
-  const initialCount = filteredReservations.filter((item) => item.visitType === "初診").length;
-  const followupCount = filteredReservations.filter((item) => item.visitType === "再診").length;
-  const departmentCount = useMemo(
-    () => new Set(filteredReservations.map((item) => item.department)).size,
-    [filteredReservations],
-  );
+  const { totalReservations, initialCount, followupCount, departmentCount } = useMemo(() => {
+    let total = 0;
+    let initial = 0;
+    let followup = 0;
+    const departments = new Set<string>();
+
+    for (const item of filteredReservations) {
+      total++;
+      departments.add(item.department);
+      if (item.visitType === "初診") {
+        initial++;
+      } else if (item.visitType === "再診") {
+        followup++;
+      }
+    }
+
+    return {
+      totalReservations: total,
+      initialCount: initial,
+      followupCount: followup,
+      departmentCount: departments.size,
+    };
+  }, [filteredReservations]);
 
   const weekdayData = useMemo(
     () => aggregateByWeekday(filteredReservations),
@@ -798,8 +909,12 @@ const monthlyOverview = useMemo(
     [filteredReservations],
   );
 
+  const handleCardClick = useCallback((department: string) => {
+    setExpandedDepartment(department);
+  }, []);
+
   // データを共有URLとして発行
-  const handleShare = async () => {
+  const handleShare = useCallback(async () => {
     if (reservations.length === 0) {
       setUploadError("共有するデータがありません。");
       return;
@@ -830,9 +945,9 @@ const monthlyOverview = useMemo(
     } finally {
       setIsSharing(false);
     }
-  };
+  }, [reservations]);
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     clearReservationsStorage();
     clearReservationDiff();
     setReservations([]);
@@ -840,7 +955,7 @@ const monthlyOverview = useMemo(
     setLastUpdated(null);
     setShareUrl(null);
     setUploadError(null);
-  };
+  }, []);
 
   return (
     <main className="min-h-screen bg-background">
@@ -1191,70 +1306,18 @@ const monthlyOverview = useMemo(
         >
           <div className="flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-2 md:gap-4 md:overflow-visible lg:grid-cols-3">
             {displayedDepartments.map(({ department, data, total }, index) => (
-              <div
+              <DepartmentCard
                 key={department}
-                draggable
-                onDragStart={() => handleDragStart(index)}
-                onDragOver={(e) => handleDragOver(e, index)}
+                department={department}
+                data={data}
+                total={total}
+                index={index}
+                isDragged={draggedIndex === index}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
                 onDragEnd={handleDragEnd}
-                onClick={() => setExpandedDepartment(department)}
-                className={`aspect-[4/5] min-w-[240px] cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-brand-400 hover:shadow-lg sm:aspect-square sm:min-w-0 ${
-                  draggedIndex === index ? "opacity-50" : ""
-                }`}
-              >
-                <div className="flex h-full flex-col pointer-events-none">
-                  <div className="mb-2 flex items-start justify-between">
-                    <h3 className="text-sm font-semibold text-slate-800 line-clamp-2">
-                      {department}
-                    </h3>
-                  </div>
-                  <p className="mb-3 text-xs text-slate-500">
-                    総予約数: {total.toLocaleString("ja-JP")}
-                  </p>
-                  <div className="flex-1 min-h-0">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={data}>
-                        <CartesianGrid stroke="rgba(148, 163, 184, 0.15)" vertical={false} />
-                        <XAxis 
-                          dataKey="hour" 
-                          stroke="#94A3B8" 
-                          tick={{ fontSize: 10 }}
-                          interval="preserveStartEnd"
-                        />
-                        <YAxis 
-                          stroke="#94A3B8" 
-                          tick={{ fontSize: 10 }}
-                          width={30}
-                        />
-                        <Tooltip
-                          formatter={tooltipFormatter}
-                          contentStyle={{ fontSize: 12 }}
-                          itemSorter={(item) => {
-                            const order = { '初診': 0, '再診': 1 };
-                            return order[item.name as keyof typeof order] ?? 999;
-                          }}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="初診"
-                          stroke="#5DD4C3"
-                          strokeWidth={2}
-                          dot={false}
-                          name="初診"
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="再診"
-                          stroke="#FFB8C8"
-                          strokeWidth={2}
-                          dot={false}
-                          name="再診"
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
+                onClick={handleCardClick}
+              />
             ))}
 {displayedDepartments.length === 0 && (
               <p className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
