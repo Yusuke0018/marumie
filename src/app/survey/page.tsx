@@ -224,26 +224,34 @@ export default function SurveyPage() {
 
     setUploadError(null);
     try {
-      const allData: SurveyData[] = [...surveyData];
-      
+      const allData: SurveyData[] = [];
+
       for (const file of Array.from(files)) {
         const text = await file.text();
-        
+
         // ファイル名から種類を判定
         const fileType = file.name.includes("内視鏡") ? "内視鏡" : "外来";
         const parsed = parseSurveyCSV(text, fileType);
         allData.push(...parsed);
       }
-      
-      // 重複排除（日付+種類でユニーク）
-      const uniqueData = allData.reduce((acc, curr) => {
-        const exists = acc.find(item => item.date === curr.date && item.fileType === curr.fileType);
-        if (!exists) {
-          acc.push(curr);
-        }
-        return acc;
-      }, [] as SurveyData[]);
-      
+
+      // 既存データとマージ（日付+種類でユニーク化）
+      const dataMap = new Map<string, SurveyData>();
+
+      // 既存データを先に追加
+      for (const item of surveyData) {
+        const key = `${item.date}|${item.fileType}`;
+        dataMap.set(key, item);
+      }
+
+      // 新規データで上書き（同じ日付+種類の場合は新しいデータを優先）
+      for (const item of allData) {
+        const key = `${item.date}|${item.fileType}`;
+        dataMap.set(key, item);
+      }
+
+      const uniqueData = Array.from(dataMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+
       setSurveyData(uniqueData);
       const timestamp = new Date().toISOString();
       setLastUpdated(timestamp);

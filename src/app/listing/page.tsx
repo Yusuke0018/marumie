@@ -178,10 +178,30 @@ export default function ListingPage() {
     try {
       const text = await file.text();
       const parsed = parseListingCSV(text);
-      
+
+      // 既存データとマージ（日付ベースで重複排除）
+      const existingCategory = categoryData.find(c => c.category === category);
+      let mergedData = parsed;
+
+      if (existingCategory) {
+        const dataMap = new Map<string, ListingData>();
+
+        // 既存データを先に追加
+        for (const item of existingCategory.data) {
+          dataMap.set(item.date, item);
+        }
+
+        // 新規データで上書き（同じ日付の場合は新しいデータを優先）
+        for (const item of parsed) {
+          dataMap.set(item.date, item);
+        }
+
+        mergedData = Array.from(dataMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+      }
+
       const newCategoryData = categoryData.filter(c => c.category !== category);
-      newCategoryData.push({ category, data: parsed });
-      
+      newCategoryData.push({ category, data: mergedData });
+
       setCategoryData(newCategoryData);
       const timestamp = new Date().toISOString();
       setLastUpdated(timestamp);

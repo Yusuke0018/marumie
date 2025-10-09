@@ -503,14 +503,31 @@ export default function PatientAnalysisPage() {
     try {
       const text = await file.text();
       const parsed = parseKarteCsv(text);
-      setRecords(parsed);
+
+      // 既存データとマージ（重複排除）
+      const existingMap = new Map<string, KarteRecord>();
+      for (const record of records) {
+        const key = `${record.dateIso}|${record.visitType}|${record.patientNumber}|${record.department}`;
+        existingMap.set(key, record);
+      }
+
+      for (const record of parsed) {
+        const key = `${record.dateIso}|${record.visitType}|${record.patientNumber}|${record.department}`;
+        existingMap.set(key, record);
+      }
+
+      const merged = Array.from(existingMap.values()).sort((a, b) =>
+        a.dateIso.localeCompare(b.dateIso),
+      );
+
+      setRecords(merged);
       setShareUrl(null);
 
       const timestamp = new Date().toISOString();
       setLastUpdated(timestamp);
 
       if (typeof window !== "undefined") {
-        window.localStorage.setItem(KARTE_STORAGE_KEY, JSON.stringify(parsed));
+        window.localStorage.setItem(KARTE_STORAGE_KEY, JSON.stringify(merged));
         window.localStorage.setItem(KARTE_TIMESTAMP_KEY, timestamp);
       }
     } catch (error) {
