@@ -1,0 +1,12 @@
+timestamp: 2025-10-09T11:21:04+0900
+branch: main
+commit: 06e3445a5d5046ff56a18be5f2c52b5418a0770b
+diffstat:
+  src/app/page.tsx | 2 +-
+  1 file changed, 1 insertion(+), 1 deletion(-)
+commands:
+  - npm run lint -- --fix (success)
+  - npm run build (success)
+push: pending
+notes:
+  - 最新月カードのラベル末尾から「数」を除去して一行表示を維持
