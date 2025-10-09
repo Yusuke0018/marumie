@@ -57,7 +57,7 @@ import type { SharedDataBundle } from "@/lib/sharedBundle";
 
 const KARTE_STORAGE_KEY = "clinic-analytics/karte-records/v1";
 const KARTE_TIMESTAMP_KEY = "clinic-analytics/karte-last-updated/v1";
-const KARTE_MIN_MONTH = "2025-10";
+const KARTE_MIN_MONTH = "2000-01";
 const PERIOD_MONTHS: Record<Exclude<PeriodType, "all">, number> = {
   "3months": 3,
   "6months": 6,
