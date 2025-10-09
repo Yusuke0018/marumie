@@ -1,6 +1,23 @@
+"use client";
+
+import { useEffect } from "react";
 import dynamic from "next/dynamic";
 
 const Bar = dynamic(() => import("react-chartjs-2").then(mod => mod.Bar), { ssr: false });
+
+// Chart.js登録
+if (typeof window !== "undefined") {
+  import("chart.js").then((ChartJS) => {
+    ChartJS.Chart.register(
+      ChartJS.CategoryScale,
+      ChartJS.LinearScale,
+      ChartJS.BarElement,
+      ChartJS.Title,
+      ChartJS.Tooltip,
+      ChartJS.Legend
+    );
+  });
+}
 
 type HourlyBucket = {
   hour: string;

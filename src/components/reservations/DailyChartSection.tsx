@@ -1,6 +1,24 @@
+"use client";
+
+import { useEffect } from "react";
 import dynamic from "next/dynamic";
 
 const Line = dynamic(() => import("react-chartjs-2").then(mod => mod.Line), { ssr: false });
+
+// Chart.js登録
+if (typeof window !== "undefined") {
+  import("chart.js").then((ChartJS) => {
+    ChartJS.Chart.register(
+      ChartJS.CategoryScale,
+      ChartJS.LinearScale,
+      ChartJS.LineElement,
+      ChartJS.PointElement,
+      ChartJS.Title,
+      ChartJS.Tooltip,
+      ChartJS.Filler
+    );
+  });
+}
 
 type DailyBucket = {
   date: string;

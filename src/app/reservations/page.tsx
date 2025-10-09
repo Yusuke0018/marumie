@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, memo } from "react";
-import dynamic from "next/dynamic";
+import { useCallback, useEffect, useMemo, useState, memo, lazy, Suspense } from "react";
 import { RefreshCw, Share2, Link as LinkIcon } from "lucide-react";
 import { uploadDataToR2, fetchDataFromR2 } from "@/lib/dataShare";
 import { getDayType, getWeekdayName, type PeriodType, filterByPeriod } from "@/lib/dateUtils";
@@ -20,26 +19,16 @@ import { saveSurveyDataToStorage } from "@/lib/surveyData";
 import { saveListingDataToStorage } from "@/lib/listingData";
 import type { SharedDataBundle } from "@/lib/sharedBundle";
 
-// Chart.jsを動的インポートで遅延読み込み（初期バンドルサイズを削減）
-const Bar = dynamic(() => import("react-chartjs-2").then(mod => mod.Bar), { ssr: false });
-const Line = dynamic(() => import("react-chartjs-2").then(mod => mod.Line), { ssr: false });
-
-// Chart.js登録は動的インポート時に実行
-if (typeof window !== "undefined") {
-  import("chart.js").then((ChartJS) => {
-    ChartJS.Chart.register(
-      ChartJS.CategoryScale,
-      ChartJS.LinearScale,
-      ChartJS.BarElement,
-      ChartJS.LineElement,
-      ChartJS.PointElement,
-      ChartJS.Title,
-      ChartJS.Tooltip,
-      ChartJS.Legend,
-      ChartJS.Filler
-    );
-  });
-}
+// グラフコンポーネントをReact.lazyで遅延ロード（初期バンドルサイズを削減）
+const WeekdayChartSection = lazy(() =>
+  import('@/components/reservations/WeekdayChartSection').then(m => ({ default: m.WeekdayChartSection }))
+);
+const HourlyChartSection = lazy(() =>
+  import('@/components/reservations/HourlyChartSection').then(m => ({ default: m.HourlyChartSection }))
+);
+const DailyChartSection = lazy(() =>
+  import('@/components/reservations/DailyChartSection').then(m => ({ default: m.DailyChartSection }))
+);
 
 type HourlyBucket = {
   hour: string;
@@ -912,67 +901,9 @@ const monthlyOverview = useMemo(
               📊 クリックでグラフを表示
             </button>
           ) : (
-            <div className="-mx-2 sm:mx-0">
-              <div className="h-[280px] sm:h-[340px] md:h-[380px]">
-                <Bar
-                  data={{
-                    labels: weekdayData.map(d => d.weekday),
-                    datasets: [
-                      {
-                        label: '初診',
-                        data: weekdayData.map(d => d['初診']),
-                        backgroundColor: '#5DD4C3',
-                        borderRadius: 4,
-                      },
-                      {
-                        label: '再診',
-                        data: weekdayData.map(d => d['再診']),
-                        backgroundColor: '#FFB8C8',
-                        borderRadius: 4,
-                      },
-                      {
-                        label: '当日予約',
-                        data: weekdayData.map(d => d['当日予約']),
-                        backgroundColor: '#FFA500',
-                        borderRadius: 4,
-                      },
-                    ],
-                  }}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                      legend: {
-                        position: 'top' as const,
-                        labels: {
-                          font: { size: 12 },
-                          usePointStyle: true,
-                          padding: 10,
-                        },
-                      },
-                      tooltip: {
-                        callbacks: {
-                          label: (context) => {
-                            return `${context.dataset.label}: ${context.parsed.y.toLocaleString('ja-JP')}`;
-                          },
-                        },
-                      },
-                    },
-                    scales: {
-                      x: {
-                        grid: { display: false },
-                        ticks: { font: { size: 12 }, color: '#64748B' },
-                      },
-                      y: {
-                        grid: { color: 'rgba(148, 163, 184, 0.2)' },
-                        ticks: { font: { size: 12 }, color: '#64748B' },
-                      },
-                    },
-                    animation: false,
-                  }}
-                />
-              </div>
-            </div>
+            <Suspense fallback={<div className="h-[280px] sm:h-[340px] md:h-[380px] flex items-center justify-center text-slate-500">読み込み中...</div>}>
+              <WeekdayChartSection weekdayData={weekdayData} />
+            </Suspense>
           )}
         </SectionCard>
 
@@ -1073,61 +1004,9 @@ const monthlyOverview = useMemo(
               📊 クリックでグラフを表示
             </button>
           ) : (
-            <div className="-mx-2 sm:mx-0">
-              <div className="h-[280px] sm:h-[340px] md:h-[380px]">
-                <Bar
-                  data={{
-                    labels: departmentSpecificHourly.map(d => d.hour),
-                    datasets: [
-                      {
-                        label: '初診',
-                        data: departmentSpecificHourly.map(d => d['初診']),
-                        backgroundColor: '#5DD4C3',
-                        borderRadius: 4,
-                      },
-                      {
-                        label: '再診',
-                        data: departmentSpecificHourly.map(d => d['再診']),
-                        backgroundColor: '#FFB8C8',
-                        borderRadius: 4,
-                      },
-                    ],
-                  }}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                      legend: {
-                        position: 'top' as const,
-                        labels: {
-                          font: { size: 12 },
-                          usePointStyle: true,
-                          padding: 10,
-                        },
-                      },
-                      tooltip: {
-                        callbacks: {
-                          label: (context) => {
-                            return `${context.dataset.label}: ${context.parsed.y.toLocaleString('ja-JP')}`;
-                          },
-                        },
-                      },
-                    },
-                    scales: {
-                      x: {
-                        grid: { display: false },
-                        ticks: { font: { size: 12 }, color: '#64748B' },
-                      },
-                      y: {
-                        grid: { color: 'rgba(148, 163, 184, 0.2)' },
-                        ticks: { font: { size: 12 }, color: '#64748B' },
-                      },
-                    },
-                    animation: false,
-                  }}
-                />
-              </div>
-            </div>
+            <Suspense fallback={<div className="h-[280px] sm:h-[340px] md:h-[380px] flex items-center justify-center text-slate-500">読み込み中...</div>}>
+              <HourlyChartSection hourlyData={departmentSpecificHourly} />
+            </Suspense>
           )}
         </SectionCard>
 
@@ -1143,52 +1022,9 @@ const monthlyOverview = useMemo(
               📊 クリックでグラフを表示
             </button>
           ) : (
-            <div className="-mx-2 h-[240px] sm:mx-0 sm:h-72">
-              <Line
-                data={{
-                  labels: overallDaily.map(d => d.date),
-                  datasets: [
-                    {
-                      label: '総数',
-                      data: overallDaily.map(d => d.total),
-                      borderColor: '#5DD4C3',
-                      backgroundColor: 'rgba(93, 212, 195, 0.1)',
-                      borderWidth: 2,
-                      fill: true,
-                      pointRadius: 0,
-                      tension: 0.4,
-                    },
-                  ],
-                }}
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  plugins: {
-                    legend: {
-                      display: false,
-                    },
-                    tooltip: {
-                      callbacks: {
-                        label: (context) => {
-                          return `${context.dataset.label}: ${context.parsed.y.toLocaleString('ja-JP')}`;
-                        },
-                      },
-                    },
-                  },
-                  scales: {
-                    x: {
-                      grid: { display: false },
-                      ticks: { font: { size: 11 }, color: '#64748B' },
-                    },
-                    y: {
-                      grid: { color: 'rgba(148, 163, 184, 0.2)' },
-                      ticks: { font: { size: 11 }, color: '#64748B' },
-                    },
-                  },
-                  animation: false,
-                }}
-              />
-            </div>
+            <Suspense fallback={<div className="h-[240px] sm:h-72 flex items-center justify-center text-slate-500">読み込み中...</div>}>
+              <DailyChartSection dailyData={overallDaily} />
+            </Suspense>
           )}
         </SectionCard>
 
