@@ -125,8 +125,11 @@ export const loadSurveyTimestamp = (): string | null => {
   }
 };
 
-export const saveSurveyDataToStorage = (data: SurveyData[]): string => {
-  const timestamp = new Date().toISOString();
+export const saveSurveyDataToStorage = (
+  data: SurveyData[],
+  timestampOverride?: string,
+): string => {
+  const timestamp = timestampOverride ?? new Date().toISOString();
   if (typeof window !== "undefined") {
     try {
       window.localStorage.setItem(SURVEY_STORAGE_KEY, JSON.stringify(data));

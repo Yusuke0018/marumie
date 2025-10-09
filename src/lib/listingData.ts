@@ -153,8 +153,11 @@ export const loadListingTimestamp = (): string | null => {
   }
 };
 
-export const saveListingDataToStorage = (data: ListingCategoryData[]): string => {
-  const timestamp = new Date().toISOString();
+export const saveListingDataToStorage = (
+  data: ListingCategoryData[],
+  timestampOverride?: string,
+): string => {
+  const timestamp = timestampOverride ?? new Date().toISOString();
   if (typeof window !== "undefined") {
     try {
       window.localStorage.setItem(LISTING_STORAGE_KEY, JSON.stringify(data));

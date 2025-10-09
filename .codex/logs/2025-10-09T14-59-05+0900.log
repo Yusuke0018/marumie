@@ -1,0 +1,10 @@
+timestamp: 2025-10-09T14:59:05+0900
+branch: main
+commit: 5eaa96195942b002870005e57bc8441ddb060406
+changes:
+  - include reservations・survey・listing datasets in共有バンドルとしてアップロードし、開封時に各ストレージへ展開
+  - 新規 sharedBundle 型の追加と保存ヘルパーにタイムスタンプ上書きを許可
+  - 月別フィルター初期化や共有データ適用処理を useCallback 化して安定化
+lint:
+  - npm run lint (pass)
+push: 未実施

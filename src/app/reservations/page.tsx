@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw, Share2, Link as LinkIcon } from "lucide-react";
 import { uploadDataToR2, fetchDataFromR2 } from "@/lib/dataShare";
 import { getDayType, getWeekdayName, type PeriodType, filterByPeriod } from "@/lib/dateUtils";
@@ -15,6 +15,9 @@ import {
   RESERVATION_STORAGE_KEY,
   RESERVATION_DIFF_STORAGE_KEY,
 } from "@/lib/reservationData";
+import { saveSurveyDataToStorage } from "@/lib/surveyData";
+import { saveListingDataToStorage } from "@/lib/listingData";
+import type { SharedDataBundle } from "@/lib/sharedBundle";
 import {
   Bar,
   BarChart,
@@ -51,6 +54,8 @@ type MonthlyBucket = {
 
 const ORDER_KEY = "clinic-analytics/department-order/v1";
 const HOURS = Array.from({ length: 24 }, (_, index) => index);
+const KARTE_STORAGE_KEY = "clinic-analytics/karte-records/v1";
+const KARTE_TIMESTAMP_KEY = "clinic-analytics/karte-last-updated/v1";
 
 const encodeForShare = (payload: string): string => {
   if (typeof window === "undefined") {
@@ -435,7 +440,80 @@ export default function HomePage() {
     "priority",
   );
 
-  const loadFallbackFromParams = () => {
+  const applySharedPayload = useCallback(
+    (payload: unknown, uploadedAt?: string): boolean => {
+      const fallbackTimestamp = uploadedAt ?? new Date().toISOString();
+
+      if (Array.isArray(payload)) {
+        const reservationsData = payload as Reservation[];
+        const timestamp = saveReservationsToStorage(reservationsData, fallbackTimestamp);
+        clearReservationDiff();
+        setReservations(reservationsData);
+        setDiffMonthly(null);
+        setLastUpdated(timestamp);
+        setUploadError(null);
+        return true;
+      }
+
+      if (
+        payload &&
+        typeof payload === "object" &&
+        Array.isArray((payload as SharedDataBundle).karteRecords)
+      ) {
+        const bundle = payload as SharedDataBundle;
+
+        if (Array.isArray(bundle.karteRecords)) {
+          const karteTimestamp = bundle.karteTimestamp ?? fallbackTimestamp;
+          if (typeof window !== "undefined") {
+            try {
+              window.localStorage.setItem(
+                KARTE_STORAGE_KEY,
+                JSON.stringify(bundle.karteRecords),
+              );
+              window.localStorage.setItem(KARTE_TIMESTAMP_KEY, karteTimestamp);
+            } catch (error) {
+              console.error(error);
+            }
+          }
+        }
+
+        if (Array.isArray(bundle.surveyData)) {
+          saveSurveyDataToStorage(
+            bundle.surveyData,
+            bundle.surveyTimestamp ?? fallbackTimestamp,
+          );
+        }
+
+        if (Array.isArray(bundle.listingData)) {
+          saveListingDataToStorage(
+            bundle.listingData,
+            bundle.listingTimestamp ?? fallbackTimestamp,
+          );
+        }
+
+        if (Array.isArray(bundle.reservations)) {
+          const reservationsData = bundle.reservations as Reservation[];
+          const reservationsTimestamp = saveReservationsToStorage(
+            reservationsData,
+            bundle.reservationsTimestamp ?? fallbackTimestamp,
+          );
+          clearReservationDiff();
+          setReservations(reservationsData);
+          setDiffMonthly(null);
+          setLastUpdated(reservationsTimestamp);
+          setUploadError(null);
+          return true;
+        }
+
+        return false;
+      }
+
+      return false;
+    },
+    [],
+  );
+
+  const loadFallbackFromParams = useCallback(() => {
     if (typeof window === "undefined") {
       return false;
     }
@@ -449,16 +527,13 @@ export default function HomePage() {
       if (!decoded) {
         return false;
       }
-      const parsed: Reservation[] = JSON.parse(decoded);
-      setReservations(parsed);
-      setLastUpdated(new Date().toISOString());
-      clearReservationDiff();
-      return true;
+      const parsed = JSON.parse(decoded);
+      return applySharedPayload(parsed, new Date().toISOString());
     } catch (error) {
       console.error(error);
       return false;
     }
-  };
+  }, [applySharedPayload]);
 
   // URLパラメータからデータを読み込む
   useEffect(() => {
@@ -488,8 +563,16 @@ export default function HomePage() {
               }
             }
           } else if (response.type === "karte") {
-            if (typeof window !== "undefined") {
-              window.location.href = `/patients?data=${encodeURIComponent(dataId)}`;
+            try {
+              const parsed = JSON.parse(response.data);
+              if (!applySharedPayload(parsed, response.uploadedAt) && !loadFallbackFromParams()) {
+                setUploadError("共有データの読み込みに失敗しました。");
+              }
+            } catch (error) {
+              console.error(error);
+              if (!loadFallbackFromParams()) {
+                setUploadError("共有データの読み込みに失敗しました。");
+              }
             }
           } else if (!loadFallbackFromParams()) {
             setUploadError("未対応の共有データ形式です。");
@@ -529,7 +612,7 @@ export default function HomePage() {
         setUploadError("保存済みデータの読み込みに失敗しました。");
       }
     }
-  }, []);
+  }, [applySharedPayload, loadFallbackFromParams]);
 
   useEffect(() => {
     if (typeof window === "undefined") {

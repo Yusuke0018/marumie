@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
 import {
   RefreshCw,
   Share2,
@@ -46,12 +46,14 @@ import {
 import {
   type ListingCategory,
   type ListingData,
+  type ListingCategoryData,
   parseListingCsv,
   mergeListingData,
   loadListingDataFromStorage,
   saveListingDataToStorage,
   loadListingTimestamp,
 } from "@/lib/listingData";
+import type { SharedDataBundle } from "@/lib/sharedBundle";
 
 const KARTE_STORAGE_KEY = "clinic-analytics/karte-records/v1";
 const KARTE_TIMESTAMP_KEY = "clinic-analytics/karte-last-updated/v1";
@@ -382,6 +384,104 @@ export default function PatientAnalysisPage() {
   });
   const [listingUploadError, setListingUploadError] = useState<string | null>(null);
 
+  const applySharedBundle = useCallback(
+    (bundle: SharedDataBundle, fallbackTimestamp?: string) => {
+      const generatedAt = bundle.generatedAt ?? fallbackTimestamp ?? new Date().toISOString();
+      const karteRecords = Array.isArray(bundle.karteRecords) ? bundle.karteRecords : [];
+      const karteTimestamp = bundle.karteTimestamp ?? fallbackTimestamp ?? generatedAt;
+
+      setUploadError(null);
+    setShareUrl(null);
+    setRecords(karteRecords);
+    setLastUpdated(karteTimestamp);
+
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(KARTE_STORAGE_KEY, JSON.stringify(karteRecords));
+        window.localStorage.setItem(KARTE_TIMESTAMP_KEY, karteTimestamp);
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+      if (Array.isArray(bundle.reservations)) {
+        const reservationsData = bundle.reservations as Reservation[];
+        const reservationsTimestamp = saveReservationsToStorage(
+          reservationsData,
+          bundle.reservationsTimestamp ?? fallbackTimestamp ?? generatedAt,
+        );
+        clearReservationDiff();
+        setReservationStatus({
+          lastUpdated: reservationsTimestamp,
+          total: reservationsData.length,
+        });
+      }
+
+      if (Array.isArray(bundle.surveyData)) {
+        const surveyDataset = bundle.surveyData as SurveyData[];
+        const surveyTimestamp = saveSurveyDataToStorage(
+          surveyDataset,
+          bundle.surveyTimestamp ?? fallbackTimestamp ?? generatedAt,
+        );
+        setSurveyStatus({
+          lastUpdated: surveyTimestamp,
+          total: surveyDataset.length,
+          byType: summarizeSurveyByType(surveyDataset),
+        });
+      }
+
+      if (Array.isArray(bundle.listingData)) {
+        const listingDataset = bundle.listingData as ListingCategoryData[];
+        const listingTimestamp = saveListingDataToStorage(
+          listingDataset,
+          bundle.listingTimestamp ?? fallbackTimestamp ?? generatedAt,
+        );
+        const totals = createEmptyListingTotals();
+        listingDataset.forEach((item) => {
+          totals[item.category] = item.data.length;
+        });
+        setListingStatus({
+          lastUpdated: listingTimestamp,
+          totals,
+        });
+      }
+    },
+    [],
+  );
+
+  const applySharedPayload = useCallback(
+    (payload: unknown, uploadedAt?: string): boolean => {
+      if (Array.isArray(payload)) {
+        const timestamp = uploadedAt ?? new Date().toISOString();
+        setUploadError(null);
+        setShareUrl(null);
+        setRecords(payload as KarteRecord[]);
+        setLastUpdated(timestamp);
+        if (typeof window !== "undefined") {
+          try {
+            window.localStorage.setItem(KARTE_STORAGE_KEY, JSON.stringify(payload));
+            window.localStorage.setItem(KARTE_TIMESTAMP_KEY, timestamp);
+          } catch (error) {
+            console.error(error);
+          }
+        }
+        return true;
+      }
+
+      if (
+        payload &&
+        typeof payload === "object" &&
+        Array.isArray((payload as SharedDataBundle).karteRecords)
+      ) {
+        applySharedBundle(payload as SharedDataBundle, uploadedAt);
+        return true;
+      }
+
+      return false;
+    },
+    [applySharedBundle],
+  );
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -397,11 +497,10 @@ export default function PatientAnalysisPage() {
         .then((response) => {
           if (response.type === "karte") {
             try {
-              const parsed: KarteRecord[] = JSON.parse(response.data);
-              setRecords(parsed);
-              setLastUpdated(response.uploadedAt);
-              window.localStorage.setItem(KARTE_STORAGE_KEY, JSON.stringify(parsed));
-              window.localStorage.setItem(KARTE_TIMESTAMP_KEY, response.uploadedAt);
+              const parsed = JSON.parse(response.data);
+              if (!applySharedPayload(parsed, response.uploadedAt)) {
+                setUploadError("共有データの形式が不正です。");
+              }
             } catch (error) {
               console.error(error);
               setUploadError("共有データの読み込みに失敗しました。");
@@ -433,7 +532,7 @@ export default function PatientAnalysisPage() {
         setUploadError("保存済みデータの読み込みに失敗しました。");
       }
     }
-  }, []);
+  }, [applySharedPayload]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -820,9 +919,27 @@ export default function PatientAnalysisPage() {
     setUploadError(null);
 
     try {
+      const generatedAt = new Date().toISOString();
+      const reservationsData = loadReservationsFromStorage();
+      const surveyData = loadSurveyDataFromStorage();
+      const listingData = loadListingDataFromStorage();
+
+      const bundle: SharedDataBundle = {
+        version: 1,
+        generatedAt,
+        karteRecords: records,
+        karteTimestamp: lastUpdated ?? generatedAt,
+        reservations: reservationsData,
+        reservationsTimestamp: loadReservationTimestamp(),
+        surveyData,
+        surveyTimestamp: loadSurveyTimestamp(),
+        listingData,
+        listingTimestamp: loadListingTimestamp(),
+      };
+
       const response = await uploadDataToR2({
         type: "karte",
-        data: JSON.stringify(records),
+        data: JSON.stringify(bundle),
       });
 
       setShareUrl(response.url);
