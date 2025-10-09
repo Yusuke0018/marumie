@@ -7,4 +7,4 @@ changes:
   - 月別フィルター初期化や共有データ適用処理を useCallback 化して安定化
 lint:
   - npm run lint (pass)
-push: 未実施
+push: origin/main にプッシュ完了
