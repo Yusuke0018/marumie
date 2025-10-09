@@ -146,6 +146,7 @@ const DepartmentMetric = ({
   accent,
   caption,
   monthOverMonth,
+  isSingleMonth,
 }: {
   icon: LucideIcon;
   label: string;
@@ -153,6 +154,7 @@ const DepartmentMetric = ({
   accent: "brand" | "emerald" | "accent" | "muted";
   caption?: string | null;
   monthOverMonth?: { value: number; percentage: number } | null;
+  isSingleMonth: boolean;
 }) => {
   const accentClass =
     accent === "brand"
@@ -176,7 +178,7 @@ const DepartmentMetric = ({
         {caption && <span className="text-[11px] font-medium text-slate-400">{caption}</span>}
         {monthOverMonth && (
           <span className={`text-[11px] font-medium ${monthOverMonth.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-            前月比: {monthOverMonth.value >= 0 ? '+' : ''}{monthOverMonth.percentage.toFixed(1)}%
+            {isSingleMonth ? '前月比' : '期間比'}: {monthOverMonth.value >= 0 ? '+' : ''}{monthOverMonth.percentage}%
           </span>
         )}
       </div>
@@ -677,10 +679,15 @@ export default function PatientAnalysisPage() {
   const previousStat: KarteMonthlyStat | null =
     stats.length > 1 ? stats[stats.length - 2] : null;
 
+  const firstStat: KarteMonthlyStat | null =
+    stats.length > 0 ? stats[0] : null;
+
+  const isSingleMonthPeriod = startMonth === endMonth;
+
   const calculateMonthOverMonth = (current: number, previous: number | null) => {
     if (previous === null || previous === 0) return null;
     const diff = current - previous;
-    const percentage = (diff / previous) * 100;
+    const percentage = roundTo1Decimal((diff / previous) * 100);
     return { value: diff, percentage };
   };
 
@@ -688,24 +695,24 @@ export default function PatientAnalysisPage() {
     if (classifiedRecords.length === 0 || !startMonth || !endMonth) {
       return [];
     }
-    
-    // Calculate previous period months
-    const startDate = new Date(startMonth + '-01');
-    const endDate = new Date(endMonth + '-01');
-    const monthsDiff = (endDate.getFullYear() - startDate.getFullYear()) * 12 + (endDate.getMonth() - startDate.getMonth());
-    
-    const prevEndDate = new Date(startDate);
-    prevEndDate.setMonth(prevEndDate.getMonth() - 1);
-    const prevStartDate = new Date(prevEndDate);
-    prevStartDate.setMonth(prevStartDate.getMonth() - monthsDiff);
-    
-    const prevStartMonth = `${prevStartDate.getFullYear()}-${String(prevStartDate.getMonth() + 1).padStart(2, '0')}`;
-    const prevEndMonth = `${prevEndDate.getFullYear()}-${String(prevEndDate.getMonth() + 1).padStart(2, '0')}`;
-    
-    return classifiedRecords.filter(
-      (record) => record.monthKey >= prevStartMonth && record.monthKey <= prevEndMonth && record.monthKey >= KARTE_MIN_MONTH
-    );
-  }, [classifiedRecords, startMonth, endMonth]);
+
+    if (isSingleMonthPeriod) {
+      // 単月の場合：前月のデータ
+      const startDate = new Date(startMonth + '-01');
+      const prevDate = new Date(startDate);
+      prevDate.setMonth(prevDate.getMonth() - 1);
+      const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+
+      return classifiedRecords.filter(
+        (record) => record.monthKey === prevMonth && record.monthKey >= KARTE_MIN_MONTH
+      );
+    } else {
+      // 複数月の場合：期間の最初の月のデータ
+      return classifiedRecords.filter(
+        (record) => record.monthKey === startMonth && record.monthKey >= KARTE_MIN_MONTH
+      );
+    }
+  }, [classifiedRecords, startMonth, endMonth, isSingleMonthPeriod]);
 
   const departmentStats = useMemo<DepartmentStat[]>(() => {
     if (filteredClassified.length === 0) {
@@ -1206,37 +1213,65 @@ export default function PatientAnalysisPage() {
                     label={`最新月 (${formatMonthLabel(latestStat.month)}) 総患者`}
                     value={`${latestStat.totalPatients.toLocaleString("ja-JP")}名`}
                     tone="brand"
-                    monthOverMonth={previousStat ? calculateMonthOverMonth(latestStat.totalPatients, previousStat.totalPatients) : null}
+                    monthOverMonth={
+                      isSingleMonthPeriod && previousStat
+                        ? calculateMonthOverMonth(latestStat.totalPatients, previousStat.totalPatients)
+                        : !isSingleMonthPeriod && firstStat
+                          ? calculateMonthOverMonth(latestStat.totalPatients, firstStat.totalPatients)
+                          : null
+                    }
                   />
                   <StatCard
                     label="最新月 純初診"
                     value={`${latestStat.pureFirstVisits.toLocaleString("ja-JP")}名`}
                     tone="emerald"
-                    monthOverMonth={previousStat ? calculateMonthOverMonth(latestStat.pureFirstVisits, previousStat.pureFirstVisits) : null}
+                    monthOverMonth={
+                      isSingleMonthPeriod && previousStat
+                        ? calculateMonthOverMonth(latestStat.pureFirstVisits, previousStat.pureFirstVisits)
+                        : !isSingleMonthPeriod && firstStat
+                          ? calculateMonthOverMonth(latestStat.pureFirstVisits, firstStat.pureFirstVisits)
+                          : null
+                    }
                   />
                   <StatCard
                     label="最新月 再初診"
                     value={`${latestStat.returningFirstVisits.toLocaleString("ja-JP")}名`}
                     tone="muted"
-                    monthOverMonth={previousStat ? calculateMonthOverMonth(latestStat.returningFirstVisits, previousStat.returningFirstVisits) : null}
+                    monthOverMonth={
+                      isSingleMonthPeriod && previousStat
+                        ? calculateMonthOverMonth(latestStat.returningFirstVisits, previousStat.returningFirstVisits)
+                        : !isSingleMonthPeriod && firstStat
+                          ? calculateMonthOverMonth(latestStat.returningFirstVisits, firstStat.returningFirstVisits)
+                          : null
+                    }
                   />
                   <StatCard
                     label="最新月 再診"
                     value={`${latestStat.revisitCount.toLocaleString("ja-JP")}名`}
                     tone="accent"
-                    monthOverMonth={previousStat ? calculateMonthOverMonth(latestStat.revisitCount, previousStat.revisitCount) : null}
+                    monthOverMonth={
+                      isSingleMonthPeriod && previousStat
+                        ? calculateMonthOverMonth(latestStat.revisitCount, previousStat.revisitCount)
+                        : !isSingleMonthPeriod && firstStat
+                          ? calculateMonthOverMonth(latestStat.revisitCount, firstStat.revisitCount)
+                          : null
+                    }
                   />
                   <StatCard
                     label="最新月 平均年齢"
                     value={
                       latestStat.averageAge !== null
-                        ? `${latestStat.averageAge.toFixed(1)}歳`
+                        ? `${roundTo1Decimal(latestStat.averageAge)}歳`
                         : "データなし"
                     }
                     tone="muted"
-                    monthOverMonth={previousStat && latestStat.averageAge !== null && previousStat.averageAge !== null 
-                      ? { value: latestStat.averageAge - previousStat.averageAge, percentage: ((latestStat.averageAge - previousStat.averageAge) / previousStat.averageAge) * 100 }
-                      : null}
+                    monthOverMonth={
+                      isSingleMonthPeriod && previousStat && latestStat.averageAge !== null && previousStat.averageAge !== null
+                        ? { value: roundTo1Decimal(latestStat.averageAge - previousStat.averageAge), percentage: roundTo1Decimal(((latestStat.averageAge - previousStat.averageAge) / previousStat.averageAge) * 100) }
+                        : !isSingleMonthPeriod && firstStat && latestStat.averageAge !== null && firstStat.averageAge !== null
+                          ? { value: roundTo1Decimal(latestStat.averageAge - firstStat.averageAge), percentage: roundTo1Decimal(((latestStat.averageAge - firstStat.averageAge) / firstStat.averageAge) * 100) }
+                          : null
+                    }
                   />
                 </div>
                 <button
@@ -1403,37 +1438,42 @@ export default function PatientAnalysisPage() {
                       value={`${row.total.toLocaleString("ja-JP")}名`}
                       accent="brand"
                       monthOverMonth={totalMoM}
+                      isSingleMonth={isSingleMonthPeriod}
                     />
                     <DepartmentMetric
                       icon={UserPlus}
                       label="純初診"
                       value={`${row.pureFirst.toLocaleString("ja-JP")}名`}
-                      caption={`${row.pureRate.toFixed(1)}%`}
+                      caption={`${row.pureRate}%`}
                       accent="emerald"
                       monthOverMonth={pureMoM}
+                      isSingleMonth={isSingleMonthPeriod}
                     />
                     <DepartmentMetric
                       icon={Undo2}
                       label="再初診"
                       value={`${row.returningFirst.toLocaleString("ja-JP")}名`}
-                      caption={`${row.returningRate.toFixed(1)}%`}
+                      caption={`${row.returningRate}%`}
                       accent="accent"
                       monthOverMonth={returningMoM}
+                      isSingleMonth={isSingleMonthPeriod}
                     />
                     <DepartmentMetric
                       icon={RotateCcw}
                       label="再診"
                       value={`${row.revisit.toLocaleString("ja-JP")}名`}
-                      caption={`${row.revisitRate.toFixed(1)}%`}
+                      caption={`${row.revisitRate}%`}
                       accent="muted"
                       monthOverMonth={revisitMoM}
+                      isSingleMonth={isSingleMonthPeriod}
                     />
                     <DepartmentMetric
                       icon={Clock}
                       label="平均年齢"
-                      value={row.averageAge !== null ? `${row.averageAge.toFixed(1)}歳` : "データなし"}
+                      value={row.averageAge !== null ? `${row.averageAge}歳` : "データなし"}
                       accent="muted"
                       monthOverMonth={ageMoM}
+                      isSingleMonth={isSingleMonthPeriod}
                     />
                   </div>
                 </div>
