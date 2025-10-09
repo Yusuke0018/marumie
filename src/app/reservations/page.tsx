@@ -429,7 +429,7 @@ export default function HomePage() {
   const [departmentOrder, setDepartmentOrder] = useState<string[]>([]);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [expandedDepartment, setExpandedDepartment] = useState<string | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("all");
   const [sortMode, setSortMode] = useState<"priority" | "alphabetical" | "volume">(
     "priority",
@@ -567,6 +567,25 @@ export default function HomePage() {
     return Array.from(months).sort();
   }, [reservations]);
 
+  useEffect(() => {
+    if (availableMonths.length === 0) {
+      if (selectedMonth !== "" && selectedMonth !== "all") {
+        setSelectedMonth("");
+      }
+      return;
+    }
+
+    const latestMonth = availableMonths[availableMonths.length - 1];
+    if (selectedMonth === "") {
+      setSelectedMonth(latestMonth);
+      return;
+    }
+
+    if (selectedMonth !== "all" && !availableMonths.includes(selectedMonth)) {
+      setSelectedMonth(latestMonth);
+    }
+  }, [availableMonths, selectedMonth]);
+
   const filteredReservations = useMemo(() => {
     let filtered = reservations;
     
@@ -576,7 +595,7 @@ export default function HomePage() {
     }
     
     // 月フィルター
-    if (selectedMonth !== "all") {
+    if (selectedMonth !== "" && selectedMonth !== "all") {
       filtered = filtered.filter(r => r.reservationMonth === selectedMonth);
     }
     
@@ -809,11 +828,11 @@ const monthlyOverview = useMemo(
             </div>
             <div className="flex items-center gap-2">
               <label className="text-sm font-semibold text-slate-700">月別:</label>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
-              >
+                <select
+                  value={selectedMonth === "" ? "all" : selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+                >
                 <option value="all">全て</option>
                 {availableMonths.map(month => (
                   <option key={month} value={month}>{month}</option>

@@ -41,6 +41,7 @@ import {
   loadSurveyDataFromStorage,
   saveSurveyDataToStorage,
   loadSurveyTimestamp,
+  type SurveyFileType,
 } from "@/lib/surveyData";
 import {
   type ListingCategory,
@@ -61,6 +62,7 @@ const PERIOD_MONTHS: Record<Exclude<PeriodType, "all">, number> = {
   "1year": 12,
 };
 const LISTING_CATEGORIES: ListingCategory[] = ["内科", "胃カメラ", "大腸カメラ"];
+const SURVEY_FILE_TYPES: SurveyFileType[] = ["外来", "内視鏡"];
 
 const createEmptyListingTotals = (): Record<ListingCategory, number> =>
   LISTING_CATEGORIES.reduce(
@@ -70,6 +72,23 @@ const createEmptyListingTotals = (): Record<ListingCategory, number> =>
     },
     {} as Record<ListingCategory, number>,
   );
+
+const createEmptySurveyCounts = (): Record<SurveyFileType, number> =>
+  SURVEY_FILE_TYPES.reduce(
+    (acc, type) => {
+      acc[type] = 0;
+      return acc;
+    },
+    {} as Record<SurveyFileType, number>,
+  );
+
+const summarizeSurveyByType = (data: SurveyData[]): Record<SurveyFileType, number> => {
+  const counts = createEmptySurveyCounts();
+  for (const item of data) {
+    counts[item.fileType] = (counts[item.fileType] ?? 0) + 1;
+  }
+  return counts;
+};
 
 const roundTo1Decimal = (value: number) => Math.round(value * 10) / 10;
 
@@ -328,7 +347,7 @@ export default function PatientAnalysisPage() {
   const [isLoadingShared, setIsLoadingShared] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("all");
-  const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [reservationStatus, setReservationStatus] = useState<{
     lastUpdated: string | null;
     total: number;
@@ -341,9 +360,11 @@ export default function PatientAnalysisPage() {
   const [surveyStatus, setSurveyStatus] = useState<{
     lastUpdated: string | null;
     total: number;
+    byType: Record<SurveyFileType, number>;
   }>({
     lastUpdated: null,
     total: 0,
+    byType: createEmptySurveyCounts(),
   });
   const [isUploadingSurvey, setIsUploadingSurvey] = useState(false);
   const [surveyUploadError, setSurveyUploadError] = useState<string | null>(null);
@@ -421,24 +442,28 @@ export default function PatientAnalysisPage() {
 
     try {
       const existingReservations = loadReservationsFromStorage();
+      const reservationTimestamp = loadReservationTimestamp();
       setReservationStatus({
-        lastUpdated: loadReservationTimestamp(),
+        lastUpdated: reservationTimestamp,
         total: existingReservations.length,
       });
 
       const existingSurvey = loadSurveyDataFromStorage();
+      const surveyTimestamp = loadSurveyTimestamp();
       setSurveyStatus({
-        lastUpdated: loadSurveyTimestamp(),
+        lastUpdated: surveyTimestamp,
         total: existingSurvey.length,
+        byType: summarizeSurveyByType(existingSurvey),
       });
 
       const existingListing = loadListingDataFromStorage();
+      const listingTimestamp = loadListingTimestamp();
       const totals = createEmptyListingTotals();
       existingListing.forEach((item) => {
         totals[item.category] = item.data.length;
       });
       setListingStatus({
-        lastUpdated: loadListingTimestamp(),
+        lastUpdated: listingTimestamp,
         totals,
       });
     } catch (error) {
@@ -473,16 +498,26 @@ export default function PatientAnalysisPage() {
   }, [periodFilteredRecords]);
 
   useEffect(() => {
-    if (selectedMonth === "all") {
+    if (monthsForPeriod.length === 0) {
+      if (selectedMonth !== "" && selectedMonth !== "all") {
+        setSelectedMonth("");
+      }
       return;
     }
-    if (!monthsForPeriod.includes(selectedMonth)) {
-      setSelectedMonth("all");
+
+    const latestMonth = monthsForPeriod[monthsForPeriod.length - 1];
+    if (selectedMonth === "") {
+      setSelectedMonth(latestMonth);
+      return;
+    }
+
+    if (selectedMonth !== "all" && !monthsForPeriod.includes(selectedMonth)) {
+      setSelectedMonth(latestMonth);
     }
   }, [monthsForPeriod, selectedMonth]);
 
   const filteredClassified = useMemo(() => {
-    if (selectedMonth === "all") {
+    if (selectedMonth === "" || selectedMonth === "all") {
       return periodFilteredRecords;
     }
     return periodFilteredRecords.filter((record) => record.monthKey === selectedMonth);
@@ -500,7 +535,7 @@ export default function PatientAnalysisPage() {
       return [];
     }
     const targetMonths =
-      selectedMonth === "all"
+      selectedMonth === "" || selectedMonth === "all"
         ? new Set(periodFilteredRecords.map((record) => record.monthKey))
         : new Set([selectedMonth]);
     return statsAll.filter((stat) => targetMonths.has(stat.month));
@@ -716,6 +751,7 @@ export default function PatientAnalysisPage() {
       setSurveyStatus({
         lastUpdated: timestamp,
         total: merged.length,
+        byType: summarizeSurveyByType(merged),
       });
     } catch (error) {
       console.error(error);
@@ -874,7 +910,7 @@ export default function PatientAnalysisPage() {
           <div className="flex items-center gap-2">
             <label className="text-sm font-semibold text-slate-700">月別:</label>
             <select
-              value={selectedMonth}
+              value={selectedMonth === "" ? "all" : selectedMonth}
               onChange={(event) => setSelectedMonth(event.target.value)}
               disabled={monthsForPeriod.length === 0}
               className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
@@ -1158,6 +1194,9 @@ export default function PatientAnalysisPage() {
                       </p>
                       <p>
                         登録件数: {surveyStatus.total.toLocaleString("ja-JP")}件
+                      </p>
+                      <p>
+                        内訳: 外来 {surveyStatus.byType["外来"].toLocaleString("ja-JP")}件 / 内視鏡 {surveyStatus.byType["内視鏡"].toLocaleString("ja-JP")}件
                       </p>
                     </div>
                   </div>

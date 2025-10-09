@@ -140,7 +140,7 @@ export default function CorrelationPage() {
   const [listingData, setListingData] = useState<CategoryData[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<"内科" | "胃カメラ" | "大腸カメラ">("内科");
-  const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilter>("all");
   const [customStartDate, setCustomStartDate] = useState<string>("");
   const [customEndDate, setCustomEndDate] = useState<string>("");
@@ -184,7 +184,7 @@ export default function CorrelationPage() {
     } else if (selectedPeriod !== "all") {
       data = filterByPeriod(data, selectedPeriod);
     }
-    if (selectedMonth !== "all") {
+    if (selectedMonth !== "" && selectedMonth !== "all") {
       data = data.filter(d => getMonthKey(d.date) === selectedMonth);
     }
     return data;
@@ -206,8 +206,21 @@ export default function CorrelationPage() {
   }, [listingData, selectedCategory]);
 
   useEffect(() => {
+    if (availableMonths.length === 0) {
+      if (selectedMonth !== "" && selectedMonth !== "all") {
+        setSelectedMonth("");
+      }
+      return;
+    }
+
+    const latestMonth = availableMonths[availableMonths.length - 1];
+    if (selectedMonth === "") {
+      setSelectedMonth(latestMonth);
+      return;
+    }
+
     if (selectedMonth !== "all" && !availableMonths.includes(selectedMonth)) {
-      setSelectedMonth("all");
+      setSelectedMonth(latestMonth);
     }
   }, [availableMonths, selectedMonth]);
 
@@ -227,7 +240,7 @@ export default function CorrelationPage() {
       filtered = filterByPeriod(filtered, selectedPeriod);
     }
     
-    if (selectedMonth !== "all") {
+    if (selectedMonth !== "" && selectedMonth !== "all") {
       filtered = filtered.filter(r => r.reservationMonth && r.reservationMonth === selectedMonth);
     }
     
@@ -505,7 +518,7 @@ export default function CorrelationPage() {
               <div className="flex items-center gap-3">
                 <label className="text-sm font-semibold text-slate-700">月別絞り込み:</label>
                 <select
-                  value={selectedMonth}
+                  value={selectedMonth === "" ? "all" : selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
                   className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
                 >

@@ -43,7 +43,7 @@ export default function SurveyPage() {
   const [surveyData, setSurveyData] = useState<SurveyData[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilter>("all");
   const [customStartDate, setCustomStartDate] = useState<string>("");
   const [customEndDate, setCustomEndDate] = useState<string>("");
@@ -84,8 +84,21 @@ export default function SurveyPage() {
   }, [surveyData]);
 
   useEffect(() => {
+    if (availableMonths.length === 0) {
+      if (selectedMonth !== "" && selectedMonth !== "all") {
+        setSelectedMonth("");
+      }
+      return;
+    }
+
+    const latestMonth = availableMonths[availableMonths.length - 1];
+    if (selectedMonth === "") {
+      setSelectedMonth(latestMonth);
+      return;
+    }
+
     if (selectedMonth !== "all" && !availableMonths.includes(selectedMonth)) {
-      setSelectedMonth("all");
+      setSelectedMonth(latestMonth);
     }
   }, [availableMonths, selectedMonth]);
 
@@ -100,7 +113,7 @@ export default function SurveyPage() {
     } else if (selectedPeriod !== "all") {
       data = filterByPeriod(data, selectedPeriod);
     }
-    if (selectedMonth !== "all") {
+    if (selectedMonth !== "" && selectedMonth !== "all") {
       data = data.filter(d => d.month === selectedMonth);
     }
     return data;
@@ -117,7 +130,7 @@ export default function SurveyPage() {
     } else if (selectedPeriod !== "all") {
       data = filterByPeriod(data, selectedPeriod);
     }
-    if (selectedMonth !== "all") {
+    if (selectedMonth !== "" && selectedMonth !== "all") {
       data = data.filter(d => d.month === selectedMonth);
     }
     return data;
@@ -185,7 +198,7 @@ export default function SurveyPage() {
     clearSurveyStorage();
     setSurveyData([]);
     setLastUpdated(null);
-    setSelectedMonth("all");
+    setSelectedMonth("");
     setSelectedPeriod("all");
     setCustomStartDate("");
     setCustomEndDate("");
@@ -285,7 +298,7 @@ export default function SurveyPage() {
               <div className="flex items-center gap-3">
                 <label className="text-sm font-semibold text-slate-700">月別絞り込み:</label>
                 <select
-                  value={selectedMonth}
+                  value={selectedMonth === "" ? "all" : selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
                   className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
                 >
