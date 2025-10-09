@@ -1,0 +1,10 @@
+timestamp: 2025-10-09T18-16-09+0900
+branch: main
+commit: 7a9501888c884f5610c84a91d2c6f4a5adfbb46a
+changes:
+  - docs/reservations-leadtime-plan.md を新規作成し、リードタイム分析ページの仕様・集計指針・UI構成を整理
+commands:
+  - なし（資料作成のみ）
+push: 未実施（構想資料のみのため）
+notes:
+  - 共有データにリードタイム指標を組み込む方針を含む
