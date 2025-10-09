@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import type { LeadtimeHourStat } from "@/lib/leadtimeMetrics";
 import { LEADTIME_CATEGORIES } from "@/lib/leadtimeMetrics";
 
-const Bar = dynamic(() => import("react-chartjs-2").then((mod) => mod.Bar), {
+const Chart = dynamic(() => import("react-chartjs-2").then((mod) => mod.Chart), {
   ssr: false,
 });
 
@@ -91,7 +91,8 @@ export const HourlyLeadtimeChart = ({
 
   return (
     <div className="h-[420px] sm:h-[460px]">
-      <Bar
+      <Chart
+        type="bar"
         data={{
           labels: prepared.labels,
           datasets: prepared.datasets,
@@ -116,11 +117,11 @@ export const HourlyLeadtimeChart = ({
                 display: true,
                 text: "カテゴリ構成比",
               },
-              grid: { drawBorder: false },
+              grid: { display: true },
             },
             y1: {
               position: "right",
-              grid: { drawBorder: false, drawOnChartArea: false },
+              grid: { display: false },
               ticks: {
                 callback: (value) => `${value}h`,
               },
@@ -152,7 +153,7 @@ export const HourlyLeadtimeChart = ({
                   const percent = context.parsed.y.toFixed(1);
                   const raw = prepared.raw[context.dataIndex];
                   const category = context.dataset.label ?? "";
-                  const count = raw.summary.categoryCounts[category] ?? 0;
+                  const count = raw.summary.categoryCounts[category as keyof typeof raw.summary.categoryCounts] ?? 0;
                   return `${category}: ${count.toLocaleString(
                     "ja-JP",
                   )}件 (${percent}%)`;

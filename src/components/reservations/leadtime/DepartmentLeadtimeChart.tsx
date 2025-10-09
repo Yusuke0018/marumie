@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import type { LeadtimeDepartmentStat } from "@/lib/leadtimeMetrics";
 import { getTopCategory } from "@/lib/leadtimeMetrics";
 
-const Bar = dynamic(() => import("react-chartjs-2").then((mod) => mod.Bar), {
+const Chart = dynamic(() => import("react-chartjs-2").then((mod) => mod.Chart), {
   ssr: false,
 });
 
@@ -75,7 +75,8 @@ export const DepartmentLeadtimeChart = ({
 
   return (
     <div className="h-[480px] sm:h-[540px]">
-      <Bar
+      <Chart
+        type="bar"
         data={{
           labels: prepared.labels,
           datasets: [
@@ -121,11 +122,11 @@ export const DepartmentLeadtimeChart = ({
                 display: true,
                 text: "平均リードタイム（時間）",
               },
-              grid: { drawBorder: false },
+              grid: { display: true },
             },
             x1: {
               position: "top",
-              grid: { drawBorder: false, drawOnChartArea: false },
+              grid: { display: false },
               ticks: {
                 callback: (value) => `${value}%`,
               },
