@@ -56,35 +56,6 @@ const calculateAge = (birthIso: string | null, visitIso: string): number | null 
   return age >= 0 && age < 130 ? age : null;
 };
 
-const encodeForShare = (payload: string): string => {
-  if (typeof window === "undefined") {
-    return "";
-  }
-  const bytes = new TextEncoder().encode(payload);
-  let binary = "";
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte);
-  });
-  return window.btoa(binary);
-};
-
-const decodeFromShare = (payload: string): string | null => {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  try {
-    const binary = window.atob(payload);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) {
-      bytes[index] = binary.charCodeAt(index);
-    }
-    return new TextDecoder().decode(bytes);
-  } catch (error) {
-    console.error(error);
-    return null;
-  }
-};
-
 type DepartmentStat = {
   department: string;
   total: number;
@@ -321,30 +292,6 @@ export default function PatientAnalysisPage() {
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("all");
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
 
-  const loadFallbackFromParams = () => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const fallback = params.get("fallback");
-      if (!fallback) {
-        return false;
-      }
-      const decoded = decodeFromShare(fallback);
-      if (!decoded) {
-        return false;
-      }
-      const parsed: KarteRecord[] = JSON.parse(decoded);
-      setRecords(parsed);
-      setLastUpdated(new Date().toISOString());
-      return true;
-    } catch (error) {
-      console.error(error);
-      return false;
-    }
-  };
-
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -352,17 +299,6 @@ export default function PatientAnalysisPage() {
 
     const params = new URLSearchParams(window.location.search);
     const dataId = params.get("data");
-    const fallback = params.get("fallback");
-
-    // fallbackパラメータがある場合は優先的に使用
-    if (fallback) {
-      setIsReadOnly(Boolean(dataId));
-      if (loadFallbackFromParams()) {
-        setIsLoadingShared(false);
-        return;
-      }
-    }
-
     setIsReadOnly(Boolean(dataId));
 
     if (dataId) {
@@ -378,19 +314,15 @@ export default function PatientAnalysisPage() {
               window.localStorage.setItem(KARTE_TIMESTAMP_KEY, response.uploadedAt);
             } catch (error) {
               console.error(error);
-              if (!loadFallbackFromParams()) {
-                setUploadError("共有データの読み込みに失敗しました。");
-              }
+              setUploadError("共有データの読み込みに失敗しました。");
             }
-          } else if (!loadFallbackFromParams()) {
+          } else {
             setUploadError("カルテ集計データではない共有リンクです。");
           }
         })
         .catch((error) => {
           console.error(error);
-          if (!loadFallbackFromParams()) {
-            setUploadError(`共有データの読み込みに失敗しました: ${(error as Error).message}`);
-          }
+          setUploadError(`共有データの読み込みに失敗しました: ${(error as Error).message}`);
         })
         .finally(() => {
           setIsLoadingShared(false);
@@ -608,16 +540,9 @@ export default function PatientAnalysisPage() {
         data: JSON.stringify(records),
       });
 
-      const fallbackPayload = encodeForShare(JSON.stringify(records));
-      const shareUrlObject = new URL(response.url);
-      if (fallbackPayload) {
-        shareUrlObject.searchParams.set("fallback", fallbackPayload);
-      }
-      const finalUrl = shareUrlObject.toString();
-
-      setShareUrl(finalUrl);
-      await navigator.clipboard.writeText(finalUrl);
-      alert(`共有URLをクリップボードにコピーしました！\n\n${finalUrl}`);
+      setShareUrl(response.url);
+      await navigator.clipboard.writeText(response.url);
+      alert(`共有URLをクリップボードにコピーしました！\n\n${response.url}`);
     } catch (error) {
       console.error(error);
       setUploadError(`共有URLの生成に失敗しました: ${(error as Error).message}`);
