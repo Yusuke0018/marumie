@@ -1251,7 +1251,7 @@ ${response.url}`);
               {latestKarteStat && (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                   <StatCard
-                    label={`最新月 (${formatMonthLabel(latestKarteStat.month)}) 総患者数`}
+                    label={`最新月 (${formatMonthLabel(latestKarteStat.month)}) 総患者`}
                     value={`${latestKarteStat.totalPatients.toLocaleString("ja-JP")}名`}
                     tone="brand"
                   />
