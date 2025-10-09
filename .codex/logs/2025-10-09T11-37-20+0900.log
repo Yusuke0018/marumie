@@ -1,0 +1,13 @@
+timestamp: 2025-10-09T11:37:20+0900
+branch: main
+commit: 11ff81d6c93d9670984948cbc67c2ef85b4e1089
+diffstat:
+  src/app/patients/page.tsx |  96 ++++++++++++++++++++++++++++++++++++
+  src/lib/karteAnalytics.ts | 123 ++++++++++++++++++++++++++++++++--------------
+  2 files changed, 183 insertions(+), 36 deletions(-)
+commands:
+  - npm run lint -- --fix (success)
+  - npm run build (success)
+push: pending
+notes:
+  - 診療科別の純初診・再初診等を表示し、外国人自費診療科を除外
