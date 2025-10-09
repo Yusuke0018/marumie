@@ -61,7 +61,6 @@ type MonthlyBucket = {
   当日予約: number;
 };
 
-const ORDER_KEY = "clinic-analytics/department-order/v1";
 const HOURS = Array.from({ length: 24 }, (_, index) => index);
 const KARTE_STORAGE_KEY = "clinic-analytics/karte-records/v1";
 const KARTE_TIMESTAMP_KEY = "clinic-analytics/karte-last-updated/v1";
@@ -413,80 +412,6 @@ const StatCard = memo(({
 
 StatCard.displayName = 'StatCard';
 
-// 診療科カードコンポーネント（グラフなしの軽量版で初期表示を高速化）
-const DepartmentCard = memo(({
-  department,
-  data,
-  total,
-  index,
-  isDragged,
-  onDragStart,
-  onDragOver,
-  onDragEnd,
-  onClick,
-}: {
-  department: string;
-  data: HourlyBucket[];
-  total: number;
-  index: number;
-  isDragged: boolean;
-  onDragStart: (index: number) => void;
-  onDragOver: (e: React.DragEvent, index: number) => void;
-  onDragEnd: () => void;
-  onClick: (department: string) => void;
-}) => {
-  // ピーク時間を計算（グラフの代わりに表示）
-  const peakHour = useMemo(() => {
-    let maxTotal = 0;
-    let maxHour = '';
-    for (const bucket of data) {
-      if (bucket.total > maxTotal) {
-        maxTotal = bucket.total;
-        maxHour = bucket.hour;
-      }
-    }
-    return { hour: maxHour, count: maxTotal };
-  }, [data]);
-
-  return (
-    <div
-      draggable
-      onDragStart={() => onDragStart(index)}
-      onDragOver={(e) => onDragOver(e, index)}
-      onDragEnd={onDragEnd}
-      onClick={() => onClick(department)}
-      className={`min-w-[240px] cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-brand-400 hover:shadow-lg sm:min-w-0 ${
-        isDragged ? "opacity-50" : ""
-      }`}
-    >
-      <div className="flex flex-col gap-3">
-        <div className="flex items-start justify-between">
-          <h3 className="text-sm font-semibold text-slate-800 line-clamp-2">
-            {department}
-          </h3>
-        </div>
-        <div className="space-y-2">
-          <div className="flex justify-between text-xs">
-            <span className="text-slate-500">総予約数</span>
-            <span className="font-semibold text-slate-900">{total.toLocaleString("ja-JP")}</span>
-          </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-slate-500">ピーク時間</span>
-            <span className="font-semibold text-brand-600">{peakHour.hour} ({peakHour.count}件)</span>
-          </div>
-        </div>
-        <div className="pt-2 border-t border-slate-100">
-          <p className="text-[11px] text-slate-400 text-center">
-            クリックでグラフを表示
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-});
-
-DepartmentCard.displayName = 'DepartmentCard';
-
 export default function HomePage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -496,14 +421,8 @@ export default function HomePage() {
   const [isLoadingShared, setIsLoadingShared] = useState(false);
   const [diffMonthly, setDiffMonthly] = useState<MonthlyBucket[] | null>(null);
   const [isReadOnly, setIsReadOnly] = useState(false);
-  const [departmentOrder, setDepartmentOrder] = useState<string[]>([]);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [expandedDepartment, setExpandedDepartment] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("all");
-  const [sortMode, setSortMode] = useState<"priority" | "alphabetical" | "volume">(
-    "priority",
-  );
   const [showWeekdayChart, setShowWeekdayChart] = useState(false);
   const [showHourlyChart, setShowHourlyChart] = useState(false);
   const [showDailyChart, setShowDailyChart] = useState(false);
@@ -672,10 +591,6 @@ export default function HomePage() {
         setDiffMonthly(
           diffRecords.length > 0 ? aggregateMonthly(diffRecords) : null,
         );
-        const storedOrder = window.localStorage.getItem(ORDER_KEY);
-        if (storedOrder) {
-          setDepartmentOrder(JSON.parse(storedOrder));
-        }
       } catch (error) {
         console.error(error);
         setUploadError("保存済みデータの読み込みに失敗しました。");
@@ -777,79 +692,19 @@ const overallDaily = useMemo(
 
   const sortedDepartmentHourly = useMemo(() => {
     const base = [...departmentHourly];
-    switch (sortMode) {
-      case "alphabetical":
-        base.sort((a, b) => a.department.localeCompare(b.department, "ja"));
-        break;
-      case "volume":
-        base.sort((a, b) => {
-          const diff = b.total - a.total;
-          if (diff !== 0) {
-            return diff;
-          }
-          return a.department.localeCompare(b.department, "ja");
-        });
-        break;
-      case "priority":
-      default:
-        base.sort((a, b) => {
-          const priorityDiff = getPriority(a.department) - getPriority(b.department);
-          if (priorityDiff !== 0) {
-            return priorityDiff;
-          }
-          const diff = b.total - a.total;
-          if (diff !== 0) {
-            return diff;
-          }
-          return a.department.localeCompare(b.department, "ja");
-        });
-        break;
-    }
+    base.sort((a, b) => {
+      const priorityDiff = getPriority(a.department) - getPriority(b.department);
+      if (priorityDiff !== 0) {
+        return priorityDiff;
+      }
+      const diff = b.total - a.total;
+      if (diff !== 0) {
+        return diff;
+      }
+      return a.department.localeCompare(b.department, "ja");
+    });
     return base;
-  }, [departmentHourly, sortMode]);
-
-  const displayedDepartments = useMemo(() => {
-    if (departmentOrder.length === 0) {
-      return sortedDepartmentHourly;
-    }
-    const orderMap = new Map(departmentOrder.map((dept, idx) => [dept, idx]));
-    return [...sortedDepartmentHourly].sort((a, b) => {
-      const aIndex = orderMap.get(a.department) ?? 9999;
-      const bIndex = orderMap.get(b.department) ?? 9999;
-      return aIndex - bIndex;
-    });
-  }, [sortedDepartmentHourly, departmentOrder]);
-
-  useEffect(() => {
-    if (sortedDepartmentHourly.length > 0 && departmentOrder.length === 0) {
-      setDepartmentOrder(sortedDepartmentHourly.map(d => d.department));
-    }
-  }, [sortedDepartmentHourly, departmentOrder.length]);
-
-  const handleDragStart = useCallback((index: number) => {
-    setDraggedIndex(index);
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    if (draggedIndex === null || draggedIndex === index) return;
-
-    setDepartmentOrder(prevOrder => {
-      const newOrder = [...prevOrder];
-      const draggedItem = newOrder[draggedIndex];
-      newOrder.splice(draggedIndex, 1);
-      newOrder.splice(index, 0, draggedItem);
-      return newOrder;
-    });
-    setDraggedIndex(index);
-  }, [draggedIndex]);
-
-  const handleDragEnd = useCallback(() => {
-    setDraggedIndex(null);
-    if (typeof window !== "undefined" && departmentOrder.length > 0) {
-      window.localStorage.setItem(ORDER_KEY, JSON.stringify(departmentOrder));
-    }
-  }, [departmentOrder]);
+  }, [departmentHourly]);
 
 const monthlyOverview = useMemo(
     () => aggregateMonthly(reservations),
@@ -889,10 +744,6 @@ const monthlyOverview = useMemo(
     () => aggregateByDayType(filteredReservations),
     [filteredReservations],
   );
-
-  const handleCardClick = useCallback((department: string) => {
-    setExpandedDepartment(department);
-  }, []);
 
   // データを共有URLとして発行
   const handleShare = useCallback(async () => {
@@ -1184,7 +1035,7 @@ const monthlyOverview = useMemo(
               >
                 全体
               </button>
-              {sortedDepartmentHourly.slice(0, 8).map(({ department }) => (
+              {sortedDepartmentHourly.map(({ department }) => (
                 <button
                   key={department}
                   onClick={() => setSelectedDepartment(department)}
@@ -1416,49 +1267,6 @@ const monthlyOverview = useMemo(
         )}
 
         <SectionCard
-          title="診療科別の時間帯分布（受付基準）"
-          description="診療科ごとに初診・再診の受付時間帯をラインチャートで比較できます。"
-          action={
-            <label className="flex items-center gap-2 text-xs font-medium text-slate-500">
-              並び替え
-              <select
-                value={sortMode}
-                onChange={(event) =>
-                  setSortMode(event.target.value as typeof sortMode)
-                }
-                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 shadow-sm focus:border-brand-300 focus:outline-none"
-              >
-                <option value="priority">推奨順</option>
-                <option value="alphabetical">五十音順</option>
-                <option value="volume">予約数順</option>
-              </select>
-            </label>
-          }
-        >
-          <div className="flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-2 md:gap-4 md:overflow-visible lg:grid-cols-3">
-            {displayedDepartments.map(({ department, data, total }, index) => (
-              <DepartmentCard
-                key={department}
-                department={department}
-                data={data}
-                total={total}
-                index={index}
-                isDragged={draggedIndex === index}
-                onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
-                onDragEnd={handleDragEnd}
-                onClick={handleCardClick}
-              />
-            ))}
-{displayedDepartments.length === 0 && (
-              <p className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                集計対象のデータがありません。CSVをアップロードしてください。
-              </p>
-            )}
-          </div>
-        </SectionCard>
-
-        <SectionCard
           title="データ管理"
           description="予約CSVの共有URL発行と保存データの管理を行います。取り込みは患者分析ページに集約されています。"
         >
@@ -1521,97 +1329,6 @@ const monthlyOverview = useMemo(
         </SectionCard>
       </div>
 
-      {expandedDepartment && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={() => setExpandedDepartment(null)}
-        >
-          <div
-            className="w-full max-w-4xl rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">
-                  {expandedDepartment}
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  総予約数: {displayedDepartments.find(d => d.department === expandedDepartment)?.total.toLocaleString("ja-JP")}
-                </p>
-              </div>
-              <button
-                onClick={() => setExpandedDepartment(null)}
-                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-              >
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="h-[260px] sm:h-[340px] md:h-96">
-              <Line
-                data={{
-                  labels: displayedDepartments.find(d => d.department === expandedDepartment)?.data.map(d => d.hour) || [],
-                  datasets: [
-                    {
-                      label: '初診',
-                      data: displayedDepartments.find(d => d.department === expandedDepartment)?.data.map(d => d['初診']) || [],
-                      borderColor: '#5DD4C3',
-                      backgroundColor: 'rgba(93, 212, 195, 0.1)',
-                      borderWidth: 3,
-                      fill: false,
-                      pointRadius: 0,
-                      tension: 0.4,
-                    },
-                    {
-                      label: '再診',
-                      data: displayedDepartments.find(d => d.department === expandedDepartment)?.data.map(d => d['再診']) || [],
-                      borderColor: '#FFB8C8',
-                      backgroundColor: 'rgba(255, 184, 200, 0.1)',
-                      borderWidth: 3,
-                      fill: false,
-                      pointRadius: 0,
-                      tension: 0.4,
-                    },
-                  ],
-                }}
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  plugins: {
-                    legend: {
-                      position: 'top' as const,
-                      labels: {
-                        font: { size: 12 },
-                        usePointStyle: true,
-                        padding: 10,
-                      },
-                    },
-                    tooltip: {
-                      callbacks: {
-                        label: (context) => {
-                          return `${context.dataset.label}: ${context.parsed.y.toLocaleString('ja-JP')}`;
-                        },
-                      },
-                    },
-                  },
-                  scales: {
-                    x: {
-                      grid: { display: false },
-                      ticks: { font: { size: 12 }, color: '#64748B' },
-                    },
-                    y: {
-                      grid: { color: 'rgba(148, 163, 184, 0.2)' },
-                      ticks: { font: { size: 12 }, color: '#64748B' },
-                    },
-                  },
-                  animation: false,
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   );
 }
