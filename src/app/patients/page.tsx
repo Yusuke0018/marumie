@@ -1065,7 +1065,18 @@ export default function PatientAnalysisPage() {
         {stats.length > 0 ? (
           <>
             {latestStat && (
-              <SectionCard title="最新月サマリー">
+              <SectionCard 
+                title={startMonth && endMonth && startMonth === endMonth 
+                  ? `${formatMonthLabel(startMonth)} サマリー`
+                  : startMonth && endMonth
+                    ? `期間内最新月サマリー（${formatMonthLabel(latestStat.month)}）`
+                    : "最新月サマリー"
+                }
+                description={startMonth && endMonth && startMonth !== endMonth 
+                  ? `選択期間：${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}`
+                  : undefined
+                }
+              >
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                   <StatCard
                     label={`最新月 (${formatMonthLabel(latestStat.month)}) 総患者`}
@@ -1105,14 +1116,20 @@ export default function PatientAnalysisPage() {
                 </button>
                 {showSummaryChart && (
                   <div className="mt-4">
-                    <MonthlySummaryChart stat={latestStat} />
+                    <MonthlySummaryChart stats={stats} />
                   </div>
                 )}
               </SectionCard>
             )}
 
             {stats.length > 1 && (
-            <SectionCard title="月次推移" description="選択期間のカルテ集計を月別に一覧しています。">
+            <SectionCard 
+              title={startMonth && endMonth && startMonth !== endMonth
+                ? `月次推移（${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}）`
+                : "月次推移"
+              }
+              description="選択期間のカルテ集計を月別に一覧しています。"
+            >
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-slate-200 text-sm">
                   <thead>
@@ -1177,7 +1194,12 @@ export default function PatientAnalysisPage() {
         )}
 
         <SectionCard
-          title="診療科別 集計"
+          title={startMonth && endMonth && startMonth !== endMonth
+            ? `診療科別 集計（${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}）`
+            : startMonth && endMonth && startMonth === endMonth
+              ? `診療科別 集計（${formatMonthLabel(startMonth)}）`
+              : "診療科別 集計"
+          }
           description="診療科ごとの総患者・純初診・再初診・再診の件数です（「外国人自費」を含む診療科は除外しています）。"
         >
           {departmentStats.length > 0 ? (
@@ -1250,13 +1272,7 @@ export default function PatientAnalysisPage() {
               </button>
               {showDepartmentChart && (
                 <div className="mt-4">
-                  <DepartmentChart stats={departmentStats.map(row => ({
-                    department: row.department,
-                    totalPatients: row.total,
-                    pureFirstVisits: row.pureFirst,
-                    returningFirstVisits: row.returningFirst,
-                    revisitCount: row.revisit,
-                  }))} />
+                  <DepartmentChart records={filteredClassified} />
                 </div>
               )}
             </>

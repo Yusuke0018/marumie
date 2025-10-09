@@ -14,8 +14,6 @@ import { uploadDataToR2, fetchDataFromR2 } from "@/lib/dataShare";
 import {
   getDayType,
   getWeekdayName,
-  type PeriodType,
-  filterByPeriod,
 } from "@/lib/dateUtils";
 import {
   Reservation,
@@ -46,6 +44,11 @@ const HourlyChartSection = lazy(() =>
 const DailyChartSection = lazy(() =>
   import("@/components/reservations/DailyChartSection").then((m) => ({
     default: m.DailyChartSection,
+  })),
+);
+const MonthlyTrendChart = lazy(() =>
+  import("@/components/reservations/MonthlyTrendChart").then((m) => ({
+    default: m.MonthlyTrendChart,
   })),
 );
 
@@ -479,11 +482,12 @@ export default function HomePage() {
   const [isLoadingShared, setIsLoadingShared] = useState(false);
   const [diffMonthly, setDiffMonthly] = useState<MonthlyBucket[] | null>(null);
   const [isReadOnly, setIsReadOnly] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState<string>("");
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("all");
+  const [startMonth, setStartMonth] = useState<string>("");
+  const [endMonth, setEndMonth] = useState<string>("");
   const [showWeekdayChart, setShowWeekdayChart] = useState(false);
   const [showHourlyChart, setShowHourlyChart] = useState(false);
   const [showDailyChart, setShowDailyChart] = useState(false);
+  const [showMonthlyChart, setShowMonthlyChart] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState<string>("全体");
   const [showAllDepartments, setShowAllDepartments] = useState(false);
 
@@ -701,40 +705,33 @@ export default function HomePage() {
 
   useEffect(() => {
     if (availableMonths.length === 0) {
-      if (selectedMonth !== "" && selectedMonth !== "all") {
-        setSelectedMonth("");
-      }
       return;
     }
 
     const latestMonth = availableMonths[availableMonths.length - 1];
-    if (!latestMonth) return;
-
-    if (selectedMonth === "") {
-      setSelectedMonth(latestMonth);
-    } else if (
-      selectedMonth !== "all" &&
-      !availableMonths.includes(selectedMonth)
-    ) {
-      setSelectedMonth(latestMonth);
+    
+    // 開始月・終了月が未設定の場合、最新月を設定
+    if (!startMonth && !endMonth) {
+      setStartMonth(latestMonth);
+      setEndMonth(latestMonth);
     }
-  }, [availableMonths, selectedMonth]);
+  }, [availableMonths, startMonth, endMonth]);
 
   const filteredReservations = useMemo(() => {
     let filtered = reservations;
 
-    // 期間フィルター
-    if (selectedPeriod !== "all") {
-      filtered = filterByPeriod(filtered, selectedPeriod);
-    }
-
-    // 月フィルター
-    if (selectedMonth !== "" && selectedMonth !== "all") {
-      filtered = filtered.filter((r) => r.reservationMonth === selectedMonth);
+    if (startMonth && endMonth) {
+      filtered = filtered.filter(
+        (r) => r.reservationMonth >= startMonth && r.reservationMonth <= endMonth
+      );
+    } else if (startMonth) {
+      filtered = filtered.filter((r) => r.reservationMonth >= startMonth);
+    } else if (endMonth) {
+      filtered = filtered.filter((r) => r.reservationMonth <= endMonth);
     }
 
     return filtered;
-  }, [reservations, selectedMonth, selectedPeriod]);
+  }, [reservations, startMonth, endMonth]);
 
   const aggregatedInsights = useMemo(
     () => aggregateReservationInsights(filteredReservations),
@@ -793,8 +790,8 @@ export default function HomePage() {
   }, [sortedDepartmentHourly, showAllDepartments]);
 
   const monthlyOverview = useMemo(
-    () => aggregateMonthly(reservations),
-    [reservations],
+    () => aggregateMonthly(filteredReservations),
+    [filteredReservations],
   );
 
   // データを共有URLとして発行
@@ -922,35 +919,33 @@ export default function HomePage() {
         {reservations.length > 0 && (
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
-              <label className="text-sm font-semibold text-slate-700">
-                分析期間:
-              </label>
+              <label className="text-sm font-semibold text-slate-700">開始月:</label>
               <select
-                value={selectedPeriod}
-                onChange={(e) =>
-                  setSelectedPeriod(e.target.value as PeriodType)
-                }
-                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+                value={startMonth}
+                onChange={(e) => setStartMonth(e.target.value)}
+                disabled={availableMonths.length === 0}
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <option value="all">全期間</option>
-                <option value="3months">直近3ヶ月</option>
-                <option value="6months">直近6ヶ月</option>
-                <option value="1year">直近1年</option>
+                <option value="">選択してください</option>
+                {availableMonths.map((month) => (
+                  <option key={month} value={month}>
+                    {formatMonthLabel(month)}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-sm font-semibold text-slate-700">
-                月別:
-              </label>
+              <label className="text-sm font-semibold text-slate-700">終了月:</label>
               <select
-                value={selectedMonth === "" ? "all" : selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+                value={endMonth}
+                onChange={(e) => setEndMonth(e.target.value)}
+                disabled={availableMonths.length === 0}
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <option value="all">全て</option>
+                <option value="">選択してください</option>
                 {availableMonths.map((month) => (
                   <option key={month} value={month}>
-                    {month}
+                    {formatMonthLabel(month)}
                   </option>
                 ))}
               </select>
@@ -1142,7 +1137,10 @@ export default function HomePage() {
         </SectionCard>
 
         <SectionCard
-          title="月次サマリ（受付基準）"
+          title={startMonth && endMonth && startMonth !== endMonth
+            ? `月次サマリ（${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}）`
+            : "月次サマリ（受付基準）"
+          }
           description="CSVに含まれる予約受付データを月単位で集計しています。"
         >
           <div className="overflow-x-auto">
@@ -1189,6 +1187,29 @@ export default function HomePage() {
               </tbody>
             </table>
           </div>
+          {monthlyOverview.length > 0 && (
+            <>
+              <button
+                onClick={() => setShowMonthlyChart(!showMonthlyChart)}
+                className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                {showMonthlyChart ? "グラフを非表示" : "グラフを表示"}
+              </button>
+              {showMonthlyChart && (
+                <Suspense
+                  fallback={
+                    <div className="h-[400px] flex items-center justify-center text-slate-500">
+                      読み込み中...
+                    </div>
+                  }
+                >
+                  <div className="mt-4">
+                    <MonthlyTrendChart monthlyData={monthlyOverview} />
+                  </div>
+                </Suspense>
+              )}
+            </>
+          )}
         </SectionCard>
 
         {diffMonthly && diffMonthly.length > 0 && (

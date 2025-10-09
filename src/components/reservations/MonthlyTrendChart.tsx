@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import dynamic from "next/dynamic";
-import type { KarteMonthlyStat } from "@/lib/karteAnalytics";
 
 const Chart = dynamic(() => import("react-chartjs-2").then((mod) => mod.Chart), {
   ssr: false,
@@ -20,8 +19,16 @@ if (typeof window !== "undefined") {
   });
 }
 
-type MonthlySummaryChartProps = {
-  stats: KarteMonthlyStat[];
+type MonthlyBucket = {
+  month: string;
+  total: number;
+  初診: number;
+  再診: number;
+  当日予約: number;
+};
+
+type MonthlyTrendChartProps = {
+  monthlyData: MonthlyBucket[];
 };
 
 const formatMonthLabel = (month: string): string => {
@@ -29,44 +36,44 @@ const formatMonthLabel = (month: string): string => {
   return `${year}年${monthNum}月`;
 };
 
-export const MonthlySummaryChart = ({ stats }: MonthlySummaryChartProps) => {
+export const MonthlyTrendChart = ({ monthlyData }: MonthlyTrendChartProps) => {
   const chartData = useMemo(() => {
-    const sortedStats = [...stats].sort((a, b) => a.month.localeCompare(b.month));
+    const sortedData = [...monthlyData].sort((a, b) => a.month.localeCompare(b.month));
     
     return {
-      labels: sortedStats.map((stat) => formatMonthLabel(stat.month)),
+      labels: sortedData.map((data) => formatMonthLabel(data.month)),
       datasets: [
         {
-          label: "総患者",
-          data: sortedStats.map((stat) => stat.totalPatients),
+          label: "総予約数",
+          data: sortedData.map((data) => data.total),
           borderColor: "#3b82f6",
           backgroundColor: "#3b82f6",
           tension: 0.3,
         },
         {
-          label: "純初診",
-          data: sortedStats.map((stat) => stat.pureFirstVisits),
+          label: "初診",
+          data: sortedData.map((data) => data.初診),
           borderColor: "#10b981",
           backgroundColor: "#10b981",
           tension: 0.3,
         },
         {
-          label: "再初診",
-          data: sortedStats.map((stat) => stat.returningFirstVisits),
-          borderColor: "#f59e0b",
-          backgroundColor: "#f59e0b",
-          tension: 0.3,
-        },
-        {
           label: "再診",
-          data: sortedStats.map((stat) => stat.revisitCount),
+          data: sortedData.map((data) => data.再診),
           borderColor: "#8b5cf6",
           backgroundColor: "#8b5cf6",
           tension: 0.3,
         },
+        {
+          label: "当日予約",
+          data: sortedData.map((data) => data.当日予約),
+          borderColor: "#f59e0b",
+          backgroundColor: "#f59e0b",
+          tension: 0.3,
+        },
       ],
     };
-  }, [stats]);
+  }, [monthlyData]);
 
   return (
     <div className="h-[400px]">
@@ -83,7 +90,7 @@ export const MonthlySummaryChart = ({ stats }: MonthlySummaryChartProps) => {
             tooltip: {
               callbacks: {
                 label: (context) => {
-                  return `${context.dataset.label}: ${context.parsed.y.toLocaleString("ja-JP")}人`;
+                  return `${context.dataset.label}: ${context.parsed.y.toLocaleString("ja-JP")}件`;
                 },
               },
             },
@@ -92,7 +99,7 @@ export const MonthlySummaryChart = ({ stats }: MonthlySummaryChartProps) => {
             y: {
               beginAtZero: true,
               ticks: {
-                callback: (value) => `${value}人`,
+                callback: (value) => `${value}件`,
               },
             },
           },

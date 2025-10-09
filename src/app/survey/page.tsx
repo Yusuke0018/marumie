@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { filterByDateRange, filterByPeriod, type PeriodType } from "@/lib/dateUtils";
+
 import { RefreshCw } from "lucide-react";
 import {
   type SurveyData,
@@ -18,8 +18,6 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-
-type PeriodFilter = PeriodType | "custom";
 
 const COLORS = [
   "#2A9D8F", "#FF7B7B", "#5DD4C3", "#E65C5C", "#75DBC3",
@@ -43,10 +41,8 @@ export default function SurveyPage() {
   const [surveyData, setSurveyData] = useState<SurveyData[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState<string>("");
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilter>("all");
-  const [customStartDate, setCustomStartDate] = useState<string>("");
-  const [customEndDate, setCustomEndDate] = useState<string>("");
+  const [startMonth, setStartMonth] = useState<string>("");
+  const [endMonth, setEndMonth] = useState<string>("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -85,56 +81,44 @@ export default function SurveyPage() {
 
   useEffect(() => {
     if (availableMonths.length === 0) {
-      if (selectedMonth !== "" && selectedMonth !== "all") {
-        setSelectedMonth("");
-      }
       return;
     }
 
     const latestMonth = availableMonths[availableMonths.length - 1];
-    if (selectedMonth === "") {
-      setSelectedMonth(latestMonth);
-      return;
+    
+    if (!startMonth && !endMonth) {
+      setStartMonth(latestMonth);
+      setEndMonth(latestMonth);
     }
-
-    if (selectedMonth !== "all" && !availableMonths.includes(selectedMonth)) {
-      setSelectedMonth(latestMonth);
-    }
-  }, [availableMonths, selectedMonth]);
+  }, [availableMonths, startMonth, endMonth]);
 
   const gairaiData = useMemo(() => {
     let data = surveyData.filter(d => d.fileType === "外来");
-    if (selectedPeriod === "custom") {
-      data = filterByDateRange(data, {
-        startDate: customStartDate || undefined,
-        endDate: customEndDate || undefined,
-        getDate: (item) => item.date,
-      });
-    } else if (selectedPeriod !== "all") {
-      data = filterByPeriod(data, selectedPeriod);
+    
+    if (startMonth && endMonth) {
+      data = data.filter(d => d.month >= startMonth && d.month <= endMonth);
+    } else if (startMonth) {
+      data = data.filter(d => d.month >= startMonth);
+    } else if (endMonth) {
+      data = data.filter(d => d.month <= endMonth);
     }
-    if (selectedMonth !== "" && selectedMonth !== "all") {
-      data = data.filter(d => d.month === selectedMonth);
-    }
+    
     return data;
-  }, [surveyData, selectedMonth, selectedPeriod, customStartDate, customEndDate]);
+  }, [surveyData, startMonth, endMonth]);
 
   const naishikyoData = useMemo(() => {
     let data = surveyData.filter(d => d.fileType === "内視鏡");
-    if (selectedPeriod === "custom") {
-      data = filterByDateRange(data, {
-        startDate: customStartDate || undefined,
-        endDate: customEndDate || undefined,
-        getDate: (item) => item.date,
-      });
-    } else if (selectedPeriod !== "all") {
-      data = filterByPeriod(data, selectedPeriod);
+    
+    if (startMonth && endMonth) {
+      data = data.filter(d => d.month >= startMonth && d.month <= endMonth);
+    } else if (startMonth) {
+      data = data.filter(d => d.month >= startMonth);
+    } else if (endMonth) {
+      data = data.filter(d => d.month <= endMonth);
     }
-    if (selectedMonth !== "" && selectedMonth !== "all") {
-      data = data.filter(d => d.month === selectedMonth);
-    }
+    
     return data;
-  }, [surveyData, selectedMonth, selectedPeriod, customStartDate, customEndDate]);
+  }, [surveyData, startMonth, endMonth]);
 
   const gairaiChartData = useMemo(() => {
     const totals: Record<string, number> = {
@@ -198,10 +182,8 @@ export default function SurveyPage() {
     clearSurveyStorage();
     setSurveyData([]);
     setLastUpdated(null);
-    setSelectedMonth("");
-    setSelectedPeriod("all");
-    setCustomStartDate("");
-    setCustomEndDate("");
+    setStartMonth("");
+    setEndMonth("");
     setUploadError(null);
   };
 
@@ -264,47 +246,35 @@ export default function SurveyPage() {
         {surveyData.length > 0 && (
           <>
             <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-semibold text-slate-700">期間範囲:</label>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-semibold text-slate-700">開始月:</label>
                 <select
-                  value={selectedPeriod}
-                  onChange={(e) => setSelectedPeriod(e.target.value as PeriodFilter)}
-                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+                  value={startMonth}
+                  onChange={(e) => setStartMonth(e.target.value)}
+                  disabled={availableMonths.length === 0}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <option value="all">全期間</option>
-                  <option value="3months">直近3ヶ月</option>
-                  <option value="6months">直近6ヶ月</option>
-                  <option value="1year">直近1年</option>
-                  <option value="custom">カスタム</option>
+                  <option value="">選択してください</option>
+                  {availableMonths.map((month) => (
+                    <option key={month} value={month}>
+                      {month}
+                    </option>
+                  ))}
                 </select>
               </div>
-              {selectedPeriod === "custom" && (
-                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="date"
-                    value={customStartDate}
-                    onChange={(e) => setCustomStartDate(e.target.value)}
-                    className="rounded-full border border-slate-200 px-3 py-2 shadow-sm focus:border-brand-400 focus:outline-none"
-                  />
-                  <span className="text-slate-500">〜</span>
-                  <input
-                    type="date"
-                    value={customEndDate}
-                    onChange={(e) => setCustomEndDate(e.target.value)}
-                    className="rounded-full border border-slate-200 px-3 py-2 shadow-sm focus:border-brand-400 focus:outline-none"
-                  />
-                </div>
-              )}
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-semibold text-slate-700">月別絞り込み:</label>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-semibold text-slate-700">終了月:</label>
                 <select
-                  value={selectedMonth === "" ? "all" : selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+                  value={endMonth}
+                  onChange={(e) => setEndMonth(e.target.value)}
+                  disabled={availableMonths.length === 0}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <option value="all">全月</option>
-                  {availableMonths.map(month => (
-                    <option key={month} value={month}>{month}</option>
+                  <option value="">選択してください</option>
+                  {availableMonths.map((month) => (
+                    <option key={month} value={month}>
+                      {month}
+                    </option>
                   ))}
                 </select>
               </div>
