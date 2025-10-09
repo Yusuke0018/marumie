@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { filterByDateRange, filterByPeriod, getMonthKey, type PeriodType } from "@/lib/dateUtils";
+import { getMonthKey } from "@/lib/dateUtils";
 import {
   ComposedChart,
   Bar,
@@ -41,8 +41,6 @@ type Reservation = {
   appointmentIso?: string | null;
   receivedAtIso?: string;
 };
-
-type PeriodFilter = PeriodType | "custom";
 
 const extractDatePart = (value?: string | null): string | undefined => {
   if (!value) {
@@ -140,10 +138,8 @@ export default function CorrelationPage() {
   const [listingData, setListingData] = useState<CategoryData[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<"内科" | "胃カメラ" | "大腸カメラ">("内科");
-  const [selectedMonth, setSelectedMonth] = useState<string>("");
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilter>("all");
-  const [customStartDate, setCustomStartDate] = useState<string>("");
-  const [customEndDate, setCustomEndDate] = useState<string>("");
+  const [startMonth, setStartMonth] = useState<string>("");
+  const [endMonth, setEndMonth] = useState<string>("");
   const [lambda, setLambda] = useState<number>(0.5);
 
   useEffect(() => {
@@ -175,20 +171,26 @@ export default function CorrelationPage() {
     if (!categoryData) return [];
 
     let data = categoryData.data;
-    if (selectedPeriod === "custom") {
-      data = filterByDateRange(data, {
-        startDate: customStartDate || undefined,
-        endDate: customEndDate || undefined,
-        getDate: (item) => item.date,
+    
+    if (startMonth && endMonth) {
+      data = data.filter((item) => {
+        const month = getMonthKey(item.date);
+        return month && month >= startMonth && month <= endMonth;
       });
-    } else if (selectedPeriod !== "all") {
-      data = filterByPeriod(data, selectedPeriod);
+    } else if (startMonth) {
+      data = data.filter((item) => {
+        const month = getMonthKey(item.date);
+        return month && month >= startMonth;
+      });
+    } else if (endMonth) {
+      data = data.filter((item) => {
+        const month = getMonthKey(item.date);
+        return month && month <= endMonth;
+      });
     }
-    if (selectedMonth !== "" && selectedMonth !== "all") {
-      data = data.filter(d => getMonthKey(d.date) === selectedMonth);
-    }
+    
     return data;
-  }, [listingData, selectedCategory, selectedMonth, selectedPeriod, customStartDate, customEndDate]);
+  }, [listingData, selectedCategory, startMonth, endMonth]);
 
   const availableMonths = useMemo(() => {
     const category = listingData.find((c) => c.category === selectedCategory);
@@ -207,22 +209,15 @@ export default function CorrelationPage() {
 
   useEffect(() => {
     if (availableMonths.length === 0) {
-      if (selectedMonth !== "" && selectedMonth !== "all") {
-        setSelectedMonth("");
-      }
       return;
     }
 
     const latestMonth = availableMonths[availableMonths.length - 1];
-    if (selectedMonth === "") {
-      setSelectedMonth(latestMonth);
-      return;
+    if (startMonth === "" && endMonth === "") {
+      setStartMonth(latestMonth);
+      setEndMonth(latestMonth);
     }
-
-    if (selectedMonth !== "all" && !availableMonths.includes(selectedMonth)) {
-      setSelectedMonth(latestMonth);
-    }
-  }, [availableMonths, selectedMonth]);
+  }, [availableMonths, startMonth, endMonth]);
 
   const currentReservations = useMemo(() => {
     const departments = CATEGORY_MAPPING[selectedCategory];
@@ -230,29 +225,28 @@ export default function CorrelationPage() {
       r && departments.includes(r.department) && r.visitType === "初診"
     );
 
-    if (selectedPeriod === "custom") {
-      filtered = filterByDateRange(filtered, {
-        startDate: customStartDate || undefined,
-        endDate: customEndDate || undefined,
-        getDate: resolveReservationDate,
+    if (startMonth && endMonth) {
+      filtered = filtered.filter(r => {
+        if (!r.reservationMonth) return false;
+        const month = r.reservationMonth.replace('/', '-');
+        return month >= startMonth && month <= endMonth;
       });
-    } else if (selectedPeriod !== "all") {
-      filtered = filterByPeriod(filtered, selectedPeriod);
-    }
-    
-    if (selectedMonth !== "" && selectedMonth !== "all") {
-      filtered = filtered.filter(r => r.reservationMonth && r.reservationMonth === selectedMonth);
+    } else if (startMonth) {
+      filtered = filtered.filter(r => {
+        if (!r.reservationMonth) return false;
+        const month = r.reservationMonth.replace('/', '-');
+        return month >= startMonth;
+      });
+    } else if (endMonth) {
+      filtered = filtered.filter(r => {
+        if (!r.reservationMonth) return false;
+        const month = r.reservationMonth.replace('/', '-');
+        return month <= endMonth;
+      });
     }
     
     return filtered;
-  }, [
-    reservations,
-    selectedCategory,
-    selectedMonth,
-    selectedPeriod,
-    customStartDate,
-    customEndDate,
-  ]);
+  }, [reservations, selectedCategory, startMonth, endMonth]);
 
   const dailyData = useMemo(() => {
     // 日付ごとにデータを集計
@@ -429,8 +423,6 @@ export default function CorrelationPage() {
     ];
   }, [hourlyData, regression]);
 
-  const categories: Array<"内科" | "胃カメラ" | "大腸カメラ"> = ["内科", "胃カメラ", "大腸カメラ"];
-
   const hasData = currentListingData.length > 0 && currentReservations.length > 0;
 
   return (
@@ -466,7 +458,7 @@ export default function CorrelationPage() {
           <div className="flex items-center gap-2">
             <label className="text-sm font-semibold text-slate-700">カテゴリ:</label>
             <div className="flex gap-2">
-              {categories.map(cat => (
+              {(["内科", "胃カメラ", "大腸カメラ"] as const).map(cat => (
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
@@ -483,51 +475,44 @@ export default function CorrelationPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-3">
-              <label className="text-sm font-semibold text-slate-700">期間範囲:</label>
-              <select
-                value={selectedPeriod}
-                onChange={(e) => setSelectedPeriod(e.target.value as PeriodFilter)}
-                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
-              >
-                <option value="all">全期間</option>
-                <option value="3months">直近3ヶ月</option>
-                <option value="6months">直近6ヶ月</option>
-                <option value="1year">直近1年</option>
-                <option value="custom">カスタム</option>
-              </select>
-            </div>
-            {selectedPeriod === "custom" && (
-              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="date"
-                  value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
-                  className="rounded-full border border-slate-200 px-3 py-2 shadow-sm focus:border-brand-400 focus:outline-none"
-                />
-                <span className="text-slate-500">〜</span>
-                <input
-                  type="date"
-                  value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
-                  className="rounded-full border border-slate-200 px-3 py-2 shadow-sm focus:border-brand-400 focus:outline-none"
-                />
-              </div>
-            )}
             {availableMonths.length > 0 && (
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-semibold text-slate-700">月別絞り込み:</label>
-                <select
-                  value={selectedMonth === "" ? "all" : selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+              <>
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-semibold text-slate-700">開始月:</label>
+                  <select
+                    value={startMonth}
+                    onChange={(e) => setStartMonth(e.target.value)}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+                  >
+                    <option value="">未選択</option>
+                    {availableMonths.map(month => (
+                      <option key={month} value={month}>{month}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-semibold text-slate-700">終了月:</label>
+                  <select
+                    value={endMonth}
+                    onChange={(e) => setEndMonth(e.target.value)}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+                  >
+                    <option value="">未選択</option>
+                    {availableMonths.map(month => (
+                      <option key={month} value={month}>{month}</option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={() => {
+                    setStartMonth("");
+                    setEndMonth("");
+                  }}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50"
                 >
-                  <option value="all">全月</option>
-                  {availableMonths.map(month => (
-                    <option key={month} value={month}>{month}</option>
-                  ))}
-                </select>
-              </div>
+                  リセット
+                </button>
+              </>
             )}
           </div>
         </div>

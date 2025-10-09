@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, lazy, Suspense } from "react";
 
 import { RefreshCw } from "lucide-react";
 import {
@@ -18,6 +18,12 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
+
+const MonthlyTrendChart = lazy(() =>
+  import("@/components/survey/MonthlyTrendChart").then((m) => ({
+    default: m.MonthlyTrendChart,
+  })),
+);
 
 const COLORS = [
   "#2A9D8F", "#FF7B7B", "#5DD4C3", "#E65C5C", "#75DBC3",
@@ -43,6 +49,8 @@ export default function SurveyPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [startMonth, setStartMonth] = useState<string>("");
   const [endMonth, setEndMonth] = useState<string>("");
+  const [showGairaiChart, setShowGairaiChart] = useState(false);
+  const [showNaishikyoChart, setShowNaishikyoChart] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -350,6 +358,29 @@ export default function SurveyPage() {
                     </div>
                   </div>
                 </div>
+                {gairaiData.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => setShowGairaiChart(!showGairaiChart)}
+                      className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                      {showGairaiChart ? "月次推移グラフを非表示" : "月次推移グラフを表示"}
+                    </button>
+                    {showGairaiChart && (
+                      <Suspense
+                        fallback={
+                          <div className="mt-4 h-[400px] flex items-center justify-center text-slate-500">
+                            読み込み中...
+                          </div>
+                        }
+                      >
+                        <div className="mt-4">
+                          <MonthlyTrendChart data={gairaiData} title="外来 - 来院経路の月次推移" />
+                        </div>
+                      </Suspense>
+                    )}
+                  </>
+                )}
               </section>
             )}
 
@@ -423,6 +454,29 @@ export default function SurveyPage() {
                     </div>
                   </div>
                 </div>
+                {naishikyoData.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => setShowNaishikyoChart(!showNaishikyoChart)}
+                      className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                      {showNaishikyoChart ? "月次推移グラフを非表示" : "月次推移グラフを表示"}
+                    </button>
+                    {showNaishikyoChart && (
+                      <Suspense
+                        fallback={
+                          <div className="mt-4 h-[400px] flex items-center justify-center text-slate-500">
+                            読み込み中...
+                          </div>
+                        }
+                      >
+                        <div className="mt-4">
+                          <MonthlyTrendChart data={naishikyoData} title="内視鏡 - 来院経路の月次推移" />
+                        </div>
+                      </Suspense>
+                    )}
+                  </>
+                )}
               </section>
             )}
 
