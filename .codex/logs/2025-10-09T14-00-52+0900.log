@@ -7,4 +7,4 @@ changes:
   - added reservation/survey/listing data management helpers and status indicators on patients page
 lint:
   - npm run lint (pass)
-push: 未実施
+push: origin/main にプッシュ完了
