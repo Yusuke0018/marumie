@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { RefreshCw, Share2, Upload, Link as LinkIcon } from "lucide-react";
+import {
+  RefreshCw,
+  Share2,
+  Upload,
+  Link as LinkIcon,
+  Users,
+  UserPlus,
+  RotateCcw,
+  Undo2,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import Papa from "papaparse";
 import { uploadDataToR2, fetchDataFromR2 } from "@/lib/dataShare";
 import {
@@ -11,10 +21,57 @@ import {
   type KarteRecord,
   type KarteRecordWithCategory,
 } from "@/lib/karteAnalytics";
+import type { PeriodType } from "@/lib/dateUtils";
 
 const KARTE_STORAGE_KEY = "clinic-analytics/karte-records/v1";
 const KARTE_TIMESTAMP_KEY = "clinic-analytics/karte-last-updated/v1";
 const KARTE_MIN_MONTH = "2025-10";
+const PERIOD_MONTHS: Record<Exclude<PeriodType, "all">, number> = {
+  "3months": 3,
+  "6months": 6,
+  "1year": 12,
+};
+
+type DepartmentStat = {
+  department: string;
+  total: number;
+  pureFirst: number;
+  returningFirst: number;
+  revisit: number;
+};
+
+const DepartmentMetric = ({
+  icon: Icon,
+  label,
+  value,
+  accent,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  accent: "brand" | "emerald" | "accent" | "muted";
+}) => {
+  const accentClass =
+    accent === "brand"
+      ? "bg-brand-50 text-brand-600"
+      : accent === "emerald"
+        ? "bg-emerald-50 text-emerald-600"
+        : accent === "accent"
+          ? "bg-accent-50 text-accent-600"
+          : "bg-slate-100 text-slate-600";
+
+  return (
+    <div className="flex items-center justify-between rounded-2xl border border-slate-100 bg-white/60 px-3 py-2 shadow-sm">
+      <div className="flex items-center gap-2">
+        <span className={`flex h-8 w-8 items-center justify-center rounded-full ${accentClass}`}>
+          <Icon className="h-4 w-4" />
+        </span>
+        <span className="text-xs font-semibold text-slate-500">{label}</span>
+      </div>
+      <span className="text-sm font-semibold text-slate-900">{value}</span>
+    </div>
+  );
+};
 
 const removeBom = (value: string) => value.replace(/^\uFEFF/, "");
 
@@ -199,6 +256,8 @@ export default function PatientAnalysisPage() {
   const [isSharing, setIsSharing] = useState(false);
   const [isLoadingShared, setIsLoadingShared] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("all");
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -253,39 +312,90 @@ export default function PatientAnalysisPage() {
     }
   }, []);
 
-  const stats = useMemo(() => {
-    if (records.length === 0) {
-      return [];
-    }
-    const aggregated = aggregateKarteMonthly(records);
-    return aggregated.filter((item) => item.month >= KARTE_MIN_MONTH);
-  }, [records]);
-
-  const latestStat: KarteMonthlyStat | null = stats.length > 0 ? stats[stats.length - 1] : null;
   const classifiedRecords = useMemo<KarteRecordWithCategory[]>(() => {
     if (records.length === 0) {
       return [];
     }
     return classifyKarteRecords(records);
   }, [records]);
-  const departmentStats = useMemo(() => {
+  const periodFilteredRecords = useMemo(() => {
     if (classifiedRecords.length === 0) {
       return [];
     }
+    let filtered = classifiedRecords.filter((record) => record.monthKey >= KARTE_MIN_MONTH);
+    if (selectedPeriod !== "all") {
+      const months = PERIOD_MONTHS[selectedPeriod];
+      const cutoff = new Date();
+      cutoff.setMonth(cutoff.getMonth() - months);
+      const cutoffStr = cutoff.toISOString().split("T")[0];
+      filtered = filtered.filter((record) => record.dateIso >= cutoffStr);
+    }
+    return filtered;
+  }, [classifiedRecords, selectedPeriod]);
 
-    const map = new Map<
-      string,
-      { total: number; pureFirst: number; returningFirst: number; revisit: number }
-    >();
+  const monthsForPeriod = useMemo(() => {
+    const months = new Set(periodFilteredRecords.map((record) => record.monthKey));
+    return Array.from(months).sort();
+  }, [periodFilteredRecords]);
 
-    for (const record of classifiedRecords) {
+  useEffect(() => {
+    if (selectedMonth === "all") {
+      return;
+    }
+    if (!monthsForPeriod.includes(selectedMonth)) {
+      setSelectedMonth("all");
+    }
+  }, [monthsForPeriod, selectedMonth]);
+
+  const filteredClassified = useMemo(() => {
+    if (selectedMonth === "all") {
+      return periodFilteredRecords;
+    }
+    return periodFilteredRecords.filter((record) => record.monthKey === selectedMonth);
+  }, [periodFilteredRecords, selectedMonth]);
+
+  const statsAll = useMemo(() => {
+    if (records.length === 0) {
+      return [];
+    }
+    return aggregateKarteMonthly(records).filter((item) => item.month >= KARTE_MIN_MONTH);
+  }, [records]);
+
+  const stats = useMemo(() => {
+    if (periodFilteredRecords.length === 0) {
+      return [];
+    }
+    const targetMonths =
+      selectedMonth === "all"
+        ? new Set(periodFilteredRecords.map((record) => record.monthKey))
+        : new Set([selectedMonth]);
+    return statsAll.filter((stat) => targetMonths.has(stat.month));
+  }, [statsAll, periodFilteredRecords, selectedMonth]);
+
+  const latestStat: KarteMonthlyStat | null =
+    stats.length > 0 ? stats[stats.length - 1] : null;
+
+  const departmentStats = useMemo<DepartmentStat[]>(() => {
+    if (filteredClassified.length === 0) {
+      return [];
+    }
+
+    const map = new Map<string, DepartmentStat>();
+
+    for (const record of filteredClassified) {
       const departmentRaw = record.department?.trim() ?? "";
       if (departmentRaw.includes("外国人自費")) {
         continue;
       }
       const department = departmentRaw.length > 0 ? departmentRaw : "診療科未分類";
       if (!map.has(department)) {
-        map.set(department, { total: 0, pureFirst: 0, returningFirst: 0, revisit: 0 });
+        map.set(department, {
+          department,
+          total: 0,
+          pureFirst: 0,
+          returningFirst: 0,
+          revisit: 0,
+        });
       }
 
       const bucket = map.get(department)!;
@@ -300,22 +410,17 @@ export default function PatientAnalysisPage() {
       }
     }
 
-    return Array.from(map.entries())
-      .sort((a, b) => {
-        const diff = b[1].total - a[1].total;
-        if (diff !== 0) {
-          return diff;
-        }
-        return a[0].localeCompare(b[0], "ja");
-      })
-      .map(([department, bucket]) => ({
-        department,
-        total: bucket.total,
-        pureFirst: bucket.pureFirst,
-        returningFirst: bucket.returningFirst,
-        revisit: bucket.revisit,
-      }));
-  }, [classifiedRecords]);
+    return Array.from(map.values()).sort((a, b) => {
+      const diff = b.total - a.total;
+      if (diff !== 0) {
+        return diff;
+      }
+      return a.department.localeCompare(b.department, "ja");
+    });
+  }, [filteredClassified]);
+
+  const hasAnyRecords = records.length > 0;
+  const hasPeriodRecords = periodFilteredRecords.length > 0;
 
   const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -492,6 +597,38 @@ export default function PatientAnalysisPage() {
           )}
         </section>
 
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-semibold text-slate-700">分析期間:</label>
+            <select
+              value={selectedPeriod}
+              onChange={(event) => setSelectedPeriod(event.target.value as PeriodType)}
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+            >
+              <option value="all">全期間</option>
+              <option value="3months">直近3ヶ月</option>
+              <option value="6months">直近6ヶ月</option>
+              <option value="1year">直近1年</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-semibold text-slate-700">月別:</label>
+            <select
+              value={selectedMonth}
+              onChange={(event) => setSelectedMonth(event.target.value)}
+              disabled={monthsForPeriod.length === 0}
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <option value="all">全て</option>
+              {monthsForPeriod.map((month) => (
+                <option key={month} value={month}>
+                  {formatMonthLabel(month)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         {stats.length > 0 ? (
           <>
             {latestStat && (
@@ -573,9 +710,11 @@ export default function PatientAnalysisPage() {
         ) : (
           <SectionCard title="集計データがありません">
             <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-              {records.length === 0
+              {!hasAnyRecords
                 ? "カルテ集計CSVをアップロードすると、月次指標が表示されます。"
-                : "2025年10月以降の集計対象データが見つかりませんでした。CSVの内容をご確認ください。"}
+                : !hasPeriodRecords
+                  ? "選択した期間に該当するデータがありません。期間を変更して再度ご確認ください。"
+                  : "選択された月に該当するデータがありません。条件を変更して再度ご確認ください。"}
             </p>
           </SectionCard>
         )}
@@ -585,35 +724,54 @@ export default function PatientAnalysisPage() {
           description="診療科ごとの総患者・純初診・再初診・再診の件数です（「外国人自費」を含む診療科は除外しています）。"
         >
           {departmentStats.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                    <th className="px-3 py-2">診療科</th>
-                    <th className="px-3 py-2">総患者</th>
-                    <th className="px-3 py-2">純初診</th>
-                    <th className="px-3 py-2">再初診</th>
-                    <th className="px-3 py-2">再診</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {departmentStats.map((row) => (
-                    <tr key={row.department} className="hover:bg-slate-50">
-                      <td className="px-3 py-2 font-medium text-slate-900">{row.department}</td>
-                      <td className="px-3 py-2">{row.total.toLocaleString("ja-JP")}</td>
-                      <td className="px-3 py-2">{row.pureFirst.toLocaleString("ja-JP")}</td>
-                      <td className="px-3 py-2">
-                        {row.returningFirst.toLocaleString("ja-JP")}
-                      </td>
-                      <td className="px-3 py-2">{row.revisit.toLocaleString("ja-JP")}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {departmentStats.map((row) => (
+                <div
+                  key={row.department}
+                  className="group rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-soft transition hover:-translate-y-1 hover:border-brand-200 hover:shadow-card"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-slate-900 sm:text-base">{row.department}</h3>
+                    <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-600">
+                      {row.total.toLocaleString("ja-JP")}名
+                    </span>
+                  </div>
+                  <div className="mt-4 grid gap-2">
+                    <DepartmentMetric
+                      icon={Users}
+                      label="総患者"
+                      value={`${row.total.toLocaleString("ja-JP")}名`}
+                      accent="brand"
+                    />
+                    <DepartmentMetric
+                      icon={UserPlus}
+                      label="純初診"
+                      value={`${row.pureFirst.toLocaleString("ja-JP")}名`}
+                      accent="emerald"
+                    />
+                    <DepartmentMetric
+                      icon={Undo2}
+                      label="再初診"
+                      value={`${row.returningFirst.toLocaleString("ja-JP")}名`}
+                      accent="accent"
+                    />
+                    <DepartmentMetric
+                      icon={RotateCcw}
+                      label="再診"
+                      value={`${row.revisit.toLocaleString("ja-JP")}名`}
+                      accent="muted"
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-              診療科別の集計対象データがありません。
+              {!hasAnyRecords
+                ? "カルテ集計CSVをアップロードすると、診療科別の内訳が表示されます。"
+                : !hasPeriodRecords
+                  ? "選択した期間に該当する診療科データがありません。"
+                  : "選択された月に該当する診療科データがありません。"}
             </p>
           )}
         </SectionCard>

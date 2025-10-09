@@ -7,8 +7,8 @@ export default function Navigation() {
   const pathname = usePathname();
 
   const links = [
-    { href: "/patients" as const, label: "患者分析" },
-    { href: "/" as const, label: "予約分析" },
+    { href: "/" as const, label: "患者分析" },
+    { href: "/reservations" as const, label: "予約分析" },
     { href: "/survey" as const, label: "アンケート分析" },
     { href: "/listing" as const, label: "リスティング分析" },
     { href: "/correlation" as const, label: "相関分析" },
@@ -20,7 +20,10 @@ export default function Navigation() {
         <h1 className="py-4 text-lg font-bold tracking-wide text-brand-600">マルミエ</h1>
         <div className="flex gap-2 py-2">
           {links.map((link) => {
-            const isActive = pathname === link.href;
+            const isActive =
+              link.href === "/"
+                ? pathname === "/" || pathname.startsWith("/patients")
+                : pathname === link.href;
             return (
               <Link
                 key={link.href}
