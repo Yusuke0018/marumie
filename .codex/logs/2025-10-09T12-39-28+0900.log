@@ -1,0 +1,13 @@
+timestamp: 2025-10-09T12:39:28+0900
+branch: main
+commit: 4995daa681ba1366a7034021dea6b1cf52526bb5
+diffstat:
+  src/app/patients/page.tsx     |  4 ++--
+  src/app/reservations/page.tsx |  6 ++----
+  2 files changed, 4 insertions(+), 6 deletions(-)
+commands:
+  - npm run lint -- --fix (success)
+  - npm run build (success)
+push: pending
+notes:
+  - 共有URL閲覧時もCSV/共有操作が可能となるようデータ管理セクションの制約を解除
