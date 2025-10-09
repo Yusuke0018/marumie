@@ -507,6 +507,7 @@ export default function HomePage() {
   const [showWeekdayChart, setShowWeekdayChart] = useState(false);
   const [showHourlyChart, setShowHourlyChart] = useState(false);
   const [showDailyChart, setShowDailyChart] = useState(false);
+  const [selectedDepartment, setSelectedDepartment] = useState<string>("全体");
 
   const applySharedPayload = useCallback(
     (payload: unknown, uploadedAt?: string): boolean => {
@@ -752,9 +753,16 @@ export default function HomePage() {
     return filtered;
   }, [reservations, selectedMonth, selectedPeriod]);
 
-  const overallHourly = useMemo(
-    () => aggregateHourly(filteredReservations),
-    [filteredReservations],
+  const departmentFilteredReservations = useMemo(() => {
+    if (selectedDepartment === "全体") {
+      return filteredReservations;
+    }
+    return filteredReservations.filter(r => r.department === selectedDepartment);
+  }, [filteredReservations, selectedDepartment]);
+
+  const departmentSpecificHourly = useMemo(
+    () => aggregateHourly(departmentFilteredReservations),
+    [departmentFilteredReservations],
   );
 
 const overallDaily = useMemo(
@@ -1161,8 +1169,36 @@ const monthlyOverview = useMemo(
 
         <SectionCard
           title="時間帯別 予約数（受付基準）"
-          description="1時間単位で予約受付が集中する時間帯を大きく表示しています。"
+          description="1時間単位で予約受付が集中する時間帯を診療科別に表示しています。"
         >
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <label className="text-sm font-semibold text-slate-700">診療科:</label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setSelectedDepartment("全体")}
+                className={`rounded-xl px-5 py-2.5 text-sm font-bold transition-all shadow-md ${
+                  selectedDepartment === "全体"
+                    ? "bg-gradient-to-r from-brand-500 to-brand-600 text-white scale-105 shadow-lg ring-2 ring-brand-300"
+                    : "bg-white text-slate-700 hover:bg-brand-50 hover:shadow-lg hover:scale-105"
+                } border-2 border-slate-200`}
+              >
+                全体
+              </button>
+              {sortedDepartmentHourly.slice(0, 8).map(({ department }) => (
+                <button
+                  key={department}
+                  onClick={() => setSelectedDepartment(department)}
+                  className={`rounded-xl px-5 py-2.5 text-sm font-bold transition-all shadow-md ${
+                    selectedDepartment === department
+                      ? "bg-gradient-to-r from-brand-500 to-brand-600 text-white scale-105 shadow-lg ring-2 ring-brand-300"
+                      : "bg-white text-slate-700 hover:bg-brand-50 hover:shadow-lg hover:scale-105"
+                  } border-2 border-slate-200`}
+                >
+                  {department}
+                </button>
+              ))}
+            </div>
+          </div>
           {!showHourlyChart ? (
             <button
               onClick={() => setShowHourlyChart(true)}
@@ -1175,17 +1211,17 @@ const monthlyOverview = useMemo(
               <div className="h-[280px] sm:h-[340px] md:h-[380px]">
                 <Bar
                   data={{
-                    labels: overallHourly.map(d => d.hour),
+                    labels: departmentSpecificHourly.map(d => d.hour),
                     datasets: [
                       {
                         label: '初診',
-                        data: overallHourly.map(d => d['初診']),
+                        data: departmentSpecificHourly.map(d => d['初診']),
                         backgroundColor: '#5DD4C3',
                         borderRadius: 4,
                       },
                       {
                         label: '再診',
-                        data: overallHourly.map(d => d['再診']),
+                        data: departmentSpecificHourly.map(d => d['再診']),
                         backgroundColor: '#FFB8C8',
                         borderRadius: 4,
                       },
