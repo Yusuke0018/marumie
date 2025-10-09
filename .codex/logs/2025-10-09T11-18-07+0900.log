@@ -1,0 +1,11 @@
+timestamp: 2025-10-09T11:18:07+0900
+branch: main
+commit: 4b5781ab4d2f1fc29d497860adc17436f1dbde1d
+diffstat:
+  src/app/page.tsx | 167 +++++++++++++++++++++++++++++++------------------------
+commands:
+  - npm run lint -- --fix (success)
+  - npm run build (success)
+push: pending
+notes:
+  - 共有ビュー判定でCSVアップロードと共有操作を非表示化
