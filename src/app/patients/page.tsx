@@ -58,7 +58,8 @@ import type { SharedDataBundle } from "@/lib/sharedBundle";
 const KARTE_STORAGE_KEY = "clinic-analytics/karte-records/v1";
 const KARTE_TIMESTAMP_KEY = "clinic-analytics/karte-last-updated/v1";
 const KARTE_MIN_MONTH = "2000-01";
-const PERIOD_MONTHS: Record<Exclude<PeriodType, "all">, number> = {
+const PERIOD_MONTHS: Record<Exclude<PeriodType, "all"> | "1month", number> = {
+  "1month": 1,
   "3months": 3,
   "6months": 6,
   "1year": 12,
@@ -348,7 +349,7 @@ export default function PatientAnalysisPage() {
   const [isSharing, setIsSharing] = useState(false);
   const [isLoadingShared, setIsLoadingShared] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("all");
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType | "1month">("1month");
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [reservationStatus, setReservationStatus] = useState<{
     lastUpdated: string | null;
@@ -581,8 +582,8 @@ export default function PatientAnalysisPage() {
       return [];
     }
     let filtered = classifiedRecords.filter((record) => record.monthKey >= KARTE_MIN_MONTH);
-    if (selectedPeriod !== "all") {
-      const months = PERIOD_MONTHS[selectedPeriod];
+    if (selectedPeriod !== "all" && selectedPeriod in PERIOD_MONTHS) {
+      const months = PERIOD_MONTHS[selectedPeriod as keyof typeof PERIOD_MONTHS];
       const cutoff = new Date();
       cutoff.setMonth(cutoff.getMonth() - months);
       const cutoffStr = cutoff.toISOString().split("T")[0];
@@ -1015,13 +1016,14 @@ export default function PatientAnalysisPage() {
             <label className="text-sm font-semibold text-slate-700">分析期間:</label>
             <select
               value={selectedPeriod}
-              onChange={(event) => setSelectedPeriod(event.target.value as PeriodType)}
+              onChange={(event) => setSelectedPeriod(event.target.value as PeriodType | "1month")}
               className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
             >
-              <option value="all">全期間</option>
+              <option value="1month">直近1ヶ月</option>
               <option value="3months">直近3ヶ月</option>
               <option value="6months">直近6ヶ月</option>
               <option value="1year">直近1年</option>
+              <option value="all">全期間</option>
             </select>
           </div>
           <div className="flex items-center gap-2">
@@ -1080,7 +1082,8 @@ export default function PatientAnalysisPage() {
               </SectionCard>
             )}
 
-            <SectionCard title="月次推移" description="2025年10月以降のカルテ集計を月別に一覧しています。">
+            {(selectedMonth === "all" || selectedMonth === "") && stats.length > 1 && (
+            <SectionCard title="月次推移" description="選択期間のカルテ集計を月別に一覧しています。">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-slate-200 text-sm">
                   <thead>
@@ -1119,6 +1122,7 @@ export default function PatientAnalysisPage() {
                 </table>
               </div>
             </SectionCard>
+            )}
           </>
         ) : (
           <SectionCard title="集計データがありません">
