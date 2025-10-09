@@ -68,23 +68,23 @@ export default function Navigation() {
 
       {/* モバイル全画面メニュー */}
       <div
-        className={`md:hidden fixed inset-y-0 right-0 w-[85vw] sm:w-[75vw] bg-white z-50 shadow-2xl transform transition-transform duration-300 ease-in-out ${
+        className={`md:hidden fixed inset-0 bg-white z-50 transform transition-transform duration-300 ease-in-out ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
         <div className="flex flex-col h-full">
-          <div className="flex items-center justify-between p-5 sm:p-6 border-b border-slate-200">
-            <h2 className="text-xl sm:text-2xl font-bold text-brand-600">メニュー</h2>
+          <div className="flex items-center justify-between p-6 border-b border-slate-200 shadow-sm">
+            <h2 className="text-2xl font-bold text-brand-600">メニュー</h2>
             <button
               onClick={closeMenu}
-              className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition"
+              className="p-3 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-95 transition-all"
               aria-label="閉じる"
             >
-              <X className="h-6 w-6 sm:h-7 sm:w-7" />
+              <X className="h-7 w-7" />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-5 sm:p-6">
-            <nav className="space-y-3 sm:space-y-4">
+          <div className="flex-1 overflow-y-auto p-6">
+            <nav className="flex flex-col gap-4">
               {links.map((link) => {
                 const isActive =
                   link.href === "/"
@@ -95,10 +95,10 @@ export default function Navigation() {
                     key={link.href}
                     href={link.href}
                     onClick={closeMenu}
-                    className={`flex items-center justify-center px-6 py-5 sm:py-6 text-lg sm:text-xl font-bold rounded-2xl transition-all shadow-md ${
+                    className={`flex items-center justify-center px-8 py-7 text-xl font-bold rounded-2xl transition-all shadow-lg ${
                       isActive
                         ? "bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-xl scale-105"
-                        : "bg-slate-100 text-slate-700 hover:bg-brand-50 hover:text-brand-600 hover:scale-105 hover:shadow-lg active:scale-95"
+                        : "bg-slate-100 text-slate-700 hover:bg-brand-50 hover:text-brand-600 hover:scale-105 hover:shadow-xl active:scale-95"
                     }`}
                   >
                     {link.label}
