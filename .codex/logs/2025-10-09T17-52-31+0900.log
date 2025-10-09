@@ -1,0 +1,16 @@
+timestamp: 2025-10-09T17-52-31+0900
+branch: main
+commit: c7dd1f165af82710fafcc7414421f2252e9feef7
+diffstat:
+  src/app/reservations/page.tsx | 622 +++++++++++++++++++++++++-----------------
+  src/lib/dateUtils.ts          |  88 +++++-
+  2 files changed, 438 insertions(+), 272 deletions(-)
+commands:
+  - npx prettier --write src/lib/dateUtils.ts src/app/reservations/page.tsx (success)
+  - npm ci (success)
+  - npm run lint (success)
+push: origin/main にプッシュ完了
+notes:
+  - dateUtils の祝日・曜日判定をキャッシュし日付分類処理を高速化
+  - 予約分析ページの集計を単一パスにまとめて診療科切替時の再計算負荷を削減
+  - テストスクリプト未定義のため追加テストは実行なし
