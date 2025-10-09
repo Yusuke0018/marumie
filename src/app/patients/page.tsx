@@ -610,24 +610,33 @@ export default function PatientAnalysisPage() {
     return filtered;
   }, [classifiedRecords, startMonth, endMonth]);
 
-  const monthsForPeriod = useMemo(() => {
-    const months = new Set(periodFilteredRecords.map((record) => record.monthKey));
+  const allAvailableMonths = useMemo(() => {
+    if (classifiedRecords.length === 0) {
+      return [];
+    }
+    const months = new Set(
+      classifiedRecords
+        .filter((record) => record.monthKey >= KARTE_MIN_MONTH)
+        .map((record) => record.monthKey)
+    );
     return Array.from(months).sort();
-  }, [periodFilteredRecords]);
+  }, [classifiedRecords]);
+
+
 
   useEffect(() => {
-    if (monthsForPeriod.length === 0) {
+    if (allAvailableMonths.length === 0) {
       return;
     }
 
-    const latestMonth = monthsForPeriod[monthsForPeriod.length - 1];
+    const latestMonth = allAvailableMonths[allAvailableMonths.length - 1];
     
     // 開始月・終了月が未設定の場合、最新月を設定
     if (!startMonth && !endMonth) {
       setStartMonth(latestMonth);
       setEndMonth(latestMonth);
     }
-  }, [monthsForPeriod, startMonth, endMonth]);
+  }, [allAvailableMonths, startMonth, endMonth]);
 
   const filteredClassified = useMemo(() => {
     return periodFilteredRecords;
@@ -1024,11 +1033,11 @@ export default function PatientAnalysisPage() {
             <select
               value={startMonth}
               onChange={(event) => setStartMonth(event.target.value)}
-              disabled={monthsForPeriod.length === 0}
+              disabled={allAvailableMonths.length === 0}
               className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
             >
               <option value="">選択してください</option>
-              {monthsForPeriod.map((month) => (
+              {allAvailableMonths.map((month) => (
                 <option key={month} value={month}>
                   {formatMonthLabel(month)}
                 </option>
@@ -1040,11 +1049,11 @@ export default function PatientAnalysisPage() {
             <select
               value={endMonth}
               onChange={(event) => setEndMonth(event.target.value)}
-              disabled={monthsForPeriod.length === 0}
+              disabled={allAvailableMonths.length === 0}
               className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
             >
               <option value="">選択してください</option>
-              {monthsForPeriod.map((month) => (
+              {allAvailableMonths.map((month) => (
                 <option key={month} value={month}>
                   {formatMonthLabel(month)}
                 </option>
