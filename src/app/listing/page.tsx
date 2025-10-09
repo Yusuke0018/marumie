@@ -270,16 +270,16 @@ export default function ListingPage() {
               )}
               <div className="flex items-center gap-3">
                 <label className="text-sm font-semibold text-slate-700">カテゴリ:</label>
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                   {categories.map(cat => (
                     <button
                       key={cat}
                       onClick={() => setSelectedCategory(cat)}
-                      className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                      className={`rounded-xl px-6 py-3 text-base font-bold transition-all shadow-md ${
                         selectedCategory === cat
-                          ? "bg-brand-500 text-white"
-                          : "bg-white text-slate-600 hover:bg-brand-50"
-                      } border border-slate-200`}
+                          ? "bg-gradient-to-r from-brand-500 to-brand-600 text-white scale-105 shadow-lg ring-2 ring-brand-300"
+                          : "bg-white text-slate-700 hover:bg-brand-50 hover:shadow-lg hover:scale-105"
+                      } border-2 border-slate-200`}
                     >
                       {cat}
                     </button>

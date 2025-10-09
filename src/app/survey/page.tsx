@@ -311,10 +311,13 @@ export default function SurveyPage() {
             </div>
 
             {gairaiChartData.length > 0 && (
-              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
-                <div className="mb-4">
-                  <h2 className="text-lg font-semibold text-slate-900">外来 - 来院経路の内訳</h2>
-                  <p className="mt-1 text-sm text-slate-500">
+              <section className="rounded-3xl border-2 border-blue-300 bg-gradient-to-br from-blue-50 to-white p-8 shadow-lg">
+                <div className="mb-6 rounded-2xl bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-4 shadow-md">
+                  <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                    <span className="text-3xl">🏥</span>
+                    外来 - 来院経路の内訳
+                  </h2>
+                  <p className="mt-2 text-lg text-blue-50 font-semibold">
                     総回答数: {gairaiChartData.reduce((sum, item) => sum + item.value, 0).toLocaleString("ja-JP")}件
                   </p>
                 </div>
@@ -381,10 +384,13 @@ export default function SurveyPage() {
             )}
 
             {naishikyoChartData.length > 0 && (
-              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
-                <div className="mb-4">
-                  <h2 className="text-lg font-semibold text-slate-900">内視鏡 - 来院経路の内訳</h2>
-                  <p className="mt-1 text-sm text-slate-500">
+              <section className="rounded-3xl border-2 border-purple-300 bg-gradient-to-br from-purple-50 to-white p-8 shadow-lg">
+                <div className="mb-6 rounded-2xl bg-gradient-to-r from-purple-500 to-purple-600 px-6 py-4 shadow-md">
+                  <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                    <span className="text-3xl">🔬</span>
+                    内視鏡 - 来院経路の内訳
+                  </h2>
+                  <p className="mt-2 text-lg text-purple-50 font-semibold">
                     総回答数: {naishikyoChartData.reduce((sum, item) => sum + item.value, 0).toLocaleString("ja-JP")}件
                   </p>
                 </div>
