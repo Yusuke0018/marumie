@@ -10,6 +10,7 @@ import {
   UserPlus,
   RotateCcw,
   Undo2,
+  Clock,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Papa from "papaparse";
@@ -32,12 +33,39 @@ const PERIOD_MONTHS: Record<Exclude<PeriodType, "all">, number> = {
   "1year": 12,
 };
 
+const roundTo1Decimal = (value: number) => Math.round(value * 10) / 10;
+
+const calculateAge = (birthIso: string | null, visitIso: string): number | null => {
+  if (!birthIso) {
+    return null;
+  }
+  const birthDate = new Date(birthIso);
+  const visitDate = new Date(visitIso);
+  if (Number.isNaN(birthDate.getTime()) || Number.isNaN(visitDate.getTime())) {
+    return null;
+  }
+  let age = visitDate.getFullYear() - birthDate.getFullYear();
+  const visitMonth = visitDate.getMonth();
+  const birthMonth = birthDate.getMonth();
+  if (
+    visitMonth < birthMonth ||
+    (visitMonth === birthMonth && visitDate.getDate() < birthDate.getDate())
+  ) {
+    age -= 1;
+  }
+  return age >= 0 && age < 130 ? age : null;
+};
+
 type DepartmentStat = {
   department: string;
   total: number;
   pureFirst: number;
   returningFirst: number;
   revisit: number;
+  averageAge: number | null;
+  pureRate: number;
+  returningRate: number;
+  revisitRate: number;
 };
 
 const DepartmentMetric = ({
@@ -45,11 +73,13 @@ const DepartmentMetric = ({
   label,
   value,
   accent,
+  caption,
 }: {
   icon: LucideIcon;
   label: string;
   value: string;
   accent: "brand" | "emerald" | "accent" | "muted";
+  caption?: string | null;
 }) => {
   const accentClass =
     accent === "brand"
@@ -68,7 +98,10 @@ const DepartmentMetric = ({
         </span>
         <span className="text-xs font-semibold text-slate-500">{label}</span>
       </div>
-      <span className="text-sm font-semibold text-slate-900">{value}</span>
+      <div className="flex flex-col items-end">
+        <span className="text-sm font-semibold text-slate-900">{value}</span>
+        {caption && <span className="text-[11px] font-medium text-slate-400">{caption}</span>}
+      </div>
     </div>
   );
 };
@@ -380,11 +413,22 @@ export default function PatientAnalysisPage() {
       return [];
     }
 
-    const map = new Map<string, DepartmentStat>();
+    const map = new Map<
+      string,
+      {
+        department: string;
+        total: number;
+        pureFirst: number;
+        returningFirst: number;
+        revisit: number;
+        ageSum: number;
+        ageCount: number;
+      }
+    >();
 
     for (const record of filteredClassified) {
       const departmentRaw = record.department?.trim() ?? "";
-      if (departmentRaw.includes("外国人自費")) {
+      if (departmentRaw.includes("自費")) {
         continue;
       }
       const department = departmentRaw.length > 0 ? departmentRaw : "診療科未分類";
@@ -395,6 +439,8 @@ export default function PatientAnalysisPage() {
           pureFirst: 0,
           returningFirst: 0,
           revisit: 0,
+          ageSum: 0,
+          ageCount: 0,
         });
       }
 
@@ -408,15 +454,40 @@ export default function PatientAnalysisPage() {
       } else if (record.category === "revisit") {
         bucket.revisit += 1;
       }
+
+      const age = calculateAge(record.birthDateIso ?? null, record.dateIso);
+      if (age !== null) {
+        bucket.ageSum += age;
+        bucket.ageCount += 1;
+      }
     }
 
-    return Array.from(map.values()).sort((a, b) => {
-      const diff = b.total - a.total;
-      if (diff !== 0) {
-        return diff;
-      }
-      return a.department.localeCompare(b.department, "ja");
-    });
+    return Array.from(map.values())
+      .map((bucket) => {
+        const pureRate = bucket.total > 0 ? (bucket.pureFirst / bucket.total) * 100 : 0;
+        const returningRate = bucket.total > 0 ? (bucket.returningFirst / bucket.total) * 100 : 0;
+        const revisitRate = bucket.total > 0 ? (bucket.revisit / bucket.total) * 100 : 0;
+
+        return {
+          department: bucket.department,
+          total: bucket.total,
+          pureFirst: bucket.pureFirst,
+          returningFirst: bucket.returningFirst,
+          revisit: bucket.revisit,
+          averageAge:
+            bucket.ageCount > 0 ? roundTo1Decimal(bucket.ageSum / bucket.ageCount) : null,
+          pureRate: roundTo1Decimal(pureRate),
+          returningRate: roundTo1Decimal(returningRate),
+          revisitRate: roundTo1Decimal(revisitRate),
+        };
+      })
+      .sort((a, b) => {
+        const diff = b.total - a.total;
+        if (diff !== 0) {
+          return diff;
+        }
+        return a.department.localeCompare(b.department, "ja");
+      });
   }, [filteredClassified]);
 
   const hasAnyRecords = records.length > 0;
@@ -692,18 +763,27 @@ export default function PatientAnalysisPage() {
                       icon={UserPlus}
                       label="純初診"
                       value={`${row.pureFirst.toLocaleString("ja-JP")}名`}
+                      caption={`${row.pureRate.toFixed(1)}%`}
                       accent="emerald"
                     />
                     <DepartmentMetric
                       icon={Undo2}
                       label="再初診"
                       value={`${row.returningFirst.toLocaleString("ja-JP")}名`}
+                      caption={`${row.returningRate.toFixed(1)}%`}
                       accent="accent"
                     />
                     <DepartmentMetric
                       icon={RotateCcw}
                       label="再診"
                       value={`${row.revisit.toLocaleString("ja-JP")}名`}
+                      caption={`${row.revisitRate.toFixed(1)}%`}
+                      accent="muted"
+                    />
+                    <DepartmentMetric
+                      icon={Clock}
+                      label="平均年齢"
+                      value={row.averageAge !== null ? `${row.averageAge.toFixed(1)}歳` : "データなし"}
                       accent="muted"
                     />
                   </div>
