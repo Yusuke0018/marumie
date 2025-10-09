@@ -3,11 +3,6 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { RefreshCw, Upload, Share2, Link as LinkIcon } from "lucide-react";
 import { uploadDataToR2, fetchDataFromR2 } from "@/lib/dataShare";
-import {
-  aggregateKarteMonthly,
-  type KarteMonthlyStat,
-  type KarteRecord,
-} from "@/lib/karteAnalytics";
 import { getDayType, getWeekdayName, type PeriodType, filterByPeriod } from "@/lib/dateUtils";
 import Papa from "papaparse";
 import {
@@ -69,9 +64,6 @@ type ParsedDateTime = {
 const STORAGE_KEY = "clinic-analytics/reservations/v1";
 const TIMESTAMP_KEY = "clinic-analytics/last-updated/v1";
 const ORDER_KEY = "clinic-analytics/department-order/v1";
-const KARTE_STORAGE_KEY = "clinic-analytics/karte-records/v1";
-const KARTE_TIMESTAMP_KEY = "clinic-analytics/karte-last-updated/v1";
-const KARTE_MIN_MONTH = "2025-10";
 const HOURS = Array.from({ length: 24 }, (_, index) => index);
 
 const RAW_DEPARTMENT_PRIORITIES = [
@@ -155,117 +147,6 @@ const getLegendOrderIndex = (label: string) => {
 const visitLegendSorter = (item: LegendPayload) => {
   const label = `${item.value ?? item.dataKey ?? ""}`;
   return getLegendOrderIndex(label);
-};
-
-const removeBom = (value: string) => value.replace(/^\uFEFF/, "");
-
-const normalizeCsvRow = (row: Record<string, string | undefined>) => {
-  const normalized: Record<string, string | undefined> = {};
-  for (const [key, value] of Object.entries(row)) {
-    const normalizedKey = removeBom(key).trim();
-    normalized[normalizedKey] =
-      typeof value === "string" ? value.trim() || undefined : value;
-  }
-  return normalized;
-};
-
-const parseSlashDate = (raw: string | undefined) => {
-  if (!raw) {
-    return null;
-  }
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-  const parts = trimmed.split("/");
-  if (parts.length < 3) {
-    return null;
-  }
-  const [yearStr, monthStr, dayStr] = parts;
-  const year = Number(yearStr);
-  const month = Number(monthStr);
-  const day = Number(dayStr);
-  if (
-    !Number.isFinite(year) ||
-    !Number.isFinite(month) ||
-    !Number.isFinite(day) ||
-    month < 1 ||
-    month > 12 ||
-    day < 1 ||
-    day > 31
-  ) {
-    return null;
-  }
-  return new Date(year, month - 1, day);
-};
-
-const formatDateKey = (date: Date) => {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
-const parsePatientNumber = (raw: string | undefined) => {
-  if (!raw) {
-    return null;
-  }
-  const digits = raw.replace(/[^\d]/g, "");
-  if (digits.length === 0) {
-    return null;
-  }
-  const value = Number.parseInt(digits, 10);
-  if (!Number.isSafeInteger(value) || value < 0) {
-    return null;
-  }
-  return value;
-};
-
-const parseKarteCsv = (text: string): KarteRecord[] => {
-  const parsed = Papa.parse<Record<string, string>>(text, {
-    header: true,
-    skipEmptyLines: true,
-  });
-
-  if (parsed.errors.length > 0) {
-    throw new Error(parsed.errors[0]?.message ?? "CSV parsing error");
-  }
-
-  const records: KarteRecord[] = [];
-
-  for (const rawRow of parsed.data) {
-    const row = normalizeCsvRow(rawRow);
-    const visitDate = parseSlashDate(row["日付"]);
-    if (!visitDate) {
-      continue;
-    }
-
-    const dateIso = formatDateKey(visitDate);
-    const monthKey = dateIso.slice(0, 7);
-
-    const visitTypeRaw = row["初診・再診"] ?? "";
-    const visitType =
-      visitTypeRaw === "初診" ? "初診" : visitTypeRaw === "再診" ? "再診" : "不明";
-
-    const patientNumber = parsePatientNumber(row["患者番号"]);
-    const birthDate = parseSlashDate(row["患者生年月日"]);
-    const birthDateIso = birthDate ? formatDateKey(birthDate) : null;
-
-    records.push({
-      dateIso,
-      monthKey,
-      visitType,
-      patientNumber,
-      birthDateIso,
-    });
-  }
-
-  if (records.length === 0) {
-    throw new Error("有効なカルテ集計データが見つかりませんでした。");
-  }
-
-  records.sort((a, b) => a.dateIso.localeCompare(b.dateIso));
-  return records;
 };
 
 const createReservationKey = (payload: {
@@ -661,11 +542,6 @@ export default function HomePage() {
   const [isLoadingShared, setIsLoadingShared] = useState(false);
   const [diffMonthly, setDiffMonthly] = useState<MonthlyBucket[] | null>(null);
   const [isReadOnly, setIsReadOnly] = useState(false);
-  const [karteRecords, setKarteRecords] = useState<KarteRecord[]>([]);
-  const [karteLastUpdated, setKarteLastUpdated] = useState<string | null>(null);
-  const [karteUploadError, setKarteUploadError] = useState<string | null>(null);
-  const [karteShareUrl, setKarteShareUrl] = useState<string | null>(null);
-  const [karteIsSharing, setKarteIsSharing] = useState(false);
   const [departmentOrder, setDepartmentOrder] = useState<string[]>([]);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [expandedDepartment, setExpandedDepartment] = useState<string | null>(null);
@@ -701,16 +577,8 @@ export default function HomePage() {
               setUploadError("共有データの読み込みに失敗しました。");
             }
           } else if (response.type === "karte") {
-            try {
-              const parsed: KarteRecord[] = JSON.parse(response.data);
-              setKarteRecords(parsed);
-              setKarteLastUpdated(response.uploadedAt);
-              setKarteShareUrl(null);
-              window.localStorage.setItem(KARTE_STORAGE_KEY, JSON.stringify(parsed));
-              window.localStorage.setItem(KARTE_TIMESTAMP_KEY, response.uploadedAt);
-            } catch (error) {
-              console.error(error);
-              setKarteUploadError("共有データの読み込みに失敗しました。");
+            if (typeof window !== "undefined") {
+              window.location.href = `/patients?data=${encodeURIComponent(dataId)}`;
             }
           } else {
             setUploadError("未対応の共有データ形式です。");
@@ -720,7 +588,6 @@ export default function HomePage() {
           console.error(error);
           const message = `共有データの読み込みに失敗しました: ${(error as Error).message}`;
           setUploadError(message);
-          setKarteUploadError(message);
         })
         .finally(() => {
           setIsLoadingShared(false);
@@ -741,21 +608,9 @@ export default function HomePage() {
         if (storedOrder) {
           setDepartmentOrder(JSON.parse(storedOrder));
         }
-
-        const storedKarte = window.localStorage.getItem(KARTE_STORAGE_KEY);
-        if (storedKarte) {
-          const parsedKarte: KarteRecord[] = JSON.parse(storedKarte);
-          setKarteRecords(parsedKarte);
-        }
-        const storedKarteTimestamp = window.localStorage.getItem(KARTE_TIMESTAMP_KEY);
-        if (storedKarteTimestamp) {
-          setKarteLastUpdated(storedKarteTimestamp);
-        }
-        setKarteShareUrl(null);
       } catch (error) {
         console.error(error);
         setUploadError("保存済みデータの読み込みに失敗しました。");
-        setKarteUploadError("保存済みデータの読み込みに失敗しました。");
       }
     }
   }, []);
@@ -764,17 +619,6 @@ export default function HomePage() {
     const months = new Set(reservations.map(r => r.reservationMonth));
     return Array.from(months).sort();
   }, [reservations]);
-
-  const karteStats = useMemo(() => {
-    if (karteRecords.length === 0) {
-      return [];
-    }
-    const aggregated = aggregateKarteMonthly(karteRecords);
-    return aggregated.filter((item) => item.month >= KARTE_MIN_MONTH);
-  }, [karteRecords]);
-
-  const latestKarteStat: KarteMonthlyStat | null =
-    karteStats.length > 0 ? karteStats[karteStats.length - 1] : null;
 
   const filteredReservations = useMemo(() => {
     let filtered = reservations;
@@ -904,78 +748,6 @@ const monthlyOverview = useMemo(
     () => aggregateByDayType(filteredReservations),
     [filteredReservations],
   );
-
-  const handleKarteUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    setKarteUploadError(null);
-    try {
-      const text = await file.text();
-      const parsed = parseKarteCsv(text);
-      setKarteRecords(parsed);
-      setKarteShareUrl(null);
-
-      const timestamp = new Date().toISOString();
-      setKarteLastUpdated(timestamp);
-
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(KARTE_STORAGE_KEY, JSON.stringify(parsed));
-        window.localStorage.setItem(KARTE_TIMESTAMP_KEY, timestamp);
-      }
-    } catch (error) {
-      console.error(error);
-      const message =
-        error instanceof Error
-          ? `カルテ集計CSVの解析に失敗しました: ${error.message}`
-          : "カルテ集計CSVの解析に失敗しました。";
-      setKarteUploadError(message);
-    } finally {
-      event.target.value = "";
-    }
-  };
-
-  const handleKarteShare = async () => {
-    if (karteRecords.length === 0) {
-      setKarteUploadError("共有するカルテ集計データがありません。");
-      return;
-    }
-
-    setKarteIsSharing(true);
-    setKarteUploadError(null);
-
-    try {
-      const response = await uploadDataToR2({
-        type: "karte",
-        data: JSON.stringify(karteRecords),
-      });
-      setKarteShareUrl(response.url);
-
-      await navigator.clipboard.writeText(response.url);
-      alert(`共有URLをクリップボードにコピーしました！\n\n${response.url}`);
-    } catch (error) {
-      console.error(error);
-      setKarteUploadError(
-        `共有URLの生成に失敗しました: ${(error as Error).message}`,
-      );
-    } finally {
-      setKarteIsSharing(false);
-    }
-  };
-
-  const handleKarteReset = () => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.localStorage.removeItem(KARTE_STORAGE_KEY);
-    window.localStorage.removeItem(KARTE_TIMESTAMP_KEY);
-    setKarteRecords([]);
-    setKarteLastUpdated(null);
-    setKarteShareUrl(null);
-    setKarteUploadError(null);
-  };
 
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -1167,167 +939,6 @@ ${response.url}`);
           {uploadError && (
             <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {uploadError}
-            </p>
-          )}
-        </section>
-
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft sm:p-8">
-          <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-            <div className="space-y-3">
-              <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">カルテ集計ダッシュボード</h2>
-              <p className="max-w-xl text-sm leading-6 text-slate-600">
-                カルテ集計CSVを読み込むと、2025年10月以降の月次指標
-                （総患者数・純初診・再初診・再診・平均年齢）を自動算出します。
-                前月の患者番号を基準に直近200番を照合し、純初診を推定しています。
-              </p>
-              {karteLastUpdated && (
-                <p className="text-xs font-medium text-slate-500">
-                  最終更新: {new Date(karteLastUpdated).toLocaleString("ja-JP")}
-                </p>
-              )}
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              {!isReadOnly ? (
-                <>
-                  <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-emerald-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-600 sm:w-auto">
-                    <Upload className="h-4 w-4" />
-                    カルテCSVを選択
-                    <input
-                      type="file"
-                      accept=".csv,text/csv"
-                      onChange={handleKarteUpload}
-                      className="hidden"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleKarteShare}
-                    disabled={karteIsSharing || karteRecords.length === 0}
-                    className="flex w-full items-center justify-center gap-2 rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                  >
-                    {karteIsSharing ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                        生成中...
-                      </>
-                    ) : (
-                      <>
-                        <Share2 className="h-4 w-4" />
-                        共有URLを発行
-                      </>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleKarteReset}
-                    className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-emerald-200 hover:text-emerald-600 sm:w-auto"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    カルテ集計をリセット
-                  </button>
-                </>
-              ) : (
-                <div className="rounded-2xl border border-dashed border-emerald-300 bg-white/70 px-5 py-3 text-center text-sm font-semibold text-emerald-600">
-                  閲覧専用モードのため、カルテCSVのアップロードや共有操作は利用できません。
-                </div>
-              )}
-            </div>
-          </div>
-          {karteUploadError && (
-            <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {karteUploadError}
-            </p>
-          )}
-          {karteShareUrl && (
-            <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3">
-              <p className="flex items-center gap-2 text-sm text-green-700">
-                <LinkIcon className="h-4 w-4" />
-                共有URL: <code className="rounded bg-white px-2 py-1 text-xs">{karteShareUrl}</code>
-              </p>
-            </div>
-          )}
-          {karteStats.length > 0 ? (
-            <div className="mt-6 space-y-6">
-              {latestKarteStat && (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                  <StatCard
-                    label={`最新月 (${formatMonthLabel(latestKarteStat.month)}) 総患者`}
-                    value={`${latestKarteStat.totalPatients.toLocaleString("ja-JP")}名`}
-                    tone="brand"
-                  />
-                  <StatCard
-                    label="最新月 純初診"
-                    value={`${latestKarteStat.pureFirstVisits.toLocaleString("ja-JP")}名`}
-                    tone="emerald"
-                  />
-                  <StatCard
-                    label="最新月 再初診"
-                    value={`${latestKarteStat.returningFirstVisits.toLocaleString("ja-JP")}名`}
-                    tone="muted"
-                  />
-                  <StatCard
-                    label="最新月 再診"
-                    value={`${latestKarteStat.revisitCount.toLocaleString("ja-JP")}名`}
-                    tone="accent"
-                  />
-                  <StatCard
-                    label="最新月 平均年齢"
-                    value={
-                      latestKarteStat.averageAge !== null
-                        ? `${latestKarteStat.averageAge.toFixed(1)}歳`
-                        : "データなし"
-                    }
-                    tone="muted"
-                  />
-                </div>
-              )}
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200 text-sm">
-                  <thead>
-                    <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                      <th className="px-3 py-2">月</th>
-                      <th className="px-3 py-2">総患者数</th>
-                      <th className="px-3 py-2">純初診</th>
-                      <th className="px-3 py-2">再初診</th>
-                      <th className="px-3 py-2">再診</th>
-                      <th className="px-3 py-2">平均年齢</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {karteStats
-                      .slice()
-                      .reverse()
-                      .map((stat) => (
-                        <tr key={stat.month} className="hover:bg-slate-50">
-                          <td className="px-3 py-2 font-medium text-slate-900">
-                            {formatMonthLabel(stat.month)}
-                          </td>
-                          <td className="px-3 py-2">
-                            {stat.totalPatients.toLocaleString("ja-JP")}
-                          </td>
-                          <td className="px-3 py-2">
-                            {stat.pureFirstVisits.toLocaleString("ja-JP")}
-                          </td>
-                          <td className="px-3 py-2">
-                            {stat.returningFirstVisits.toLocaleString("ja-JP")}
-                          </td>
-                          <td className="px-3 py-2">
-                            {stat.revisitCount.toLocaleString("ja-JP")}
-                          </td>
-                          <td className="px-3 py-2">
-                            {stat.averageAge !== null ? `${stat.averageAge.toFixed(1)}歳` : "—"}
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : (
-            <p className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-              {karteRecords.length === 0
-                ? "カルテ集計CSVをアップロードすると、2025年10月以降の指標が表示されます。"
-                : "2025年10月以降の集計対象データが見つかりませんでした。CSV内容をご確認ください。"}
             </p>
           )}
         </section>
