@@ -660,6 +660,7 @@ export default function HomePage() {
   const [isSharing, setIsSharing] = useState(false);
   const [isLoadingShared, setIsLoadingShared] = useState(false);
   const [diffMonthly, setDiffMonthly] = useState<MonthlyBucket[] | null>(null);
+  const [isReadOnly, setIsReadOnly] = useState(false);
   const [karteRecords, setKarteRecords] = useState<KarteRecord[]>([]);
   const [karteLastUpdated, setKarteLastUpdated] = useState<string | null>(null);
   const [karteUploadError, setKarteUploadError] = useState<string | null>(null);
@@ -682,6 +683,7 @@ export default function HomePage() {
 
     const params = new URLSearchParams(window.location.search);
     const dataId = params.get("data");
+    setIsReadOnly(Boolean(dataId));
 
     if (dataId) {
       setIsLoadingShared(true);
@@ -1088,44 +1090,57 @@ ${response.url}`);
                   スマホでは横スクロールやピンチアウトでグラフを拡大できます。
                 </p>
               </div>
+              {isReadOnly && (
+                <p className="rounded-2xl border border-dashed border-brand-300 bg-white/80 px-4 py-3 text-sm font-medium text-brand-700">
+                  共有URLから閲覧中です。集計結果のみ参照でき、CSVのアップロードや共有操作は無効化されています。
+                </p>
+              )}
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-400 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-500 sm:w-auto">
-                <Upload className="h-4 w-4" />
-                CSVを選択
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={handleShare}
-                disabled={isSharing || reservations.length === 0}
-                className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-              >
-                {isSharing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    生成中...
-                  </>
-                ) : (
-                  <>
-                    <Share2 className="h-4 w-4" />
-                    共有URLを発行
-                  </>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={handleReset}
-                className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-brand-200 hover:text-brand-600 sm:w-auto"
-              >
-                <RefreshCw className="h-4 w-4" />
-                保存内容をリセット
-              </button>
+              {!isReadOnly ? (
+                <>
+                  <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-400 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-500 sm:w-auto">
+                    <Upload className="h-4 w-4" />
+                    CSVを選択
+                    <input
+                      type="file"
+                      accept=".csv,text/csv"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleShare}
+                    disabled={isSharing || reservations.length === 0}
+                    className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                  >
+                    {isSharing ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        生成中...
+                      </>
+                    ) : (
+                      <>
+                        <Share2 className="h-4 w-4" />
+                        共有URLを発行
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-brand-200 hover:text-brand-600 sm:w-auto"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    保存内容をリセット
+                  </button>
+                </>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-brand-300 bg-white/70 px-5 py-3 text-center text-sm font-semibold text-brand-600">
+                  共有URL経由の閲覧モードです。CSVのアップロードや共有操作は利用できません。
+                </div>
+              )}
             </div>
           </div>
           {isLoadingShared && (
@@ -1172,42 +1187,50 @@ ${response.url}`);
               )}
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-emerald-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-600 sm:w-auto">
-                <Upload className="h-4 w-4" />
-                カルテCSVを選択
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={handleKarteUpload}
-                  className="hidden"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={handleKarteShare}
-                disabled={karteIsSharing || karteRecords.length === 0}
-                className="flex w-full items-center justify-center gap-2 rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-              >
-                {karteIsSharing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    生成中...
-                  </>
-                ) : (
-                  <>
-                    <Share2 className="h-4 w-4" />
-                    共有URLを発行
-                  </>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={handleKarteReset}
-                className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-emerald-200 hover:text-emerald-600 sm:w-auto"
-              >
-                <RefreshCw className="h-4 w-4" />
-                カルテ集計をリセット
-              </button>
+              {!isReadOnly ? (
+                <>
+                  <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-emerald-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-600 sm:w-auto">
+                    <Upload className="h-4 w-4" />
+                    カルテCSVを選択
+                    <input
+                      type="file"
+                      accept=".csv,text/csv"
+                      onChange={handleKarteUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleKarteShare}
+                    disabled={karteIsSharing || karteRecords.length === 0}
+                    className="flex w-full items-center justify-center gap-2 rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                  >
+                    {karteIsSharing ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        生成中...
+                      </>
+                    ) : (
+                      <>
+                        <Share2 className="h-4 w-4" />
+                        共有URLを発行
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleKarteReset}
+                    className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 transition hover:border-emerald-200 hover:text-emerald-600 sm:w-auto"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    カルテ集計をリセット
+                  </button>
+                </>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-emerald-300 bg-white/70 px-5 py-3 text-center text-sm font-semibold text-emerald-600">
+                  閲覧専用モードのため、カルテCSVのアップロードや共有操作は利用できません。
+                </div>
+              )}
             </div>
           </div>
           {karteUploadError && (
