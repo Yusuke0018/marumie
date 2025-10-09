@@ -1,0 +1,18 @@
+timestamp: 2025-10-09T18-45-29+0900
+branch: main
+commit: 6428631d5c107bb10324c018fe3f4584c5010f40
+diffstat:
+  docs/reservations-leadtime-plan.md                 |  33 +-
+  src/app/reservations/leadtime/page.tsx             | 556 ++++++++++++++-------
+  src/components/reservations/leadtime/CategoryBreakdownChart.tsx            | 104 ++++
+  src/components/reservations/leadtime/DepartmentLeadtimeChart.tsx           | 166 ++++++
+  src/components/reservations/leadtime/HourlyLeadtimeChart.tsx              | 167 +++++++
+  5 files changed, 847 insertions(+), 179 deletions(-)
+commands:
+  - npx prettier --write docs/reservations-leadtime-plan.md src/app/reservations/leadtime/page.tsx src/components/reservations/leadtime/CategoryBreakdownChart.tsx src/components/reservations/leadtime/HourlyLeadtimeChart.tsx src/components/reservations/leadtime/DepartmentLeadtimeChart.tsx (success)
+  - npm run lint (success)
+push: 未実施（このログ作成時点）
+notes:
+  - リードタイムページにハイライトカードとドーナツ／積み上げ棒／横棒チャートを追加
+  - グラフはリアクティブに遅延読み込みし、データがない場合は自動的に非表示
+  - フィルターや初診／再診トグルがグラフとテーブル双方に反映されるよう調整
