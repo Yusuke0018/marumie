@@ -83,8 +83,8 @@ export default function Navigation() {
               <X className="h-7 w-7" />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-6">
-            <nav className="flex flex-col gap-5">
+          <div className="flex-1 flex flex-col p-6">
+            <nav className="flex flex-col flex-1 justify-around gap-3">
               {links.map((link) => {
                 const isActive =
                   link.href === "/"
@@ -95,7 +95,7 @@ export default function Navigation() {
                     key={link.href}
                     href={link.href}
                     onClick={closeMenu}
-                    className={`flex items-center justify-center px-6 py-10 text-2xl font-bold rounded-2xl transition-all shadow-lg ${
+                    className={`flex items-center justify-center flex-1 px-6 text-2xl font-bold rounded-2xl transition-all shadow-lg ${
                       isActive
                         ? "bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-xl scale-105"
                         : "bg-slate-100 text-slate-700 hover:bg-brand-50 hover:text-brand-600 hover:scale-105 hover:shadow-xl active:scale-95"
