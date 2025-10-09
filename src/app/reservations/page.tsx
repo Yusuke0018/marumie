@@ -19,18 +19,31 @@ import { saveSurveyDataToStorage } from "@/lib/surveyData";
 import { saveListingDataToStorage } from "@/lib/listingData";
 import type { SharedDataBundle } from "@/lib/sharedBundle";
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-  type LegendPayload,
-} from "recharts";
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  Title,
+  Tooltip as ChartTooltip,
+  Legend as ChartLegend,
+  Filler,
+} from "chart.js";
+import { Bar, Line } from "react-chartjs-2";
+
+// Chart.js登録
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  Title,
+  ChartTooltip,
+  ChartLegend,
+  Filler
+);
 
 type HourlyBucket = {
   hour: string;
@@ -156,18 +169,6 @@ const createEmptyHourlyBuckets = (): HourlyBucket[] =>
     初診: 0,
     再診: 0,
   }));
-
-const VISIT_LEGEND_ORDER = ["初診", "再診", "当日予約"];
-
-const getLegendOrderIndex = (label: string) => {
-  const index = VISIT_LEGEND_ORDER.indexOf(label);
-  return index === -1 ? VISIT_LEGEND_ORDER.length : index;
-};
-
-const visitLegendSorter = (item: LegendPayload) => {
-  const label = `${item.value ?? item.dataKey ?? ""}`;
-  return getLegendOrderIndex(label);
-};
 
 const aggregateHourly = (reservations: Reservation[]): HourlyBucket[] => {
   const buckets = createEmptyHourlyBuckets();
@@ -353,13 +354,6 @@ const aggregateDepartmentHourly = (
     data,
     total: totals.get(department) ?? 0,
   }));
-};
-
-const tooltipFormatter = (value: unknown, name: string): [string, string] => {
-  if (typeof value === "number") {
-    return [value.toLocaleString("ja-JP"), name];
-  }
-  return ["0", name];
 };
 
 const formatMonthLabel = (month: string) => {
@@ -1063,27 +1057,63 @@ const monthlyOverview = useMemo(
           ) : (
             <div className="-mx-2 sm:mx-0">
               <div className="h-[280px] sm:h-[340px] md:h-[380px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={weekdayData}>
-                    <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
-                    <XAxis dataKey="weekday" stroke="#64748B" tick={{ fontSize: 12 }} />
-                    <YAxis stroke="#64748B" tick={{ fontSize: 12 }} />
-                    <Tooltip
-                      formatter={tooltipFormatter}
-                      itemSorter={(item) => {
-                        const order = { '初診': 0, '再診': 1, '当日予約': 2 };
-                        return order[item.name as keyof typeof order] ?? 999;
-                      }}
-                    />
-                    <Legend
-                      wrapperStyle={{ paddingTop: 10, fontSize: 12 }}
-                      itemSorter={visitLegendSorter}
-                    />
-                    <Bar dataKey="初診" fill="#5DD4C3" name="初診" isAnimationActive={false} />
-                    <Bar dataKey="再診" fill="#FFB8C8" name="再診" isAnimationActive={false} />
-                    <Bar dataKey="当日予約" fill="#FFA500" name="当日予約" isAnimationActive={false} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <Bar
+                  data={{
+                    labels: weekdayData.map(d => d.weekday),
+                    datasets: [
+                      {
+                        label: '初診',
+                        data: weekdayData.map(d => d['初診']),
+                        backgroundColor: '#5DD4C3',
+                        borderRadius: 4,
+                      },
+                      {
+                        label: '再診',
+                        data: weekdayData.map(d => d['再診']),
+                        backgroundColor: '#FFB8C8',
+                        borderRadius: 4,
+                      },
+                      {
+                        label: '当日予約',
+                        data: weekdayData.map(d => d['当日予約']),
+                        backgroundColor: '#FFA500',
+                        borderRadius: 4,
+                      },
+                    ],
+                  }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: {
+                        position: 'top' as const,
+                        labels: {
+                          font: { size: 12 },
+                          usePointStyle: true,
+                          padding: 10,
+                        },
+                      },
+                      tooltip: {
+                        callbacks: {
+                          label: (context) => {
+                            return `${context.dataset.label}: ${context.parsed.y.toLocaleString('ja-JP')}`;
+                          },
+                        },
+                      },
+                    },
+                    scales: {
+                      x: {
+                        grid: { display: false },
+                        ticks: { font: { size: 12 }, color: '#64748B' },
+                      },
+                      y: {
+                        grid: { color: 'rgba(148, 163, 184, 0.2)' },
+                        ticks: { font: { size: 12 }, color: '#64748B' },
+                      },
+                    },
+                    animation: false,
+                  }}
+                />
               </div>
             </div>
           )}
@@ -1150,26 +1180,57 @@ const monthlyOverview = useMemo(
           ) : (
             <div className="-mx-2 sm:mx-0">
               <div className="h-[280px] sm:h-[340px] md:h-[380px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={overallHourly}>
-                    <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
-                    <XAxis dataKey="hour" stroke="#64748B" tick={{ fontSize: 12 }} />
-                    <YAxis stroke="#64748B" tick={{ fontSize: 12 }} />
-                    <Tooltip
-                      formatter={tooltipFormatter}
-                      itemSorter={(item) => {
-                        const order = { '初診': 0, '再診': 1 };
-                        return order[item.name as keyof typeof order] ?? 999;
-                      }}
-                    />
-                    <Legend
-                      wrapperStyle={{ paddingTop: 10, fontSize: 12 }}
-                      itemSorter={visitLegendSorter}
-                    />
-                    <Bar dataKey="初診" fill="#5DD4C3" name="初診" isAnimationActive={false} />
-                    <Bar dataKey="再診" fill="#FFB8C8" name="再診" isAnimationActive={false} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <Bar
+                  data={{
+                    labels: overallHourly.map(d => d.hour),
+                    datasets: [
+                      {
+                        label: '初診',
+                        data: overallHourly.map(d => d['初診']),
+                        backgroundColor: '#5DD4C3',
+                        borderRadius: 4,
+                      },
+                      {
+                        label: '再診',
+                        data: overallHourly.map(d => d['再診']),
+                        backgroundColor: '#FFB8C8',
+                        borderRadius: 4,
+                      },
+                    ],
+                  }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: {
+                        position: 'top' as const,
+                        labels: {
+                          font: { size: 12 },
+                          usePointStyle: true,
+                          padding: 10,
+                        },
+                      },
+                      tooltip: {
+                        callbacks: {
+                          label: (context) => {
+                            return `${context.dataset.label}: ${context.parsed.y.toLocaleString('ja-JP')}`;
+                          },
+                        },
+                      },
+                    },
+                    scales: {
+                      x: {
+                        grid: { display: false },
+                        ticks: { font: { size: 12 }, color: '#64748B' },
+                      },
+                      y: {
+                        grid: { color: 'rgba(148, 163, 184, 0.2)' },
+                        ticks: { font: { size: 12 }, color: '#64748B' },
+                      },
+                    },
+                    animation: false,
+                  }}
+                />
               </div>
             </div>
           )}
@@ -1188,23 +1249,50 @@ const monthlyOverview = useMemo(
             </button>
           ) : (
             <div className="-mx-2 h-[240px] sm:mx-0 sm:h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={overallDaily}>
-                  <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
-                  <XAxis dataKey="date" stroke="#64748B" />
-                  <YAxis stroke="#64748B" />
-                  <Tooltip formatter={tooltipFormatter} />
-                  <Line
-                    type="monotone"
-                    dataKey="total"
-                    stroke="#5DD4C3"
-                    strokeWidth={2}
-                    dot={false}
-                    name="総数"
-                    isAnimationActive={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              <Line
+                data={{
+                  labels: overallDaily.map(d => d.date),
+                  datasets: [
+                    {
+                      label: '総数',
+                      data: overallDaily.map(d => d.total),
+                      borderColor: '#5DD4C3',
+                      backgroundColor: 'rgba(93, 212, 195, 0.1)',
+                      borderWidth: 2,
+                      fill: true,
+                      pointRadius: 0,
+                      tension: 0.4,
+                    },
+                  ],
+                }}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: {
+                      display: false,
+                    },
+                    tooltip: {
+                      callbacks: {
+                        label: (context) => {
+                          return `${context.dataset.label}: ${context.parsed.y.toLocaleString('ja-JP')}`;
+                        },
+                      },
+                    },
+                  },
+                  scales: {
+                    x: {
+                      grid: { display: false },
+                      ticks: { font: { size: 11 }, color: '#64748B' },
+                    },
+                    y: {
+                      grid: { color: 'rgba(148, 163, 184, 0.2)' },
+                      ticks: { font: { size: 11 }, color: '#64748B' },
+                    },
+                  },
+                  animation: false,
+                }}
+              />
             </div>
           )}
         </SectionCard>
@@ -1432,42 +1520,65 @@ const monthlyOverview = useMemo(
               </button>
             </div>
             <div className="h-[260px] sm:h-[340px] md:h-96">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={displayedDepartments.find(d => d.department === expandedDepartment)?.data}>
-                  <CartesianGrid stroke="rgba(148, 163, 184, 0.2)" vertical={false} />
-                  <XAxis dataKey="hour" stroke="#64748B" tick={{ fontSize: 12 }} />
-                  <YAxis stroke="#64748B" tick={{ fontSize: 12 }} />
-                  <Tooltip
-                    formatter={tooltipFormatter}
-                    itemSorter={(item) => {
-                      const order = { '初診': 0, '再診': 1 };
-                      return order[item.name as keyof typeof order] ?? 999;
-                    }}
-                  />
-                  <Legend
-                    wrapperStyle={{ paddingTop: 10, fontSize: 12 }}
-                    itemSorter={visitLegendSorter}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="初診"
-                    stroke="#5DD4C3"
-                    strokeWidth={3}
-                    dot={false}
-                    name="初診"
-                    isAnimationActive={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="再診"
-                    stroke="#FFB8C8"
-                    strokeWidth={3}
-                    dot={false}
-                    name="再診"
-                    isAnimationActive={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              <Line
+                data={{
+                  labels: displayedDepartments.find(d => d.department === expandedDepartment)?.data.map(d => d.hour) || [],
+                  datasets: [
+                    {
+                      label: '初診',
+                      data: displayedDepartments.find(d => d.department === expandedDepartment)?.data.map(d => d['初診']) || [],
+                      borderColor: '#5DD4C3',
+                      backgroundColor: 'rgba(93, 212, 195, 0.1)',
+                      borderWidth: 3,
+                      fill: false,
+                      pointRadius: 0,
+                      tension: 0.4,
+                    },
+                    {
+                      label: '再診',
+                      data: displayedDepartments.find(d => d.department === expandedDepartment)?.data.map(d => d['再診']) || [],
+                      borderColor: '#FFB8C8',
+                      backgroundColor: 'rgba(255, 184, 200, 0.1)',
+                      borderWidth: 3,
+                      fill: false,
+                      pointRadius: 0,
+                      tension: 0.4,
+                    },
+                  ],
+                }}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: {
+                      position: 'top' as const,
+                      labels: {
+                        font: { size: 12 },
+                        usePointStyle: true,
+                        padding: 10,
+                      },
+                    },
+                    tooltip: {
+                      callbacks: {
+                        label: (context) => {
+                          return `${context.dataset.label}: ${context.parsed.y.toLocaleString('ja-JP')}`;
+                        },
+                      },
+                    },
+                  },
+                  scales: {
+                    x: {
+                      grid: { display: false },
+                      ticks: { font: { size: 12 }, color: '#64748B' },
+                    },
+                    y: {
+                      grid: { color: 'rgba(148, 163, 184, 0.2)' },
+                      ticks: { font: { size: 12 }, color: '#64748B' },
+                    },
+                  },
+                  animation: false,
+                }}
+              />
             </div>
           </div>
         </div>

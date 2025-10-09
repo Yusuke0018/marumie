@@ -1,0 +1,125 @@
+時間帯別グラフ置き換え内容:
+<Bar
+  data={{
+    labels: overallHourly.map(d => d.hour),
+    datasets: [
+      {
+        label: '初診',
+        data: overallHourly.map(d => d['初診']),
+        backgroundColor: '#5DD4C3',
+        borderRadius: 4,
+      },
+      {
+        label: '再診',
+        data: overallHourly.map(d => d['再診']),
+        backgroundColor: '#FFB8C8',
+        borderRadius: 4,
+      },
+    ],
+  }}
+  options={{
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+        labels: { font: { size: 12 }, usePointStyle: true, padding: 10 },
+      },
+      tooltip: {
+        callbacks: {
+          label: (context) => `${context.dataset.label}: ${context.parsed.y.toLocaleString('ja-JP')}`,
+        },
+      },
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 12 }, color: '#64748B' } },
+      y: { grid: { color: 'rgba(148, 163, 184, 0.2)' }, ticks: { font: { size: 12 }, color: '#64748B' } },
+    },
+    animation: false,
+  }}
+/>
+
+日別推移グラフ置き換え内容:
+<Line
+  data={{
+    labels: overallDaily.map(d => d.date),
+    datasets: [
+      {
+        label: '総数',
+        data: overallDaily.map(d => d.total),
+        borderColor: '#5DD4C3',
+        backgroundColor: 'rgba(93, 212, 195, 0.1)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 0,
+      },
+    ],
+  }}
+  options={{
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (context) => `総数: ${context.parsed.y.toLocaleString('ja-JP')}`,
+        },
+      },
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 12 }, color: '#64748B' } },
+      y: { grid: { color: 'rgba(148, 163, 184, 0.2)' }, ticks: { font: { size: 12 }, color: '#64748B' } },
+    },
+    animation: false,
+  }}
+/>
+
+モーダルグラフ置き換え内容:
+<Line
+  data={{
+    labels: displayedDepartments.find(d => d.department === expandedDepartment)?.data.map(d => d.hour) || [],
+    datasets: [
+      {
+        label: '初診',
+        data: displayedDepartments.find(d => d.department === expandedDepartment)?.data.map(d => d['初診']) || [],
+        borderColor: '#5DD4C3',
+        backgroundColor: 'rgba(93, 212, 195, 0.1)',
+        borderWidth: 3,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 0,
+      },
+      {
+        label: '再診',
+        data: displayedDepartments.find(d => d.department === expandedDepartment)?.data.map(d => d['再診']) || [],
+        borderColor: '#FFB8C8',
+        backgroundColor: 'rgba(255, 184, 200, 0.1)',
+        borderWidth: 3,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 0,
+      },
+    ],
+  }}
+  options={{
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+        labels: { font: { size: 12 }, usePointStyle: true, padding: 10 },
+      },
+      tooltip: {
+        callbacks: {
+          label: (context) => `${context.dataset.label}: ${context.parsed.y.toLocaleString('ja-JP')}`,
+        },
+      },
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 12 }, color: '#64748B' } },
+      y: { grid: { color: 'rgba(148, 163, 184, 0.2)' }, ticks: { font: { size: 12 }, color: '#64748B' } },
+    },
+    animation: false,
+  }}
+/>
