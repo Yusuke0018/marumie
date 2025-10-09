@@ -337,4 +337,110 @@ git push origin main
 
 **作成日**: 2025-10-09
 **作成者**: Claude Code
-**ステータス**: Phase 1完了、Phase 2計画済み
+**ステータス**: Phase 1完了、Phase 2部分実装完了
+
+---
+
+## 🔜 次回セッション実装予定
+
+### React.lazy遅延ロード統合（残りのPhase 2-3）
+
+**実装するファイル**: `/Users/osakasoshin1/marumie/src/app/reservations/page.tsx`
+
+**手順**:
+
+1. **インポートセクション修正**（3-25行付近）
+   ```tsx
+   // 削除: 既存の動的インポート
+   // const Bar = dynamic(...)
+   // const Line = dynamic(...)
+
+   // 追加: React.lazy でグラフコンポーネントをインポート
+   import { lazy, Suspense } from "react";
+
+   const WeekdayChartSection = lazy(() =>
+     import('@/components/reservations/WeekdayChartSection').then(m => ({ default: m.WeekdayChartSection }))
+   );
+   const HourlyChartSection = lazy(() =>
+     import('@/components/reservations/HourlyChartSection').then(m => ({ default: m.HourlyChartSection }))
+   );
+   const DailyChartSection = lazy(() =>
+     import('@/components/reservations/DailyChartSection').then(m => ({ default: m.DailyChartSection }))
+   );
+   ```
+
+2. **曜日別グラフセクション修正**（907-977行付近）
+   ```tsx
+   {!showWeekdayChart ? (
+     <button onClick={() => setShowWeekdayChart(true)}>
+       📊 クリックでグラフを表示
+     </button>
+   ) : (
+     <Suspense fallback={<div className="h-80 flex items-center justify-center">読み込み中...</div>}>
+       <WeekdayChartSection weekdayData={weekdayData} />
+     </Suspense>
+   )}
+   ```
+
+3. **時間帯別グラフセクション修正**（1068-1132行付近）
+   ```tsx
+   {!showHourlyChart ? (
+     <button onClick={() => setShowHourlyChart(true)}>
+       📊 クリックでグラフを表示
+     </button>
+   ) : (
+     <Suspense fallback={<div className="h-80 flex items-center justify-center">読み込み中...</div>}>
+       <HourlyChartSection hourlyData={departmentSpecificHourly} />
+     </Suspense>
+   )}
+   ```
+
+4. **日別グラフセクション修正**（1138-1193行付近）
+   ```tsx
+   {!showDailyChart ? (
+     <button onClick={() => setShowDailyChart(true)}>
+       📊 クリックでグラフを表示
+     </button>
+   ) : (
+     <Suspense fallback={<div className="h-72 flex items-center justify-center">読み込み中...</div>}>
+       <DailyChartSection dailyData={overallDaily} />
+     </Suspense>
+   )}
+   ```
+
+5. **Chart.js登録コードの削除**（28-42行付近）
+   ```tsx
+   // 削除: グラフコンポーネント内で登録されるため不要
+   // if (typeof window !== "undefined") {
+   //   import("chart.js").then((ChartJS) => { ... });
+   // }
+   ```
+
+**期待される効果**:
+- 初期バンドルサイズ: 50-60%削減（Chart.jsが遅延ロード）
+- 初期表示速度: さらに50-60%高速化
+- メモリ使用量: さらに30%削減
+
+**所要時間**: 約30分
+
+**テスト手順**:
+1. `npm run dev` で開発サーバー起動
+2. ブラウザで http://localhost:3000/reservations にアクセス
+3. 各グラフの「クリックでグラフを表示」ボタンをクリック
+4. グラフが正しく表示されることを確認
+5. コンソールにエラーがないことを確認
+
+**コミットメッセージ例**:
+```
+perf: グラフセクションのReact.lazy遅延ロード実装
+
+- WeekdayChartSection, HourlyChartSection, DailyChartSectionを遅延ロード
+- Suspenseコンポーネントでローディング状態を表示
+- Chart.js登録コードを各コンポーネント内に移行
+
+効果: 初期バンドルサイズ50-60%削減、初期表示速度50-60%高速化
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+```
