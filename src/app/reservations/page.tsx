@@ -66,6 +66,35 @@ const TIMESTAMP_KEY = "clinic-analytics/last-updated/v1";
 const ORDER_KEY = "clinic-analytics/department-order/v1";
 const HOURS = Array.from({ length: 24 }, (_, index) => index);
 
+const encodeForShare = (payload: string): string => {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  const bytes = new TextEncoder().encode(payload);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return window.btoa(binary);
+};
+
+const decodeFromShare = (payload: string): string | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const binary = window.atob(payload);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return new TextDecoder().decode(bytes);
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+};
+
 const RAW_DEPARTMENT_PRIORITIES = [
   "●内科・外科外来（大岩医師）",
   "●内科外来（担当医師）",
@@ -551,6 +580,30 @@ export default function HomePage() {
     "priority",
   );
 
+  const loadFallbackFromParams = () => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fallback = params.get("fallback");
+      if (!fallback) {
+        return false;
+      }
+      const decoded = decodeFromShare(fallback);
+      if (!decoded) {
+        return false;
+      }
+      const parsed: Reservation[] = JSON.parse(decoded);
+      setReservations(parsed);
+      setLastUpdated(new Date().toISOString());
+      return true;
+    } catch (error) {
+      console.error(error);
+      return false;
+    }
+  };
+
   // URLパラメータからデータを読み込む
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -574,20 +627,24 @@ export default function HomePage() {
               window.localStorage.setItem(TIMESTAMP_KEY, response.uploadedAt);
             } catch (error) {
               console.error(error);
-              setUploadError("共有データの読み込みに失敗しました。");
+              if (!loadFallbackFromParams()) {
+                setUploadError("共有データの読み込みに失敗しました。");
+              }
             }
           } else if (response.type === "karte") {
             if (typeof window !== "undefined") {
               window.location.href = `/patients?data=${encodeURIComponent(dataId)}`;
             }
-          } else {
+          } else if (!loadFallbackFromParams()) {
             setUploadError("未対応の共有データ形式です。");
           }
         })
         .catch((error) => {
           console.error(error);
           const message = `共有データの読み込みに失敗しました: ${(error as Error).message}`;
-          setUploadError(message);
+          if (!loadFallbackFromParams()) {
+            setUploadError(message);
+          }
         })
         .finally(() => {
           setIsLoadingShared(false);
@@ -810,13 +867,16 @@ const monthlyOverview = useMemo(
         data: JSON.stringify(reservations),
       });
 
-      setShareUrl(response.url);
-      
-      // クリップボードにコピー
-      await navigator.clipboard.writeText(response.url);
-      alert(`共有URLをクリップボードにコピーしました！
+      const fallbackPayload = encodeForShare(JSON.stringify(reservations));
+      const shareUrlObject = new URL(response.url);
+      if (fallbackPayload) {
+        shareUrlObject.searchParams.set('fallback', fallbackPayload);
+      }
+      const finalUrl = shareUrlObject.toString();
 
-${response.url}`);
+      setShareUrl(finalUrl);
+      await navigator.clipboard.writeText(finalUrl);
+      alert(`共有URLをクリップボードにコピーしました！\n\n${finalUrl}`);
     } catch (error) {
       console.error(error);
       setUploadError(`共有URLの生成に失敗しました: ${(error as Error).message}`);
@@ -865,7 +925,7 @@ ${response.url}`);
               </div>
               {isReadOnly && (
                 <p className="rounded-2xl border border-dashed border-brand-300 bg-white/80 px-4 py-3 text-sm font-medium text-brand-700">
-                  共有URLから閲覧中です。集計結果のみ参照でき、CSVのアップロードや共有操作は無効化されています。
+                  共有URLから閲覧中です。閲覧者が操作すると共有データにも反映されるため取り扱いにご注意ください。
                 </p>
               )}
             </div>

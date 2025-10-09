@@ -56,6 +56,35 @@ const calculateAge = (birthIso: string | null, visitIso: string): number | null 
   return age >= 0 && age < 130 ? age : null;
 };
 
+const encodeForShare = (payload: string): string => {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  const bytes = new TextEncoder().encode(payload);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return window.btoa(binary);
+};
+
+const decodeFromShare = (payload: string): string | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const binary = window.atob(payload);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return new TextDecoder().decode(bytes);
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+};
+
 type DepartmentStat = {
   department: string;
   total: number;
@@ -292,6 +321,30 @@ export default function PatientAnalysisPage() {
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("all");
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
 
+  const loadFallbackFromParams = () => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fallback = params.get("fallback");
+      if (!fallback) {
+        return false;
+      }
+      const decoded = decodeFromShare(fallback);
+      if (!decoded) {
+        return false;
+      }
+      const parsed: KarteRecord[] = JSON.parse(decoded);
+      setRecords(parsed);
+      setLastUpdated(new Date().toISOString());
+      return true;
+    } catch (error) {
+      console.error(error);
+      return false;
+    }
+  };
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -314,15 +367,19 @@ export default function PatientAnalysisPage() {
               window.localStorage.setItem(KARTE_TIMESTAMP_KEY, response.uploadedAt);
             } catch (error) {
               console.error(error);
-              setUploadError("共有データの読み込みに失敗しました。");
+              if (!loadFallbackFromParams()) {
+                setUploadError("共有データの読み込みに失敗しました。");
+              }
             }
-          } else {
+          } else if (!loadFallbackFromParams()) {
             setUploadError("カルテ集計データではない共有リンクです。");
           }
         })
         .catch((error) => {
           console.error(error);
-          setUploadError(`共有データの読み込みに失敗しました: ${(error as Error).message}`);
+          if (!loadFallbackFromParams()) {
+            setUploadError(`共有データの読み込みに失敗しました: ${(error as Error).message}`);
+          }
         })
         .finally(() => {
           setIsLoadingShared(false);
@@ -540,13 +597,16 @@ export default function PatientAnalysisPage() {
         data: JSON.stringify(records),
       });
 
-      const baseUrl =
-        typeof window !== "undefined" ? `${window.location.origin}/patients` : response.url;
-      const url = `${baseUrl}?data=${response.id}`;
+      const fallbackPayload = encodeForShare(JSON.stringify(records));
+      const shareUrlObject = new URL(response.url);
+      if (fallbackPayload) {
+        shareUrlObject.searchParams.set("fallback", fallbackPayload);
+      }
+      const finalUrl = shareUrlObject.toString();
 
-      setShareUrl(url);
-      await navigator.clipboard.writeText(url);
-      alert(`共有URLをクリップボードにコピーしました！\n\n${url}`);
+      setShareUrl(finalUrl);
+      await navigator.clipboard.writeText(finalUrl);
+      alert(`共有URLをクリップボードにコピーしました！\n\n${finalUrl}`);
     } catch (error) {
       console.error(error);
       setUploadError(`共有URLの生成に失敗しました: ${(error as Error).message}`);
@@ -589,7 +649,7 @@ export default function PatientAnalysisPage() {
               </div>
               {isReadOnly && (
                 <p className="rounded-2xl border border-dashed border-brand-300 bg-white/80 px-4 py-3 text-sm font-medium text-brand-700">
-                  共有URLから閲覧中です。集計結果のみ参照でき、CSVのアップロードや共有操作は無効化されています。
+                  共有URLから閲覧中です。閲覧者が操作すると共有データにも反映されるため取り扱いにご注意ください。
                 </p>
               )}
               {lastUpdated && (
