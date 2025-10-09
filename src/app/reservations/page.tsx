@@ -31,6 +31,10 @@ import {
 import { saveSurveyDataToStorage } from "@/lib/surveyData";
 import { saveListingDataToStorage } from "@/lib/listingData";
 import type { SharedDataBundle } from "@/lib/sharedBundle";
+import {
+  aggregateLeadtimeMetrics,
+  saveLeadtimeMetricsToStorage,
+} from "@/lib/leadtimeMetrics";
 
 // グラフコンポーネントをReact.lazyで遅延ロード（初期バンドルサイズを削減）
 const WeekdayChartSection = lazy(() =>
@@ -498,6 +502,11 @@ export default function HomePage() {
           fallbackTimestamp,
         );
         clearReservationDiff();
+        saveLeadtimeMetricsToStorage(
+          reservationsData.length > 0
+            ? aggregateLeadtimeMetrics(reservationsData)
+            : null,
+        );
         setReservations(reservationsData);
         setDiffMonthly(null);
         setLastUpdated(timestamp);
@@ -541,6 +550,10 @@ export default function HomePage() {
           );
         }
 
+        if (bundle.leadtimeMetrics) {
+          saveLeadtimeMetricsToStorage(bundle.leadtimeMetrics);
+        }
+
         if (Array.isArray(bundle.reservations)) {
           const reservationsData = bundle.reservations as Reservation[];
           const reservationsTimestamp = saveReservationsToStorage(
@@ -552,6 +565,13 @@ export default function HomePage() {
           setDiffMonthly(null);
           setLastUpdated(reservationsTimestamp);
           setUploadError(null);
+          if (!bundle.leadtimeMetrics) {
+            saveLeadtimeMetricsToStorage(
+              reservationsData.length > 0
+                ? aggregateLeadtimeMetrics(reservationsData)
+                : null,
+            );
+          }
           return true;
         }
 
@@ -808,12 +828,28 @@ export default function HomePage() {
     setUploadError(null);
 
     try {
+      const generatedAt = new Date().toISOString();
+      const leadtimeMetrics =
+        reservations.length > 0 ? aggregateLeadtimeMetrics(reservations) : null;
+      if (leadtimeMetrics) {
+        saveLeadtimeMetricsToStorage(leadtimeMetrics);
+      }
+      const bundle: SharedDataBundle = {
+        version: 1,
+        generatedAt,
+        karteRecords: [],
+        reservations,
+        reservationsTimestamp: lastUpdated ?? generatedAt,
+        leadtimeMetrics: leadtimeMetrics ?? undefined,
+      };
+      const serializedBundle = JSON.stringify(bundle);
+
       const response = await uploadDataToR2({
         type: "reservation",
-        data: JSON.stringify(reservations),
+        data: serializedBundle,
       });
 
-      const fallbackPayload = encodeForShare(JSON.stringify(reservations));
+      const fallbackPayload = encodeForShare(serializedBundle);
       const shareUrlObject = new URL(response.url);
       if (fallbackPayload) {
         shareUrlObject.searchParams.set("fallback", fallbackPayload);
@@ -831,7 +867,7 @@ export default function HomePage() {
     } finally {
       setIsSharing(false);
     }
-  }, [reservations]);
+  }, [reservations, lastUpdated]);
 
   const handleReset = useCallback(() => {
     clearReservationsStorage();

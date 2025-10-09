@@ -12,6 +12,7 @@ export default function Navigation() {
   const links = [
     { href: "/" as const, label: "患者分析" },
     { href: "/reservations" as const, label: "予約分析" },
+    { href: "/reservations/leadtime" as const, label: "リードタイム分析" },
     { href: "/survey" as const, label: "アンケート分析" },
     { href: "/listing" as const, label: "リスティング分析" },
     { href: "/correlation" as const, label: "相関分析" },
@@ -23,7 +24,9 @@ export default function Navigation() {
   return (
     <nav className="sticky top-0 z-50 border-b border-brand-100/70 bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/70">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-4 sm:px-6">
-        <h1 className="py-4 text-lg sm:text-xl font-bold tracking-wide text-brand-600">マルミエ</h1>
+        <h1 className="py-4 text-lg sm:text-xl font-bold tracking-wide text-brand-600">
+          マルミエ
+        </h1>
 
         {/* デスクトップナビゲーション */}
         <div className="hidden md:flex gap-2 py-2">
@@ -31,7 +34,8 @@ export default function Navigation() {
             const isActive =
               link.href === "/"
                 ? pathname === "/" || pathname.startsWith("/patients")
-                : pathname === link.href;
+                : pathname === link.href ||
+                  pathname.startsWith(`${link.href}/`);
             return (
               <Link
                 key={link.href}
@@ -54,7 +58,11 @@ export default function Navigation() {
           className="md:hidden p-4 sm:p-5 rounded-2xl bg-brand-500 text-white hover:bg-brand-600 active:scale-95 transition-all shadow-lg"
           aria-label="メニュー"
         >
-          {isOpen ? <X className="h-8 w-8 sm:h-9 sm:w-9" /> : <Menu className="h-8 w-8 sm:h-9 sm:w-9" />}
+          {isOpen ? (
+            <X className="h-8 w-8 sm:h-9 sm:w-9" />
+          ) : (
+            <Menu className="h-8 w-8 sm:h-9 sm:w-9" />
+          )}
         </button>
       </div>
 
@@ -89,7 +97,8 @@ export default function Navigation() {
                 const isActive =
                   link.href === "/"
                     ? pathname === "/" || pathname.startsWith("/patients")
-                    : pathname === link.href;
+                    : pathname === link.href ||
+                      pathname.startsWith(`${link.href}/`);
                 return (
                   <Link
                     key={link.href}

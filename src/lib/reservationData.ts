@@ -1,4 +1,5 @@
 import Papa from "papaparse";
+import { clearLeadtimeMetricsStorage } from "@/lib/leadtimeMetrics";
 
 export type VisitType = "初診" | "再診" | "未設定";
 
@@ -24,7 +25,8 @@ type ParsedDateTime = {
 
 export const RESERVATION_STORAGE_KEY = "clinic-analytics/reservations/v1";
 export const RESERVATION_TIMESTAMP_KEY = "clinic-analytics/last-updated/v1";
-export const RESERVATION_DIFF_STORAGE_KEY = "clinic-analytics/reservations-diff/v1";
+export const RESERVATION_DIFF_STORAGE_KEY =
+  "clinic-analytics/reservations-diff/v1";
 
 const createReservationKey = (payload: {
   department: string;
@@ -229,7 +231,10 @@ export const saveReservationsToStorage = (
   const timestamp = timestampOverride ?? new Date().toISOString();
   if (typeof window !== "undefined") {
     try {
-      window.localStorage.setItem(RESERVATION_STORAGE_KEY, JSON.stringify(reservations));
+      window.localStorage.setItem(
+        RESERVATION_STORAGE_KEY,
+        JSON.stringify(reservations),
+      );
       window.localStorage.setItem(RESERVATION_TIMESTAMP_KEY, timestamp);
     } catch (error) {
       console.error(error);
@@ -245,6 +250,7 @@ export const clearReservationsStorage = () => {
   try {
     window.localStorage.removeItem(RESERVATION_STORAGE_KEY);
     window.localStorage.removeItem(RESERVATION_TIMESTAMP_KEY);
+    clearLeadtimeMetricsStorage();
   } catch (error) {
     console.error(error);
   }
@@ -258,7 +264,10 @@ export const saveReservationDiff = (records: Reservation[]) => {
     if (records.length === 0) {
       window.localStorage.removeItem(RESERVATION_DIFF_STORAGE_KEY);
     } else {
-      window.localStorage.setItem(RESERVATION_DIFF_STORAGE_KEY, JSON.stringify(records));
+      window.localStorage.setItem(
+        RESERVATION_DIFF_STORAGE_KEY,
+        JSON.stringify(records),
+      );
     }
   } catch (error) {
     console.error(error);
