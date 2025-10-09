@@ -22,8 +22,8 @@ export default function Navigation() {
 
   return (
     <nav className="sticky top-0 z-50 border-b border-brand-100/70 bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/70">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-6">
-        <h1 className="py-4 text-lg font-bold tracking-wide text-brand-600">マルミエ</h1>
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-4 sm:px-6">
+        <h1 className="py-4 text-lg sm:text-xl font-bold tracking-wide text-brand-600">マルミエ</h1>
 
         {/* デスクトップナビゲーション */}
         <div className="hidden md:flex gap-2 py-2">
@@ -48,13 +48,13 @@ export default function Navigation() {
           })}
         </div>
 
-        {/* モバイルハンバーガーボタン */}
+        {/* モバイルハンバーガーボタン - 大幅に拡大 */}
         <button
           onClick={toggleMenu}
-          className="md:hidden p-2 rounded-lg text-slate-600 hover:bg-brand-50 hover:text-brand-600 transition"
+          className="md:hidden p-4 sm:p-5 rounded-2xl bg-brand-500 text-white hover:bg-brand-600 active:scale-95 transition-all shadow-lg"
           aria-label="メニュー"
         >
-          {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+          {isOpen ? <X className="h-8 w-8 sm:h-9 sm:w-9" /> : <Menu className="h-8 w-8 sm:h-9 sm:w-9" />}
         </button>
       </div>
 
