@@ -1,0 +1,14 @@
+timestamp: 2025-10-09T11:32:10+0900
+branch: main
+commit: 481e628da1e1ae677688fd69e257c9506493fb43
+diffstat:
+  src/app/page.tsx              | 393 ------------------------------
+  src/app/patients/page.tsx     | 527 ++++++++++++++++++++++++++++++++++++++++++
+  src/components/Navigation.tsx |   1 +
+  3 files changed, 530 insertions(+), 391 deletions(-)
+commands:
+  - npm run lint -- --fix (success)
+  - npm run build (success)
+push: pending
+notes:
+  - 患者分析を独立ページ化し、ナビゲーション先頭に追加
