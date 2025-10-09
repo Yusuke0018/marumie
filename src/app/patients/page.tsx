@@ -145,12 +145,14 @@ const DepartmentMetric = ({
   value,
   accent,
   caption,
+  monthOverMonth,
 }: {
   icon: LucideIcon;
   label: string;
   value: string;
   accent: "brand" | "emerald" | "accent" | "muted";
   caption?: string | null;
+  monthOverMonth?: { value: number; percentage: number } | null;
 }) => {
   const accentClass =
     accent === "brand"
@@ -172,6 +174,11 @@ const DepartmentMetric = ({
       <div className="flex flex-col items-end">
         <span className="text-sm font-semibold text-slate-900">{value}</span>
         {caption && <span className="text-[11px] font-medium text-slate-400">{caption}</span>}
+        {monthOverMonth && (
+          <span className={`text-[11px] font-medium ${monthOverMonth.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+            前月比: {monthOverMonth.value >= 0 ? '+' : ''}{monthOverMonth.percentage.toFixed(1)}%
+          </span>
+        )}
       </div>
     </div>
   );
@@ -328,10 +335,12 @@ const StatCard = ({
   label,
   value,
   tone,
+  monthOverMonth,
 }: {
   label: string;
   value: string;
   tone: "brand" | "accent" | "muted" | "emerald";
+  monthOverMonth?: { value: number; percentage: number } | null;
 }) => {
   const toneClass =
     tone === "brand"
@@ -348,6 +357,11 @@ const StatCard = ({
         {label}
       </dt>
       <dd className={`mt-1 text-xl font-bold sm:mt-2 sm:text-2xl ${toneClass}`}>{value}</dd>
+      {monthOverMonth && (
+        <p className={`mt-1 text-xs font-medium ${monthOverMonth.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+          前月比: {monthOverMonth.value >= 0 ? '+' : ''}{monthOverMonth.value} ({monthOverMonth.percentage >= 0 ? '+' : ''}{monthOverMonth.percentage.toFixed(1)}%)
+        </p>
+      )}
     </div>
   );
 };
@@ -660,6 +674,39 @@ export default function PatientAnalysisPage() {
   const latestStat: KarteMonthlyStat | null =
     stats.length > 0 ? stats[stats.length - 1] : null;
 
+  const previousStat: KarteMonthlyStat | null =
+    stats.length > 1 ? stats[stats.length - 2] : null;
+
+  const calculateMonthOverMonth = (current: number, previous: number | null) => {
+    if (previous === null || previous === 0) return null;
+    const diff = current - previous;
+    const percentage = (diff / previous) * 100;
+    return { value: diff, percentage };
+  };
+
+  const previousPeriodRecords = useMemo(() => {
+    if (classifiedRecords.length === 0 || !startMonth || !endMonth) {
+      return [];
+    }
+    
+    // Calculate previous period months
+    const startDate = new Date(startMonth + '-01');
+    const endDate = new Date(endMonth + '-01');
+    const monthsDiff = (endDate.getFullYear() - startDate.getFullYear()) * 12 + (endDate.getMonth() - startDate.getMonth());
+    
+    const prevEndDate = new Date(startDate);
+    prevEndDate.setMonth(prevEndDate.getMonth() - 1);
+    const prevStartDate = new Date(prevEndDate);
+    prevStartDate.setMonth(prevStartDate.getMonth() - monthsDiff);
+    
+    const prevStartMonth = `${prevStartDate.getFullYear()}-${String(prevStartDate.getMonth() + 1).padStart(2, '0')}`;
+    const prevEndMonth = `${prevEndDate.getFullYear()}-${String(prevEndDate.getMonth() + 1).padStart(2, '0')}`;
+    
+    return classifiedRecords.filter(
+      (record) => record.monthKey >= prevStartMonth && record.monthKey <= prevEndMonth && record.monthKey >= KARTE_MIN_MONTH
+    );
+  }, [classifiedRecords, startMonth, endMonth]);
+
   const departmentStats = useMemo<DepartmentStat[]>(() => {
     if (filteredClassified.length === 0) {
       return [];
@@ -741,6 +788,83 @@ export default function PatientAnalysisPage() {
         return a.department.localeCompare(b.department, "ja");
       });
   }, [filteredClassified]);
+
+  const previousDepartmentStats = useMemo<Map<string, DepartmentStat>>(() => {
+    if (previousPeriodRecords.length === 0) {
+      return new Map();
+    }
+
+    const map = new Map<
+      string,
+      {
+        department: string;
+        total: number;
+        pureFirst: number;
+        returningFirst: number;
+        revisit: number;
+        ageSum: number;
+        ageCount: number;
+      }
+    >();
+
+    for (const record of previousPeriodRecords) {
+      const departmentRaw = record.department?.trim() ?? "";
+      if (departmentRaw.includes("自費")) {
+        continue;
+      }
+      const department = departmentRaw.length > 0 ? departmentRaw : "診療科未分類";
+      if (!map.has(department)) {
+        map.set(department, {
+          department,
+          total: 0,
+          pureFirst: 0,
+          returningFirst: 0,
+          revisit: 0,
+          ageSum: 0,
+          ageCount: 0,
+        });
+      }
+
+      const bucket = map.get(department)!;
+      bucket.total += 1;
+
+      if (record.category === "pureFirst") {
+        bucket.pureFirst += 1;
+      } else if (record.category === "returningFirst") {
+        bucket.returningFirst += 1;
+      } else if (record.category === "revisit") {
+        bucket.revisit += 1;
+      }
+
+      const age = calculateAge(record.birthDateIso ?? null, record.dateIso);
+      if (age !== null) {
+        bucket.ageSum += age;
+        bucket.ageCount += 1;
+      }
+    }
+
+    const resultMap = new Map<string, DepartmentStat>();
+    for (const bucket of map.values()) {
+      const pureRate = bucket.total > 0 ? (bucket.pureFirst / bucket.total) * 100 : 0;
+      const returningRate = bucket.total > 0 ? (bucket.returningFirst / bucket.total) * 100 : 0;
+      const revisitRate = bucket.total > 0 ? (bucket.revisit / bucket.total) * 100 : 0;
+
+      resultMap.set(bucket.department, {
+        department: bucket.department,
+        total: bucket.total,
+        pureFirst: bucket.pureFirst,
+        returningFirst: bucket.returningFirst,
+        revisit: bucket.revisit,
+        averageAge:
+          bucket.ageCount > 0 ? roundTo1Decimal(bucket.ageSum / bucket.ageCount) : null,
+        pureRate: roundTo1Decimal(pureRate),
+        returningRate: roundTo1Decimal(returningRate),
+        revisitRate: roundTo1Decimal(revisitRate),
+      });
+    }
+
+    return resultMap;
+  }, [previousPeriodRecords]);
 
   const hasAnyRecords = records.length > 0;
   const hasPeriodRecords = periodFilteredRecords.length > 0;
@@ -1082,21 +1206,25 @@ export default function PatientAnalysisPage() {
                     label={`最新月 (${formatMonthLabel(latestStat.month)}) 総患者`}
                     value={`${latestStat.totalPatients.toLocaleString("ja-JP")}名`}
                     tone="brand"
+                    monthOverMonth={previousStat ? calculateMonthOverMonth(latestStat.totalPatients, previousStat.totalPatients) : null}
                   />
                   <StatCard
                     label="最新月 純初診"
                     value={`${latestStat.pureFirstVisits.toLocaleString("ja-JP")}名`}
                     tone="emerald"
+                    monthOverMonth={previousStat ? calculateMonthOverMonth(latestStat.pureFirstVisits, previousStat.pureFirstVisits) : null}
                   />
                   <StatCard
                     label="最新月 再初診"
                     value={`${latestStat.returningFirstVisits.toLocaleString("ja-JP")}名`}
                     tone="muted"
+                    monthOverMonth={previousStat ? calculateMonthOverMonth(latestStat.returningFirstVisits, previousStat.returningFirstVisits) : null}
                   />
                   <StatCard
                     label="最新月 再診"
                     value={`${latestStat.revisitCount.toLocaleString("ja-JP")}名`}
                     tone="accent"
+                    monthOverMonth={previousStat ? calculateMonthOverMonth(latestStat.revisitCount, previousStat.revisitCount) : null}
                   />
                   <StatCard
                     label="最新月 平均年齢"
@@ -1106,6 +1234,9 @@ export default function PatientAnalysisPage() {
                         : "データなし"
                     }
                     tone="muted"
+                    monthOverMonth={previousStat && latestStat.averageAge !== null && previousStat.averageAge !== null 
+                      ? { value: latestStat.averageAge - previousStat.averageAge, percentage: ((latestStat.averageAge - previousStat.averageAge) / previousStat.averageAge) * 100 }
+                      : null}
                   />
                 </div>
                 <button
@@ -1146,24 +1277,64 @@ export default function PatientAnalysisPage() {
                     {stats
                       .slice()
                       .reverse()
-                      .map((stat) => (
+                      .map((stat, index, arr) => {
+                        const prevStat = arr[index + 1];
+                        const totalMoM = prevStat ? calculateMonthOverMonth(stat.totalPatients, prevStat.totalPatients) : null;
+                        const pureMoM = prevStat ? calculateMonthOverMonth(stat.pureFirstVisits, prevStat.pureFirstVisits) : null;
+                        const returningMoM = prevStat ? calculateMonthOverMonth(stat.returningFirstVisits, prevStat.returningFirstVisits) : null;
+                        const revisitMoM = prevStat ? calculateMonthOverMonth(stat.revisitCount, prevStat.revisitCount) : null;
+                        const ageMoM = prevStat && stat.averageAge !== null && prevStat.averageAge !== null
+                          ? { value: stat.averageAge - prevStat.averageAge, percentage: ((stat.averageAge - prevStat.averageAge) / prevStat.averageAge) * 100 }
+                          : null;
+                        
+                        return (
                         <tr key={stat.month} className="hover:bg-slate-50">
                           <td className="px-3 py-2 font-medium text-slate-900">
                             {formatMonthLabel(stat.month)}
                           </td>
-                          <td className="px-3 py-2">{stat.totalPatients.toLocaleString("ja-JP")}</td>
+                          <td className="px-3 py-2">
+                            {stat.totalPatients.toLocaleString("ja-JP")}
+                            {totalMoM && (
+                              <span className={`ml-2 text-xs ${totalMoM.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                ({totalMoM.value >= 0 ? '+' : ''}{totalMoM.percentage.toFixed(1)}%)
+                              </span>
+                            )}
+                          </td>
                           <td className="px-3 py-2">
                             {stat.pureFirstVisits.toLocaleString("ja-JP")}
+                            {pureMoM && (
+                              <span className={`ml-2 text-xs ${pureMoM.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                ({pureMoM.value >= 0 ? '+' : ''}{pureMoM.percentage.toFixed(1)}%)
+                              </span>
+                            )}
                           </td>
                           <td className="px-3 py-2">
                             {stat.returningFirstVisits.toLocaleString("ja-JP")}
+                            {returningMoM && (
+                              <span className={`ml-2 text-xs ${returningMoM.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                ({returningMoM.value >= 0 ? '+' : ''}{returningMoM.percentage.toFixed(1)}%)
+                              </span>
+                            )}
                           </td>
-                          <td className="px-3 py-2">{stat.revisitCount.toLocaleString("ja-JP")}</td>
+                          <td className="px-3 py-2">
+                            {stat.revisitCount.toLocaleString("ja-JP")}
+                            {revisitMoM && (
+                              <span className={`ml-2 text-xs ${revisitMoM.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                ({revisitMoM.value >= 0 ? '+' : ''}{revisitMoM.percentage.toFixed(1)}%)
+                              </span>
+                            )}
+                          </td>
                           <td className="px-3 py-2">
                             {stat.averageAge !== null ? `${stat.averageAge.toFixed(1)}歳` : "—"}
+                            {ageMoM && (
+                              <span className={`ml-2 text-xs ${ageMoM.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                ({ageMoM.value >= 0 ? '+' : ''}{ageMoM.percentage.toFixed(1)}%)
+                              </span>
+                            )}
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                   </tbody>
                 </table>
               </div>
@@ -1204,7 +1375,17 @@ export default function PatientAnalysisPage() {
         >
           {departmentStats.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {departmentStats.map((row) => (
+              {departmentStats.map((row) => {
+                const prevRow = previousDepartmentStats.get(row.department);
+                const totalMoM = prevRow ? calculateMonthOverMonth(row.total, prevRow.total) : null;
+                const pureMoM = prevRow ? calculateMonthOverMonth(row.pureFirst, prevRow.pureFirst) : null;
+                const returningMoM = prevRow ? calculateMonthOverMonth(row.returningFirst, prevRow.returningFirst) : null;
+                const revisitMoM = prevRow ? calculateMonthOverMonth(row.revisit, prevRow.revisit) : null;
+                const ageMoM = prevRow && row.averageAge !== null && prevRow.averageAge !== null
+                  ? { value: row.averageAge - prevRow.averageAge, percentage: ((row.averageAge - prevRow.averageAge) / prevRow.averageAge) * 100 }
+                  : null;
+                
+                return (
                 <div
                   key={row.department}
                   className="group rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-soft transition hover:-translate-y-1 hover:border-brand-200 hover:shadow-card"
@@ -1221,6 +1402,7 @@ export default function PatientAnalysisPage() {
                       label="総患者"
                       value={`${row.total.toLocaleString("ja-JP")}名`}
                       accent="brand"
+                      monthOverMonth={totalMoM}
                     />
                     <DepartmentMetric
                       icon={UserPlus}
@@ -1228,6 +1410,7 @@ export default function PatientAnalysisPage() {
                       value={`${row.pureFirst.toLocaleString("ja-JP")}名`}
                       caption={`${row.pureRate.toFixed(1)}%`}
                       accent="emerald"
+                      monthOverMonth={pureMoM}
                     />
                     <DepartmentMetric
                       icon={Undo2}
@@ -1235,6 +1418,7 @@ export default function PatientAnalysisPage() {
                       value={`${row.returningFirst.toLocaleString("ja-JP")}名`}
                       caption={`${row.returningRate.toFixed(1)}%`}
                       accent="accent"
+                      monthOverMonth={returningMoM}
                     />
                     <DepartmentMetric
                       icon={RotateCcw}
@@ -1242,16 +1426,19 @@ export default function PatientAnalysisPage() {
                       value={`${row.revisit.toLocaleString("ja-JP")}名`}
                       caption={`${row.revisitRate.toFixed(1)}%`}
                       accent="muted"
+                      monthOverMonth={revisitMoM}
                     />
                     <DepartmentMetric
                       icon={Clock}
                       label="平均年齢"
                       value={row.averageAge !== null ? `${row.averageAge.toFixed(1)}歳` : "データなし"}
                       accent="muted"
+                      monthOverMonth={ageMoM}
                     />
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
