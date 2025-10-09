@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, memo } from "react";
+import dynamic from "next/dynamic";
 import { RefreshCw, Share2, Link as LinkIcon } from "lucide-react";
 import { uploadDataToR2, fetchDataFromR2 } from "@/lib/dataShare";
 import { getDayType, getWeekdayName, type PeriodType, filterByPeriod } from "@/lib/dateUtils";
@@ -18,32 +19,27 @@ import {
 import { saveSurveyDataToStorage } from "@/lib/surveyData";
 import { saveListingDataToStorage } from "@/lib/listingData";
 import type { SharedDataBundle } from "@/lib/sharedBundle";
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  Title,
-  Tooltip as ChartTooltip,
-  Legend as ChartLegend,
-  Filler,
-} from "chart.js";
-import { Bar, Line } from "react-chartjs-2";
 
-// Chart.js登録
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  Title,
-  ChartTooltip,
-  ChartLegend,
-  Filler
-);
+// Chart.jsを動的インポートで遅延読み込み（初期バンドルサイズを削減）
+const Bar = dynamic(() => import("react-chartjs-2").then(mod => mod.Bar), { ssr: false });
+const Line = dynamic(() => import("react-chartjs-2").then(mod => mod.Line), { ssr: false });
+
+// Chart.js登録は動的インポート時に実行
+if (typeof window !== "undefined") {
+  import("chart.js").then((ChartJS) => {
+    ChartJS.Chart.register(
+      ChartJS.CategoryScale,
+      ChartJS.LinearScale,
+      ChartJS.BarElement,
+      ChartJS.LineElement,
+      ChartJS.PointElement,
+      ChartJS.Title,
+      ChartJS.Tooltip,
+      ChartJS.Legend,
+      ChartJS.Filler
+    );
+  });
+}
 
 type HourlyBucket = {
   hour: string;
@@ -181,9 +177,6 @@ const aggregateHourly = (reservations: Reservation[]): HourlyBucket[] => {
       continue;
     }
     const bucket = buckets[reservation.reservationHour];
-    if (!bucket) {
-      continue;
-    }
     if (!bucket) {
       continue;
     }
