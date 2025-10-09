@@ -427,6 +427,7 @@ export default function HomePage() {
   const [showHourlyChart, setShowHourlyChart] = useState(false);
   const [showDailyChart, setShowDailyChart] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState<string>("全体");
+  const [showAllDepartments, setShowAllDepartments] = useState(false);
 
   const applySharedPayload = useCallback(
     (payload: unknown, uploadedAt?: string): boolean => {
@@ -685,12 +686,8 @@ const overallDaily = useMemo(
     [filteredReservations],
   );
 
-  const departmentHourly = useMemo(
-    () => aggregateDepartmentHourly(filteredReservations),
-    [filteredReservations],
-  );
-
   const sortedDepartmentHourly = useMemo(() => {
+    const departmentHourly = aggregateDepartmentHourly(filteredReservations);
     const base = [...departmentHourly];
     base.sort((a, b) => {
       const priorityDiff = getPriority(a.department) - getPriority(b.department);
@@ -704,7 +701,15 @@ const overallDaily = useMemo(
       return a.department.localeCompare(b.department, "ja");
     });
     return base;
-  }, [departmentHourly]);
+  }, [filteredReservations]);
+
+  const INITIAL_DISPLAY_COUNT = 8;
+  const displayedDepartmentButtons = useMemo(() => {
+    if (showAllDepartments) {
+      return sortedDepartmentHourly;
+    }
+    return sortedDepartmentHourly.slice(0, INITIAL_DISPLAY_COUNT);
+  }, [sortedDepartmentHourly, showAllDepartments]);
 
 const monthlyOverview = useMemo(
     () => aggregateMonthly(reservations),
@@ -1035,7 +1040,7 @@ const monthlyOverview = useMemo(
               >
                 全体
               </button>
-              {sortedDepartmentHourly.map(({ department }) => (
+              {displayedDepartmentButtons.map(({ department }) => (
                 <button
                   key={department}
                   onClick={() => setSelectedDepartment(department)}
@@ -1048,6 +1053,16 @@ const monthlyOverview = useMemo(
                   {department}
                 </button>
               ))}
+              {sortedDepartmentHourly.length > INITIAL_DISPLAY_COUNT && (
+                <button
+                  onClick={() => setShowAllDepartments(!showAllDepartments)}
+                  className="rounded-xl px-4 py-2.5 text-sm font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 transition-colors border-2 border-brand-200"
+                >
+                  {showAllDepartments
+                    ? '▲ 閉じる'
+                    : `▼ 他${sortedDepartmentHourly.length - INITIAL_DISPLAY_COUNT}件を表示`}
+                </button>
+              )}
             </div>
           </div>
           {!showHourlyChart ? (
