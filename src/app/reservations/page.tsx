@@ -426,7 +426,7 @@ const StatCard = memo(({
 
 StatCard.displayName = 'StatCard';
 
-// 診療科カードコンポーネント（メモ化で不要な再レンダリングを防ぐ）
+// 診療科カードコンポーネント（グラフなしの軽量版で初期表示を高速化）
 const DepartmentCard = memo(({
   department,
   data,
@@ -448,6 +448,19 @@ const DepartmentCard = memo(({
   onDragEnd: () => void;
   onClick: (department: string) => void;
 }) => {
+  // ピーク時間を計算（グラフの代わりに表示）
+  const peakHour = useMemo(() => {
+    let maxTotal = 0;
+    let maxHour = '';
+    for (const bucket of data) {
+      if (bucket.total > maxTotal) {
+        maxTotal = bucket.total;
+        maxHour = bucket.hour;
+      }
+    }
+    return { hour: maxHour, count: maxTotal };
+  }, [data]);
+
   return (
     <div
       draggable
@@ -455,60 +468,30 @@ const DepartmentCard = memo(({
       onDragOver={(e) => onDragOver(e, index)}
       onDragEnd={onDragEnd}
       onClick={() => onClick(department)}
-      className={`aspect-[4/5] min-w-[240px] cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-brand-400 hover:shadow-lg sm:aspect-square sm:min-w-0 ${
+      className={`min-w-[240px] cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-soft transition hover:border-brand-400 hover:shadow-lg sm:min-w-0 ${
         isDragged ? "opacity-50" : ""
       }`}
     >
-      <div className="flex h-full flex-col pointer-events-none">
-        <div className="mb-2 flex items-start justify-between">
+      <div className="flex flex-col gap-3">
+        <div className="flex items-start justify-between">
           <h3 className="text-sm font-semibold text-slate-800 line-clamp-2">
             {department}
           </h3>
         </div>
-        <p className="mb-3 text-xs text-slate-500">
-          総予約数: {total.toLocaleString("ja-JP")}
-        </p>
-        <div className="flex-1 min-h-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data}>
-              <CartesianGrid stroke="rgba(148, 163, 184, 0.15)" vertical={false} />
-              <XAxis
-                dataKey="hour"
-                stroke="#94A3B8"
-                tick={{ fontSize: 10 }}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                stroke="#94A3B8"
-                tick={{ fontSize: 10 }}
-                width={30}
-              />
-              <Tooltip
-                formatter={tooltipFormatter}
-                contentStyle={{ fontSize: 12 }}
-                itemSorter={(item) => {
-                  const order = { '初診': 0, '再診': 1 };
-                  return order[item.name as keyof typeof order] ?? 999;
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="初診"
-                stroke="#5DD4C3"
-                strokeWidth={2}
-                dot={false}
-                name="初診"
-              />
-              <Line
-                type="monotone"
-                dataKey="再診"
-                stroke="#FFB8C8"
-                strokeWidth={2}
-                dot={false}
-                name="再診"
-              />
-            </LineChart>
-          </ResponsiveContainer>
+        <div className="space-y-2">
+          <div className="flex justify-between text-xs">
+            <span className="text-slate-500">総予約数</span>
+            <span className="font-semibold text-slate-900">{total.toLocaleString("ja-JP")}</span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-slate-500">ピーク時間</span>
+            <span className="font-semibold text-brand-600">{peakHour.hour} ({peakHour.count}件)</span>
+          </div>
+        </div>
+        <div className="pt-2 border-t border-slate-100">
+          <p className="text-[11px] text-slate-400 text-center">
+            クリックでグラフを表示
+          </p>
         </div>
       </div>
     </div>
@@ -1085,9 +1068,9 @@ const monthlyOverview = useMemo(
                     wrapperStyle={{ paddingTop: 10, fontSize: 12 }}
                     itemSorter={visitLegendSorter}
                   />
-                  <Bar dataKey="初診" fill="#5DD4C3" name="初診" />
-                  <Bar dataKey="再診" fill="#FFB8C8" name="再診" />
-                  <Bar dataKey="当日予約" fill="#FFA500" name="当日予約" />
+                  <Bar dataKey="初診" fill="#5DD4C3" name="初診" isAnimationActive={false} />
+                  <Bar dataKey="再診" fill="#FFB8C8" name="再診" isAnimationActive={false} />
+                  <Bar dataKey="当日予約" fill="#FFA500" name="当日予約" isAnimationActive={false} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1163,8 +1146,8 @@ const monthlyOverview = useMemo(
                     wrapperStyle={{ paddingTop: 10, fontSize: 12 }}
                     itemSorter={visitLegendSorter}
                   />
-                  <Bar dataKey="初診" fill="#5DD4C3" name="初診" />
-                  <Bar dataKey="再診" fill="#FFB8C8" name="再診" />
+                  <Bar dataKey="初診" fill="#5DD4C3" name="初診" isAnimationActive={false} />
+                  <Bar dataKey="再診" fill="#FFB8C8" name="再診" isAnimationActive={false} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1189,6 +1172,7 @@ const monthlyOverview = useMemo(
                   strokeWidth={2}
                   dot={false}
                   name="総数"
+                  isAnimationActive={false}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -1441,6 +1425,7 @@ const monthlyOverview = useMemo(
                     strokeWidth={3}
                     dot={false}
                     name="初診"
+                    isAnimationActive={false}
                   />
                   <Line
                     type="monotone"
@@ -1449,6 +1434,7 @@ const monthlyOverview = useMemo(
                     strokeWidth={3}
                     dot={false}
                     name="再診"
+                    isAnimationActive={false}
                   />
                 </LineChart>
               </ResponsiveContainer>
