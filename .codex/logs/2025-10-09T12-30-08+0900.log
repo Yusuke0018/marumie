@@ -1,0 +1,11 @@
+timestamp: 2025-10-09T12:30:08+0900
+branch: main
+commit: 165dbe0a4cdd32efc581d72990197f96f9a54b45
+diffstat:
+  src/app/patients/page.tsx | 90 +++++++++++++++++++++++++++++-----------------
+commands:
+  - npm run lint -- --fix (success)
+  - npm run build (success)
+push: pending
+notes:
+  - 診療科カードに平均年齢と純初診/再初診/再診の割合を追加し、自費診療を非表示化
