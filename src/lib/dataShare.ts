@@ -1,7 +1,7 @@
 const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL || 'https://cloudflare-worker.youyou00181002.workers.dev';
 
 export interface ShareDataRequest {
-  type: 'reservation' | 'listing' | 'survey';
+  type: 'reservation' | 'listing' | 'survey' | 'karte';
   category?: string;
   data: string; // CSV content
 }

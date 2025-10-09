@@ -49,7 +49,7 @@ export default {
 		if (request.method === 'POST' && url.pathname === '/api/upload') {
 			try {
 				const body = await request.json() as {
-					type: 'reservation' | 'listing' | 'survey';
+					type: 'reservation' | 'listing' | 'survey' | 'karte';
 					category?: string;
 					data: string;
 				};
@@ -99,7 +99,7 @@ export default {
 
 			try {
 				// 3つのタイプを全て検索
-				const types = ['reservation', 'listing', 'survey'];
+				const types = ['reservation', 'listing', 'survey', 'karte'];
 				
 				for (const type of types) {
 					const key = `${type}/${id}.json`;
