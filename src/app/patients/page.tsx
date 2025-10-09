@@ -23,6 +23,34 @@ import {
   type KarteRecordWithCategory,
 } from "@/lib/karteAnalytics";
 import type { PeriodType } from "@/lib/dateUtils";
+import {
+  type Reservation,
+  parseReservationCsv,
+  mergeReservations,
+  loadReservationsFromStorage,
+  saveReservationsToStorage,
+  loadReservationTimestamp,
+  saveReservationDiff,
+  clearReservationDiff,
+} from "@/lib/reservationData";
+import {
+  type SurveyData,
+  parseSurveyCsv,
+  determineSurveyFileType,
+  mergeSurveyData,
+  loadSurveyDataFromStorage,
+  saveSurveyDataToStorage,
+  loadSurveyTimestamp,
+} from "@/lib/surveyData";
+import {
+  type ListingCategory,
+  type ListingData,
+  parseListingCsv,
+  mergeListingData,
+  loadListingDataFromStorage,
+  saveListingDataToStorage,
+  loadListingTimestamp,
+} from "@/lib/listingData";
 
 const KARTE_STORAGE_KEY = "clinic-analytics/karte-records/v1";
 const KARTE_TIMESTAMP_KEY = "clinic-analytics/karte-last-updated/v1";
@@ -32,6 +60,16 @@ const PERIOD_MONTHS: Record<Exclude<PeriodType, "all">, number> = {
   "6months": 6,
   "1year": 12,
 };
+const LISTING_CATEGORIES: ListingCategory[] = ["内科", "胃カメラ", "大腸カメラ"];
+
+const createEmptyListingTotals = (): Record<ListingCategory, number> =>
+  LISTING_CATEGORIES.reduce(
+    (acc, category) => {
+      acc[category] = 0;
+      return acc;
+    },
+    {} as Record<ListingCategory, number>,
+  );
 
 const roundTo1Decimal = (value: number) => Math.round(value * 10) / 10;
 
@@ -291,6 +329,37 @@ export default function PatientAnalysisPage() {
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>("all");
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [reservationStatus, setReservationStatus] = useState<{
+    lastUpdated: string | null;
+    total: number;
+  }>({
+    lastUpdated: null,
+    total: 0,
+  });
+  const [isUploadingReservation, setIsUploadingReservation] = useState(false);
+  const [reservationUploadError, setReservationUploadError] = useState<string | null>(null);
+  const [surveyStatus, setSurveyStatus] = useState<{
+    lastUpdated: string | null;
+    total: number;
+  }>({
+    lastUpdated: null,
+    total: 0,
+  });
+  const [isUploadingSurvey, setIsUploadingSurvey] = useState(false);
+  const [surveyUploadError, setSurveyUploadError] = useState<string | null>(null);
+  const [listingStatus, setListingStatus] = useState<{
+    lastUpdated: string | null;
+    totals: Record<ListingCategory, number>;
+  }>({
+    lastUpdated: null,
+    totals: createEmptyListingTotals(),
+  });
+  const [isUploadingListing, setIsUploadingListing] = useState<Record<ListingCategory, boolean>>({
+    内科: false,
+    胃カメラ: false,
+    大腸カメラ: false,
+  });
+  const [listingUploadError, setListingUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -342,6 +411,38 @@ export default function PatientAnalysisPage() {
         console.error(error);
         setUploadError("保存済みデータの読み込みに失敗しました。");
       }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const existingReservations = loadReservationsFromStorage();
+      setReservationStatus({
+        lastUpdated: loadReservationTimestamp(),
+        total: existingReservations.length,
+      });
+
+      const existingSurvey = loadSurveyDataFromStorage();
+      setSurveyStatus({
+        lastUpdated: loadSurveyTimestamp(),
+        total: existingSurvey.length,
+      });
+
+      const existingListing = loadListingDataFromStorage();
+      const totals = createEmptyListingTotals();
+      existingListing.forEach((item) => {
+        totals[item.category] = item.data.length;
+      });
+      setListingStatus({
+        lastUpdated: loadListingTimestamp(),
+        totals,
+      });
+    } catch (error) {
+      console.error(error);
     }
   }, []);
 
@@ -545,6 +646,133 @@ export default function PatientAnalysisPage() {
       event.target.value = "";
     }
   };
+
+  const handleReservationUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const files = input.files ? Array.from(input.files) : [];
+    if (files.length === 0) {
+      return;
+    }
+
+    setReservationUploadError(null);
+    setIsUploadingReservation(true);
+
+    try {
+      const existing = loadReservationsFromStorage();
+      const incoming: Reservation[] = [];
+
+      for (const file of files) {
+        const text = await file.text();
+        const parsed = parseReservationCsv(text);
+        incoming.push(...parsed);
+      }
+
+      const { merged, newlyAdded } = mergeReservations(existing, incoming);
+      const timestamp = saveReservationsToStorage(merged);
+
+      if (newlyAdded.length > 0) {
+        saveReservationDiff(newlyAdded);
+      } else {
+        clearReservationDiff();
+      }
+
+      setReservationStatus({
+        lastUpdated: timestamp,
+        total: merged.length,
+      });
+    } catch (error) {
+      console.error(error);
+      setReservationUploadError("予約ログCSVの解析に失敗しました。フォーマットをご確認ください。");
+    } finally {
+      input.value = "";
+      setIsUploadingReservation(false);
+    }
+  };
+
+  const handleSurveyUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const files = input.files ? Array.from(input.files) : [];
+    if (files.length === 0) {
+      return;
+    }
+
+    setSurveyUploadError(null);
+    setIsUploadingSurvey(true);
+
+    try {
+      const existing = loadSurveyDataFromStorage();
+      const incoming: SurveyData[] = [];
+
+      for (const file of files) {
+        const text = await file.text();
+        const fileType = determineSurveyFileType(file.name);
+        const parsed = parseSurveyCsv(text, fileType);
+        incoming.push(...parsed);
+      }
+
+      const merged = mergeSurveyData(existing, incoming);
+      const timestamp = saveSurveyDataToStorage(merged);
+
+      setSurveyStatus({
+        lastUpdated: timestamp,
+        total: merged.length,
+      });
+    } catch (error) {
+      console.error(error);
+      setSurveyUploadError("アンケートCSVの解析に失敗しました。");
+    } finally {
+      input.value = "";
+      setIsUploadingSurvey(false);
+    }
+  };
+
+  const handleListingUpload =
+    (category: ListingCategory) => async (event: ChangeEvent<HTMLInputElement>) => {
+      const input = event.target;
+      const files = input.files ? Array.from(input.files) : [];
+      if (files.length === 0) {
+        return;
+      }
+
+      setListingUploadError(null);
+      setIsUploadingListing((state) => ({
+        ...state,
+        [category]: true,
+      }));
+
+      try {
+        const existing = loadListingDataFromStorage();
+        const incoming: ListingData[] = [];
+
+        for (const file of files) {
+          const text = await file.text();
+          const parsed = parseListingCsv(text);
+          incoming.push(...parsed);
+        }
+
+        const merged = mergeListingData(existing, category, incoming);
+        const timestamp = saveListingDataToStorage(merged);
+
+        const totals = createEmptyListingTotals();
+        merged.forEach((item) => {
+          totals[item.category] = item.data.length;
+        });
+
+        setListingStatus({
+          lastUpdated: timestamp,
+          totals,
+        });
+      } catch (error) {
+        console.error(error);
+        setListingUploadError("リスティング広告CSVの解析に失敗しました。");
+      } finally {
+        input.value = "";
+        setIsUploadingListing((state) => ({
+          ...state,
+          [category]: false,
+        }));
+      }
+    };
 
   const handleShare = async () => {
     if (records.length === 0) {
@@ -819,13 +1047,13 @@ export default function PatientAnalysisPage() {
 
         <SectionCard
           title="データ管理"
-          description="カルテ集計CSVの差し替えや共有URLの発行を行います。"
+          description="カルテ集計の差し替えや共有URL発行に加え、他指標のCSV取り込みもまとめて管理します。"
         >
           <div className="space-y-3">
             <p className="text-xs text-slate-500">
               {isReadOnly
                 ? "共有URLから閲覧中です。操作内容は公開データに即時反映されるため取り扱いにご注意ください。"
-                : "最新のCSVをアップロードすると集計結果が更新されます。共有URLはコピーして関係者へ連携できます。"}
+                : "カルテ集計に加えて、予約ログ・アンケート・広告のCSVもこのページでまとめて更新できます。共有URLはコピーして関係者へ連携してください。"}
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-emerald-200 px-4 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 sm:w-auto">
@@ -866,6 +1094,154 @@ export default function PatientAnalysisPage() {
                 <RefreshCw className="h-4 w-4" />
                 集計データをリセット
               </button>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
+              <p className="text-xs font-semibold text-slate-700">他ページ向けCSVの取り込み</p>
+              <p className="text-[11px] text-slate-500">
+                以下でアップロードすると予約ログ・アンケート・広告の各ページへ即時反映されます。
+              </p>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <div className="rounded-2xl border border-brand-200 bg-white/90 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-brand-700">予約ログCSV</p>
+                      <p className="text-xs text-slate-500">受付ログ分析ダッシュボードで利用します。</p>
+                    </div>
+                    <div className="text-right text-[11px] text-slate-500">
+                      <p>
+                        最終更新:{" "}
+                        {reservationStatus.lastUpdated
+                          ? new Date(reservationStatus.lastUpdated).toLocaleString("ja-JP")
+                          : "未登録"}
+                      </p>
+                      <p>
+                        登録件数: {reservationStatus.total.toLocaleString("ja-JP")}件
+                      </p>
+                    </div>
+                  </div>
+                  <label
+                    className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition sm:w-auto ${
+                      isUploadingReservation
+                        ? "pointer-events-none border-brand-100 bg-brand-50 text-brand-300"
+                        : "border-brand-200 text-brand-600 hover:bg-brand-50"
+                    }`}
+                  >
+                    <Upload className="h-4 w-4" />
+                    {isUploadingReservation ? "アップロード中..." : "予約ログCSVを選択"}
+                    <input
+                      type="file"
+                      accept=".csv,text/csv"
+                      onChange={handleReservationUpload}
+                      multiple
+                      disabled={isUploadingReservation}
+                      className="hidden"
+                    />
+                  </label>
+                  {reservationUploadError && (
+                    <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                      {reservationUploadError}
+                    </p>
+                  )}
+                </div>
+                <div className="rounded-2xl border border-purple-200 bg-white/90 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-purple-700">アンケートCSV</p>
+                      <p className="text-xs text-slate-500">来院経路アンケートの可視化に利用します。</p>
+                    </div>
+                    <div className="text-right text-[11px] text-slate-500">
+                      <p>
+                        最終更新:{" "}
+                        {surveyStatus.lastUpdated
+                          ? new Date(surveyStatus.lastUpdated).toLocaleString("ja-JP")
+                          : "未登録"}
+                      </p>
+                      <p>
+                        登録件数: {surveyStatus.total.toLocaleString("ja-JP")}件
+                      </p>
+                    </div>
+                  </div>
+                  <label
+                    className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition sm:w-auto ${
+                      isUploadingSurvey
+                        ? "pointer-events-none border-purple-100 bg-purple-50 text-purple-300"
+                        : "border-purple-200 text-purple-600 hover:bg-purple-50"
+                    }`}
+                  >
+                    <Upload className="h-4 w-4" />
+                    {isUploadingSurvey ? "アップロード中..." : "アンケートCSVを選択"}
+                    <input
+                      type="file"
+                      accept=".csv,text/csv"
+                      onChange={handleSurveyUpload}
+                      multiple
+                      disabled={isUploadingSurvey}
+                      className="hidden"
+                    />
+                  </label>
+                  {surveyUploadError && (
+                    <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                      {surveyUploadError}
+                    </p>
+                  )}
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 space-y-3 md:col-span-2">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-700">リスティング広告CSV</p>
+                      <p className="text-xs text-slate-500">カテゴリ別に広告実績を更新します。</p>
+                    </div>
+                    <div className="text-right text-[11px] text-slate-500">
+                      <p>
+                        最終更新:{" "}
+                        {listingStatus.lastUpdated
+                          ? new Date(listingStatus.lastUpdated).toLocaleString("ja-JP")
+                          : "未登録"}
+                      </p>
+                      <p>
+                        登録件数:{" "}
+                        {LISTING_CATEGORIES.map((category, index) => (
+                          <span key={category}>
+                            {index > 0 ? " / " : ""}
+                            {category} {listingStatus.totals[category].toLocaleString("ja-JP")}件
+                          </span>
+                        ))}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {LISTING_CATEGORIES.map((category) => {
+                      const uploading = isUploadingListing[category];
+                      return (
+                        <label
+                          key={category}
+                          className={`flex cursor-pointer items-center justify-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                            uploading
+                              ? "pointer-events-none border-slate-100 bg-slate-50 text-slate-400"
+                              : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          <Upload className="h-4 w-4" />
+                          {category}CSV
+                          <input
+                            type="file"
+                            accept=".csv,text/csv"
+                            onChange={handleListingUpload(category)}
+                            multiple
+                            disabled={uploading}
+                            className="hidden"
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {listingUploadError && (
+                    <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                      {listingUploadError}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
             {shareUrl && (
               <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3">

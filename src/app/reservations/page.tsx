@@ -1,10 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { RefreshCw, Upload, Share2, Link as LinkIcon } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { RefreshCw, Share2, Link as LinkIcon } from "lucide-react";
 import { uploadDataToR2, fetchDataFromR2 } from "@/lib/dataShare";
 import { getDayType, getWeekdayName, type PeriodType, filterByPeriod } from "@/lib/dateUtils";
-import Papa from "papaparse";
+import {
+  Reservation,
+  loadReservationsFromStorage,
+  loadReservationTimestamp,
+  saveReservationsToStorage,
+  clearReservationsStorage,
+  loadReservationDiff,
+  clearReservationDiff,
+  RESERVATION_STORAGE_KEY,
+  RESERVATION_DIFF_STORAGE_KEY,
+} from "@/lib/reservationData";
 import {
   Bar,
   BarChart,
@@ -18,21 +28,6 @@ import {
   YAxis,
   type LegendPayload,
 } from "recharts";
-
-type VisitType = "初診" | "再診" | "未設定";
-
-type Reservation = {
-  key: string;
-  department: string;
-  visitType: VisitType;
-  reservationDate: string;
-  reservationMonth: string;
-  reservationHour: number;
-  receivedAtIso: string;
-  appointmentIso: string | null;
-  patientId: string;
-  isSameDay: boolean;
-};
 
 type HourlyBucket = {
   hour: string;
@@ -54,15 +49,6 @@ type MonthlyBucket = {
   当日予約: number;
 };
 
-type ParsedDateTime = {
-  iso: string;
-  dateKey: string;
-  monthKey: string;
-  hour: number;
-};
-
-const STORAGE_KEY = "clinic-analytics/reservations/v1";
-const TIMESTAMP_KEY = "clinic-analytics/last-updated/v1";
 const ORDER_KEY = "clinic-analytics/department-order/v1";
 const HOURS = Array.from({ length: 24 }, (_, index) => index);
 
@@ -176,137 +162,6 @@ const getLegendOrderIndex = (label: string) => {
 const visitLegendSorter = (item: LegendPayload) => {
   const label = `${item.value ?? item.dataKey ?? ""}`;
   return getLegendOrderIndex(label);
-};
-
-const createReservationKey = (payload: {
-  department: string;
-  visitType: VisitType;
-  receivedIso: string;
-  patientId: string;
-  appointmentIso: string | null;
-}) =>
-  [
-    payload.department,
-    payload.visitType,
-    payload.receivedIso,
-    payload.patientId,
-    payload.appointmentIso ?? "",
-  ].join("|");
-
-const normalizeVisitType = (value: string | undefined): VisitType => {
-  if (!value) {
-    return "未設定";
-  }
-  const trimmed = value.trim();
-  if (trimmed === "初診" || trimmed === "再診") {
-    return trimmed;
-  }
-  return "未設定";
-};
-
-const parseJstDateTime = (raw: string | undefined): ParsedDateTime | null => {
-  if (!raw) {
-    return null;
-  }
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-
-  const parts = trimmed.split(" ");
-  const datePart = parts[0];
-  if (!datePart || datePart.split("/").length < 3) {
-    return null;
-  }
-  const timePartRaw = parts[1] ?? "00:00";
-  const [yearStr, monthStr, dayStr] = datePart.split("/");
-  const timeParts = timePartRaw.split(":");
-  const hourStr = timeParts[0];
-  const minuteStr = timeParts[1] ?? "00";
-
-  const year = Number(yearStr);
-  const month = Number(monthStr);
-  const day = Number(dayStr);
-  const hour = Number(hourStr);
-  const minute = Number(minuteStr);
-
-  if (
-    Number.isNaN(year) ||
-    Number.isNaN(month) ||
-    Number.isNaN(day) ||
-    Number.isNaN(hour) ||
-    Number.isNaN(minute)
-  ) {
-    return null;
-  }
-
-  const mm = month.toString().padStart(2, "0");
-  const dd = day.toString().padStart(2, "0");
-  const hh = hour.toString().padStart(2, "0");
-  const mi = minute.toString().padStart(2, "0");
-
-  return {
-    iso: `${year}-${mm}-${dd}T${hh}:${mi}:00+09:00`,
-    dateKey: `${year}-${mm}-${dd}`,
-    monthKey: `${year}-${mm}`,
-    hour,
-  };
-};
-
-const parseCsv = (content: string): Reservation[] => {
-  const parsed = Papa.parse<Record<string, string>>(content, {
-    header: true,
-    skipEmptyLines: true,
-    transformHeader: (header) => header.trim(),
-  });
-
-  if (parsed.errors.length > 0) {
-    throw new Error(parsed.errors[0]?.message ?? "CSV parsing error");
-  }
-
-  const items: Reservation[] = [];
-
-  for (const row of parsed.data) {
-    const department = row["診療科"]?.trim();
-    const received = parseJstDateTime(row["受信時刻JST"]);
-    if (!department || !received) {
-      continue;
-    }
-
-    const visitType = normalizeVisitType(row["初再診"]);
-    const appointment = parseJstDateTime(row["予約日時"]);
-    const patientId = row["患者ID"]?.trim() ?? "";
-
-    const reservation: Reservation = {
-      key: createReservationKey({
-        department,
-        visitType,
-        receivedIso: received.iso,
-        patientId,
-        appointmentIso: appointment?.iso ?? null,
-      }),
-      department,
-      visitType,
-      reservationDate: received.dateKey,
-      reservationMonth: received.monthKey,
-      reservationHour: received.hour,
-      receivedAtIso: received.iso,
-      appointmentIso: appointment?.iso ?? null,
-      patientId,
-      isSameDay: (row["当日予約"] ?? "").trim().toLowerCase() === "true",
-    };
-
-    items.push(reservation);
-  }
-
-  const deduplicated = new Map<string, Reservation>();
-  for (const item of items) {
-    deduplicated.set(item.key, item);
-  }
-
-  return Array.from(deduplicated.values()).sort((a, b) =>
-    a.receivedAtIso.localeCompare(b.receivedAtIso),
-  );
 };
 
 const aggregateHourly = (reservations: Reservation[]): HourlyBucket[] => {
@@ -597,6 +452,7 @@ export default function HomePage() {
       const parsed: Reservation[] = JSON.parse(decoded);
       setReservations(parsed);
       setLastUpdated(new Date().toISOString());
+      clearReservationDiff();
       return true;
     } catch (error) {
       console.error(error);
@@ -623,8 +479,8 @@ export default function HomePage() {
               const parsed: Reservation[] = JSON.parse(response.data);
               setReservations(parsed);
               setLastUpdated(response.uploadedAt);
-              window.localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
-              window.localStorage.setItem(TIMESTAMP_KEY, response.uploadedAt);
+              saveReservationsToStorage(parsed, response.uploadedAt);
+              clearReservationDiff();
             } catch (error) {
               console.error(error);
               if (!loadFallbackFromParams()) {
@@ -652,15 +508,18 @@ export default function HomePage() {
     } else {
       // ローカルストレージから読み込み
       try {
-        const stored = window.localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed: Reservation[] = JSON.parse(stored);
-          setReservations(parsed);
+        const stored = loadReservationsFromStorage();
+        if (stored.length > 0) {
+          setReservations(stored);
         }
-        const storedTimestamp = window.localStorage.getItem(TIMESTAMP_KEY);
+        const storedTimestamp = loadReservationTimestamp();
         if (storedTimestamp) {
           setLastUpdated(storedTimestamp);
         }
+        const diffRecords = loadReservationDiff();
+        setDiffMonthly(
+          diffRecords.length > 0 ? aggregateMonthly(diffRecords) : null,
+        );
         const storedOrder = window.localStorage.getItem(ORDER_KEY);
         if (storedOrder) {
           setDepartmentOrder(JSON.parse(storedOrder));
@@ -670,6 +529,37 @@ export default function HomePage() {
         setUploadError("保存済みデータの読み込みに失敗しました。");
       }
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        event.key === RESERVATION_STORAGE_KEY ||
+        event.key === RESERVATION_DIFF_STORAGE_KEY
+      ) {
+        const stored = loadReservationsFromStorage();
+        if (stored.length > 0) {
+          setReservations(stored);
+        }
+        const timestamp = loadReservationTimestamp();
+        if (timestamp) {
+          setLastUpdated(timestamp);
+        }
+        const diffRecords = loadReservationDiff();
+        setDiffMonthly(
+          diffRecords.length > 0 ? aggregateMonthly(diffRecords) : null,
+        );
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+    };
   }, []);
 
   const availableMonths = useMemo(() => {
@@ -806,60 +696,6 @@ const monthlyOverview = useMemo(
     [filteredReservations],
   );
 
-
-  const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) {
-      return;
-    }
-
-    setUploadError(null);
-    try {
-      const mergedMap = new Map<string, Reservation>();
-
-      // 既存データを先に追加
-      for (const item of reservations) {
-        mergedMap.set(item.key, item);
-      }
-
-      const allNewlyAdded: Reservation[] = [];
-
-      // 複数ファイルを順次処理
-      for (const file of Array.from(files)) {
-        const text = await file.text();
-        const parsed = parseCsv(text);
-
-        const existingKeys = new Set(reservations.map((item) => item.key));
-        const newlyAdded = parsed.filter((item) => !existingKeys.has(item.key));
-        allNewlyAdded.push(...newlyAdded);
-
-        for (const item of parsed) {
-          mergedMap.set(item.key, item);
-        }
-      }
-
-      const merged = Array.from(mergedMap.values()).sort((a, b) =>
-        a.receivedAtIso.localeCompare(b.receivedAtIso),
-      );
-
-      setReservations(merged);
-      setDiffMonthly(allNewlyAdded.length > 0 ? aggregateMonthly(allNewlyAdded) : []);
-
-      const timestamp = new Date().toISOString();
-      setLastUpdated(timestamp);
-
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-        window.localStorage.setItem(TIMESTAMP_KEY, timestamp);
-      }
-    } catch (error) {
-      console.error(error);
-      setUploadError("CSVの解析に失敗しました。フォーマットをご確認ください。");
-    } finally {
-      event.target.value = "";
-    }
-  };
-
   // データを共有URLとして発行
   const handleShare = async () => {
     if (reservations.length === 0) {
@@ -895,14 +731,13 @@ const monthlyOverview = useMemo(
   };
 
   const handleReset = () => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.localStorage.removeItem(STORAGE_KEY);
-    window.localStorage.removeItem(TIMESTAMP_KEY);
+    clearReservationsStorage();
+    clearReservationDiff();
     setReservations([]);
     setDiffMonthly(null);
     setLastUpdated(null);
+    setShareUrl(null);
+    setUploadError(null);
   };
 
   return (
@@ -1329,7 +1164,7 @@ const monthlyOverview = useMemo(
 
         <SectionCard
           title="データ管理"
-          description="予約CSVのアップロードや共有URLの発行を行います。"
+          description="予約CSVの共有URL発行と保存データの管理を行います。取り込みは患者分析ページに集約されています。"
         >
           <div className="space-y-3">
             <p className="text-xs text-slate-500">
@@ -1338,19 +1173,13 @@ const monthlyOverview = useMemo(
                 : "必要時のみCSVを差し替え、共有URLは安全な場所に保管してください。"}
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              <label
-                className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-brand-200 px-4 py-2 text-xs font-semibold text-brand-600 transition hover:bg-brand-50 sm:w-auto"
-              >
-                <Upload className="h-4 w-4" />
-                CSVを選択
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={handleFileUpload}
-                  multiple
-                  className="hidden"
-                />
-              </label>
+              <div className="flex w-full flex-col gap-1 rounded-2xl border border-dashed border-brand-200 bg-white/80 px-4 py-3 text-xs text-brand-700 sm:w-[260px]">
+                <span className="font-semibold text-brand-600">CSVアップロード窓口</span>
+                <p className="leading-relaxed">
+                  予約ログCSVは「患者分析（カルテ集計）」ページ下部のデータ管理から登録してください。
+                  保存後にこのページを開くと自動で反映されます。
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={handleShare}

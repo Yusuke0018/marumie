@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { filterByDateRange, filterByPeriod, type PeriodType } from "@/lib/dateUtils";
-import { Upload, RefreshCw } from "lucide-react";
-import Papa from "papaparse";
+import { RefreshCw } from "lucide-react";
+import {
+  type SurveyData,
+  loadSurveyDataFromStorage,
+  loadSurveyTimestamp,
+  clearSurveyStorage,
+  SURVEY_STORAGE_KEY,
+  SURVEY_TIMESTAMP_KEY,
+} from "@/lib/surveyData";
 import {
   PieChart,
   Pie,
@@ -12,26 +19,7 @@ import {
   Tooltip,
 } from "recharts";
 
-type SurveyData = {
-  date: string;
-  month: string;
-  googleSearch: number;
-  yahooSearch: number;
-  googleMap: number;
-  signboard: number;
-  medicalReferral: number;
-  friendReferral: number;
-  flyer: number;
-  youtube: number;
-  libertyCity: number;
-  aiSearch: number;
-  fileType: "外来" | "内視鏡";
-};
-
 type PeriodFilter = PeriodType | "custom";
-
-const STORAGE_KEY = "clinic-analytics/survey/v1";
-const TIMESTAMP_KEY = "clinic-analytics/survey-updated/v1";
 
 const COLORS = [
   "#2A9D8F", "#FF7B7B", "#5DD4C3", "#E65C5C", "#75DBC3",
@@ -51,45 +39,6 @@ const CHANNEL_LABELS: Record<string, string> = {
   aiSearch: "AI検索",
 };
 
-const parseSurveyCSV = (content: string, fileType: "外来" | "内視鏡"): SurveyData[] => {
-  const parsed = Papa.parse<string[]>(content, {
-    skipEmptyLines: true,
-  });
-
-  const data: SurveyData[] = [];
-  
-  for (let i = 2; i < parsed.data.length; i++) {
-    const row = parsed.data[i];
-    if (!row || !row[0]) continue;
-
-    const dateStr = row[0].trim();
-    if (!dateStr || dateStr === "OFF") continue;
-
-    const dateParts = dateStr.split("/");
-    if (dateParts.length < 3) continue;
-
-    const month = `${dateParts[0]}/${dateParts[1]}`;
-
-    data.push({
-      date: dateStr,
-      month,
-      googleSearch: Number(row[1]) || 0,
-      yahooSearch: Number(row[2]) || 0,
-      googleMap: Number(row[3]) || 0,
-      signboard: Number(row[4]) || 0,
-      medicalReferral: Number(row[5]) || 0,
-      friendReferral: Number(row[6]) || 0,
-      flyer: Number(row[7]) || 0,
-      youtube: Number(row[8]) || 0,
-      libertyCity: Number(row[9]) || 0,
-      aiSearch: Number(row[10]) || 0,
-      fileType,
-    });
-  }
-
-  return data;
-};
-
 export default function SurveyPage() {
   const [surveyData, setSurveyData] = useState<SurveyData[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -102,17 +51,31 @@ export default function SurveyPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setSurveyData(JSON.parse(stored));
-      }
-      const timestamp = window.localStorage.getItem(TIMESTAMP_KEY);
-      if (timestamp) {
-        setLastUpdated(timestamp);
-      }
+      setSurveyData(loadSurveyDataFromStorage());
+      setLastUpdated(loadSurveyTimestamp());
+      setUploadError(null);
     } catch (error) {
       console.error(error);
+      setUploadError("保存済みデータの読み込みに失敗しました。");
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === SURVEY_STORAGE_KEY || event.key === SURVEY_TIMESTAMP_KEY) {
+        setSurveyData(loadSurveyDataFromStorage());
+        setLastUpdated(loadSurveyTimestamp());
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+    };
   }, []);
 
   const availableMonths = useMemo(() => {
@@ -218,66 +181,15 @@ export default function SurveyPage() {
       .sort((a, b) => b.value - a.value);
   }, [naishikyoData]);
 
-  const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
-
-    setUploadError(null);
-    try {
-      const allData: SurveyData[] = [];
-
-      for (const file of Array.from(files)) {
-        const text = await file.text();
-
-        // ファイル名から種類を判定
-        const fileType = file.name.includes("内視鏡") ? "内視鏡" : "外来";
-        const parsed = parseSurveyCSV(text, fileType);
-        allData.push(...parsed);
-      }
-
-      // 既存データとマージ（日付+種類でユニーク化）
-      const dataMap = new Map<string, SurveyData>();
-
-      // 既存データを先に追加
-      for (const item of surveyData) {
-        const key = `${item.date}|${item.fileType}`;
-        dataMap.set(key, item);
-      }
-
-      // 新規データで上書き（同じ日付+種類の場合は新しいデータを優先）
-      for (const item of allData) {
-        const key = `${item.date}|${item.fileType}`;
-        dataMap.set(key, item);
-      }
-
-      const uniqueData = Array.from(dataMap.values()).sort((a, b) => a.date.localeCompare(b.date));
-
-      setSurveyData(uniqueData);
-      const timestamp = new Date().toISOString();
-      setLastUpdated(timestamp);
-
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(uniqueData));
-        window.localStorage.setItem(TIMESTAMP_KEY, timestamp);
-      }
-    } catch (error) {
-      console.error(error);
-      setUploadError("CSVの解析に失敗しました。");
-    } finally {
-      event.target.value = "";
-    }
-  };
-
   const handleReset = () => {
-    if (typeof window === "undefined") return;
-    window.localStorage.removeItem(STORAGE_KEY);
-    window.localStorage.removeItem(TIMESTAMP_KEY);
+    clearSurveyStorage();
     setSurveyData([]);
     setLastUpdated(null);
     setSelectedMonth("all");
     setSelectedPeriod("all");
     setCustomStartDate("");
     setCustomEndDate("");
+    setUploadError(null);
   };
 
 
@@ -307,17 +219,13 @@ export default function SurveyPage() {
               </div>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-400 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-500">
-                <Upload className="h-4 w-4" />
-                CSVを追加
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={handleFileUpload}
-                  multiple
-                  className="hidden"
-                />
-              </label>
+              <div className="flex w-full flex-col gap-1 rounded-2xl border border-dashed border-brand-200 bg-white/80 px-4 py-3 text-xs text-brand-700 sm:w-[280px]">
+                <span className="font-semibold text-brand-600">CSVアップロード窓口</span>
+                <p className="leading-relaxed">
+                  アンケートCSVは「患者分析（カルテ集計）」ページのデータ管理セクションから登録してください。
+                  保存後にこのページを開くと自動で集計が更新されます。
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={handleReset}

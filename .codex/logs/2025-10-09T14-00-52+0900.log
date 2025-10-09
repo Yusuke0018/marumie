@@ -1,0 +1,10 @@
+timestamp: 2025-10-09T14:00:52+0900
+branch: main
+commit: fadb4dd0732951938a16435895be2c41bc1d6494
+changes:
+  - centralize all CSV取り込み on 患者分析ページ with new shared storage helpers
+  - removed individual CSV upload UIs from 予約・アンケート・広告各ページ and addedガイダンス
+  - added reservation/survey/listing data management helpers and status indicators on patients page
+lint:
+  - npm run lint (pass)
+push: 未実施

@@ -1,9 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { filterByDateRange, filterByPeriod, getMonthKey, type PeriodType } from "@/lib/dateUtils";
-import { Upload, RefreshCw } from "lucide-react";
-import Papa from "papaparse";
+import { RefreshCw } from "lucide-react";
+import {
+  type ListingCategory,
+  type ListingCategoryData,
+  loadListingDataFromStorage,
+  loadListingTimestamp,
+  clearListingStorage,
+  LISTING_STORAGE_KEY,
+  LISTING_TIMESTAMP_KEY,
+} from "@/lib/listingData";
 import {
   LineChart,
   Line,
@@ -17,68 +25,13 @@ import {
   Legend,
 } from "recharts";
 
-type ListingData = {
-  date: string;
-  amount: number;
-  cv: number;
-  cvr: number;
-  cpa: number;
-  hourlyCV: number[];
-};
-
-type CategoryData = {
-  category: "内科" | "胃カメラ" | "大腸カメラ";
-  data: ListingData[];
-};
-
-const STORAGE_KEY = "clinic-analytics/listing/v1";
-const TIMESTAMP_KEY = "clinic-analytics/listing-updated/v1";
-
 type PeriodFilter = PeriodType | "custom";
 
-const parseListingCSV = (content: string): ListingData[] => {
-  const parsed = Papa.parse<string[]>(content, {
-    skipEmptyLines: true,
-  });
-
-  const data: ListingData[] = [];
-  
-  for (let i = 1; i < parsed.data.length; i++) {
-    const row = parsed.data[i];
-    if (!row || !row[0]) continue;
-
-    const dateStr = row[0].trim();
-    if (!dateStr) continue;
-
-    const amount = Number(row[1]) || 0;
-    const cv = Number(row[2]) || 0;
-    const cvrStr = row[3]?.replace("%", "") || "0";
-    const cvr = Number(cvrStr) || 0;
-    const cpa = Number(row[4]) || 0;
-
-    const hourlyCV: number[] = [];
-    for (let h = 0; h < 24; h++) {
-      hourlyCV.push(Number(row[5 + h]) || 0);
-    }
-
-    data.push({
-      date: dateStr,
-      amount,
-      cv,
-      cvr,
-      cpa,
-      hourlyCV,
-    });
-  }
-
-  return data.filter(d => d.amount > 0 || d.cv > 0);
-};
-
 export default function ListingPage() {
-  const [categoryData, setCategoryData] = useState<CategoryData[]>([]);
+  const [categoryData, setCategoryData] = useState<ListingCategoryData[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<"内科" | "胃カメラ" | "大腸カメラ">("内科");
+  const [selectedCategory, setSelectedCategory] = useState<ListingCategory>("内科");
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodFilter>("all");
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
   const [customStartDate, setCustomStartDate] = useState<string>("");
@@ -87,17 +40,31 @@ export default function ListingPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setCategoryData(JSON.parse(stored));
-      }
-      const timestamp = window.localStorage.getItem(TIMESTAMP_KEY);
-      if (timestamp) {
-        setLastUpdated(timestamp);
-      }
+      setCategoryData(loadListingDataFromStorage());
+      setLastUpdated(loadListingTimestamp());
+      setUploadError(null);
     } catch (error) {
       console.error(error);
+      setUploadError("保存済みデータの読み込みに失敗しました。");
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === LISTING_STORAGE_KEY || event.key === LISTING_TIMESTAMP_KEY) {
+        setCategoryData(loadListingDataFromStorage());
+        setLastUpdated(loadListingTimestamp());
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+    };
   }, []);
 
   const availableMonths = useMemo(() => {
@@ -170,67 +137,18 @@ export default function ListingPage() {
     }));
   }, [currentData]);
 
-  const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>, category: "内科" | "胃カメラ" | "大腸カメラ") => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
-
-    setUploadError(null);
-    try {
-      // 既存データをマップに格納
-      const existingCategory = categoryData.find(c => c.category === category);
-      const dataMap = new Map<string, ListingData>();
-
-      if (existingCategory) {
-        for (const item of existingCategory.data) {
-          dataMap.set(item.date, item);
-        }
-      }
-
-      // 複数ファイルを順次処理
-      for (const file of Array.from(files)) {
-        const text = await file.text();
-        const parsed = parseListingCSV(text);
-
-        // 新規データで上書き（同じ日付の場合は新しいデータを優先）
-        for (const item of parsed) {
-          dataMap.set(item.date, item);
-        }
-      }
-
-      const mergedData = Array.from(dataMap.values()).sort((a, b) => a.date.localeCompare(b.date));
-
-      const newCategoryData = categoryData.filter(c => c.category !== category);
-      newCategoryData.push({ category, data: mergedData });
-
-      setCategoryData(newCategoryData);
-      const timestamp = new Date().toISOString();
-      setLastUpdated(timestamp);
-
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(newCategoryData));
-        window.localStorage.setItem(TIMESTAMP_KEY, timestamp);
-      }
-    } catch (error) {
-      console.error(error);
-      setUploadError("CSVの解析に失敗しました。");
-    } finally {
-      event.target.value = "";
-    }
-  };
-
   const handleReset = () => {
-    if (typeof window === "undefined") return;
-    window.localStorage.removeItem(STORAGE_KEY);
-    window.localStorage.removeItem(TIMESTAMP_KEY);
+    clearListingStorage();
     setCategoryData([]);
     setLastUpdated(null);
     setSelectedMonth("all");
     setSelectedPeriod("all");
     setCustomStartDate("");
     setCustomEndDate("");
+    setUploadError(null);
   };
 
-  const categories: Array<"内科" | "胃カメラ" | "大腸カメラ"> = ["内科", "胃カメラ", "大腸カメラ"];
+  const categories: ListingCategory[] = ["内科", "胃カメラ", "大腸カメラ"];
 
   return (
     <main className="min-h-screen bg-background">
@@ -257,19 +175,13 @@ export default function ListingPage() {
               </div>
             </div>
             <div className="flex flex-col gap-3">
-              {categories.map(cat => (
-                <label key={cat} className="flex cursor-pointer items-center justify-center gap-2 rounded-full bg-brand-400 px-5 py-2 text-sm font-semibold text-white transition hover:bg-brand-500">
-                  <Upload className="h-4 w-4" />
-                  {cat}のCSVを選択
-                  <input
-                    type="file"
-                    accept=".csv,text/csv"
-                    onChange={(e) => handleFileUpload(e, cat)}
-                    multiple
-                    className="hidden"
-                  />
-                </label>
-              ))}
+              <div className="flex w-full flex-col gap-1 rounded-2xl border border-dashed border-brand-200 bg-white/80 px-4 py-3 text-xs text-brand-700 sm:w-[320px]">
+                <span className="font-semibold text-brand-600">CSVアップロード窓口</span>
+                <p className="leading-relaxed">
+                  リスティング広告のCSVは「患者分析（カルテ集計）」ページのデータ管理からカテゴリごとに登録してください。
+                  保存後にこのページを開くと最新データが反映されます。
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={handleReset}
