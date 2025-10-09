@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, lazy, type ChangeEvent } from "react";
 import {
   RefreshCw,
   Share2,
@@ -54,6 +54,22 @@ import {
   loadListingTimestamp,
 } from "@/lib/listingData";
 import type { SharedDataBundle } from "@/lib/sharedBundle";
+
+const MonthlySummaryChart = lazy(() =>
+  import("@/components/patients/MonthlySummaryChart").then((m) => ({
+    default: m.MonthlySummaryChart,
+  })),
+);
+const MonthlyTrendChart = lazy(() =>
+  import("@/components/patients/MonthlyTrendChart").then((m) => ({
+    default: m.MonthlyTrendChart,
+  })),
+);
+const DepartmentChart = lazy(() =>
+  import("@/components/patients/DepartmentChart").then((m) => ({
+    default: m.DepartmentChart,
+  })),
+);
 
 const KARTE_STORAGE_KEY = "clinic-analytics/karte-records/v1";
 const KARTE_TIMESTAMP_KEY = "clinic-analytics/karte-last-updated/v1";
@@ -346,6 +362,9 @@ export default function PatientAnalysisPage() {
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [startMonth, setStartMonth] = useState<string>("");
   const [endMonth, setEndMonth] = useState<string>("");
+  const [showSummaryChart, setShowSummaryChart] = useState(false);
+  const [showTrendChart, setShowTrendChart] = useState(false);
+  const [showDepartmentChart, setShowDepartmentChart] = useState(false);
   const [reservationStatus, setReservationStatus] = useState<{
     lastUpdated: string | null;
     total: number;
@@ -1069,6 +1088,17 @@ export default function PatientAnalysisPage() {
                     tone="muted"
                   />
                 </div>
+                <button
+                  onClick={() => setShowSummaryChart(!showSummaryChart)}
+                  className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  {showSummaryChart ? "グラフを非表示" : "グラフを表示"}
+                </button>
+                {showSummaryChart && (
+                  <div className="mt-4">
+                    <MonthlySummaryChart stat={latestStat} />
+                  </div>
+                )}
               </SectionCard>
             )}
 
@@ -1111,6 +1141,17 @@ export default function PatientAnalysisPage() {
                   </tbody>
                 </table>
               </div>
+              <button
+                onClick={() => setShowTrendChart(!showTrendChart)}
+                className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                {showTrendChart ? "グラフを非表示" : "グラフを表示"}
+              </button>
+              {showTrendChart && (
+                <div className="mt-4">
+                  <MonthlyTrendChart stats={stats} />
+                </div>
+              )}
             </SectionCard>
             )}
           </>
@@ -1189,6 +1230,27 @@ export default function PatientAnalysisPage() {
                   ? "選択した期間に該当する診療科データがありません。"
                   : "選択された月に該当する診療科データがありません。"}
             </p>
+          )}
+          {departmentStats.length > 0 && (
+            <>
+              <button
+                onClick={() => setShowDepartmentChart(!showDepartmentChart)}
+                className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                {showDepartmentChart ? "グラフを非表示" : "グラフを表示"}
+              </button>
+              {showDepartmentChart && (
+                <div className="mt-4">
+                  <DepartmentChart stats={departmentStats.map(row => ({
+                    department: row.department,
+                    totalPatients: row.total,
+                    pureFirstVisits: row.pureFirst,
+                    returningFirstVisits: row.returningFirst,
+                    revisitCount: row.revisit,
+                  }))} />
+                </div>
+              )}
+            </>
           )}
         </SectionCard>
 
