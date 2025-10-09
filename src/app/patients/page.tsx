@@ -22,7 +22,7 @@ import {
   type KarteRecord,
   type KarteRecordWithCategory,
 } from "@/lib/karteAnalytics";
-import type { PeriodType } from "@/lib/dateUtils";
+
 import {
   type Reservation,
   parseReservationCsv,
@@ -58,12 +58,7 @@ import type { SharedDataBundle } from "@/lib/sharedBundle";
 const KARTE_STORAGE_KEY = "clinic-analytics/karte-records/v1";
 const KARTE_TIMESTAMP_KEY = "clinic-analytics/karte-last-updated/v1";
 const KARTE_MIN_MONTH = "2000-01";
-const PERIOD_MONTHS: Record<Exclude<PeriodType, "all"> | "1month", number> = {
-  "1month": 1,
-  "3months": 3,
-  "6months": 6,
-  "1year": 12,
-};
+
 const LISTING_CATEGORIES: ListingCategory[] = ["内科", "胃カメラ", "大腸カメラ"];
 const SURVEY_FILE_TYPES: SurveyFileType[] = ["外来", "内視鏡"];
 
@@ -349,8 +344,8 @@ export default function PatientAnalysisPage() {
   const [isSharing, setIsSharing] = useState(false);
   const [isLoadingShared, setIsLoadingShared] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType | "1month">("1month");
-  const [selectedMonth, setSelectedMonth] = useState<string>("");
+  const [startMonth, setStartMonth] = useState<string>("");
+  const [endMonth, setEndMonth] = useState<string>("");
   const [reservationStatus, setReservationStatus] = useState<{
     lastUpdated: string | null;
     total: number;
@@ -582,15 +577,19 @@ export default function PatientAnalysisPage() {
       return [];
     }
     let filtered = classifiedRecords.filter((record) => record.monthKey >= KARTE_MIN_MONTH);
-    if (selectedPeriod !== "all" && selectedPeriod in PERIOD_MONTHS) {
-      const months = PERIOD_MONTHS[selectedPeriod as keyof typeof PERIOD_MONTHS];
-      const cutoff = new Date();
-      cutoff.setMonth(cutoff.getMonth() - months);
-      const cutoffStr = cutoff.toISOString().split("T")[0];
-      filtered = filtered.filter((record) => record.dateIso >= cutoffStr);
+    
+    if (startMonth && endMonth) {
+      filtered = filtered.filter(
+        (record) => record.monthKey >= startMonth && record.monthKey <= endMonth
+      );
+    } else if (startMonth) {
+      filtered = filtered.filter((record) => record.monthKey >= startMonth);
+    } else if (endMonth) {
+      filtered = filtered.filter((record) => record.monthKey <= endMonth);
     }
+    
     return filtered;
-  }, [classifiedRecords, selectedPeriod]);
+  }, [classifiedRecords, startMonth, endMonth]);
 
   const monthsForPeriod = useMemo(() => {
     const months = new Set(periodFilteredRecords.map((record) => record.monthKey));
@@ -599,29 +598,21 @@ export default function PatientAnalysisPage() {
 
   useEffect(() => {
     if (monthsForPeriod.length === 0) {
-      if (selectedMonth !== "" && selectedMonth !== "all") {
-        setSelectedMonth("");
-      }
       return;
     }
 
     const latestMonth = monthsForPeriod[monthsForPeriod.length - 1];
-    if (selectedMonth === "") {
-      setSelectedMonth(latestMonth);
-      return;
+    
+    // 開始月・終了月が未設定の場合、最新月を設定
+    if (!startMonth && !endMonth) {
+      setStartMonth(latestMonth);
+      setEndMonth(latestMonth);
     }
-
-    if (selectedMonth !== "all" && !monthsForPeriod.includes(selectedMonth)) {
-      setSelectedMonth(latestMonth);
-    }
-  }, [monthsForPeriod, selectedMonth]);
+  }, [monthsForPeriod, startMonth, endMonth]);
 
   const filteredClassified = useMemo(() => {
-    if (selectedMonth === "" || selectedMonth === "all") {
-      return periodFilteredRecords;
-    }
-    return periodFilteredRecords.filter((record) => record.monthKey === selectedMonth);
-  }, [periodFilteredRecords, selectedMonth]);
+    return periodFilteredRecords;
+  }, [periodFilteredRecords]);
 
   const statsAll = useMemo(() => {
     if (records.length === 0) {
@@ -634,12 +625,9 @@ export default function PatientAnalysisPage() {
     if (periodFilteredRecords.length === 0) {
       return [];
     }
-    const targetMonths =
-      selectedMonth === "" || selectedMonth === "all"
-        ? new Set(periodFilteredRecords.map((record) => record.monthKey))
-        : new Set([selectedMonth]);
+    const targetMonths = new Set(periodFilteredRecords.map((record) => record.monthKey));
     return statsAll.filter((stat) => targetMonths.has(stat.month));
-  }, [statsAll, periodFilteredRecords, selectedMonth]);
+  }, [statsAll, periodFilteredRecords]);
 
   const latestStat: KarteMonthlyStat | null =
     stats.length > 0 ? stats[stats.length - 1] : null;
@@ -1013,28 +1001,30 @@ export default function PatientAnalysisPage() {
 
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
-            <label className="text-sm font-semibold text-slate-700">分析期間:</label>
+            <label className="text-sm font-semibold text-slate-700">開始月:</label>
             <select
-              value={selectedPeriod}
-              onChange={(event) => setSelectedPeriod(event.target.value as PeriodType | "1month")}
-              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
-            >
-              <option value="1month">直近1ヶ月</option>
-              <option value="3months">直近3ヶ月</option>
-              <option value="6months">直近6ヶ月</option>
-              <option value="1year">直近1年</option>
-              <option value="all">全期間</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-semibold text-slate-700">月別:</label>
-            <select
-              value={selectedMonth === "" ? "all" : selectedMonth}
-              onChange={(event) => setSelectedMonth(event.target.value)}
+              value={startMonth}
+              onChange={(event) => setStartMonth(event.target.value)}
               disabled={monthsForPeriod.length === 0}
               className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <option value="all">全て</option>
+              <option value="">選択してください</option>
+              {monthsForPeriod.map((month) => (
+                <option key={month} value={month}>
+                  {formatMonthLabel(month)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-semibold text-slate-700">終了月:</label>
+            <select
+              value={endMonth}
+              onChange={(event) => setEndMonth(event.target.value)}
+              disabled={monthsForPeriod.length === 0}
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <option value="">選択してください</option>
               {monthsForPeriod.map((month) => (
                 <option key={month} value={month}>
                   {formatMonthLabel(month)}
@@ -1082,7 +1072,7 @@ export default function PatientAnalysisPage() {
               </SectionCard>
             )}
 
-            {(selectedMonth === "all" || selectedMonth === "") && stats.length > 1 && (
+            {stats.length > 1 && (
             <SectionCard title="月次推移" description="選択期間のカルテ集計を月別に一覧しています。">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-slate-200 text-sm">
