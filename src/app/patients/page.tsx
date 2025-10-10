@@ -338,11 +338,13 @@ const StatCard = ({
   value,
   tone,
   monthOverMonth,
+  isSingleMonth,
 }: {
   label: string;
   value: string;
   tone: "brand" | "accent" | "muted" | "emerald";
   monthOverMonth?: { value: number; percentage: number } | null;
+  isSingleMonth: boolean;
 }) => {
   const toneClass =
     tone === "brand"
@@ -361,7 +363,7 @@ const StatCard = ({
       <dd className={`mt-1 text-xl font-bold sm:mt-2 sm:text-2xl ${toneClass}`}>{value}</dd>
       {monthOverMonth && (
         <p className={`mt-1 text-xs font-medium ${monthOverMonth.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-          前月比: {monthOverMonth.value >= 0 ? '+' : ''}{monthOverMonth.value} ({monthOverMonth.percentage >= 0 ? '+' : ''}{monthOverMonth.percentage.toFixed(1)}%)
+          {isSingleMonth ? '前月比' : '期間比'}: {monthOverMonth.value >= 0 ? '+' : ''}{monthOverMonth.value} ({monthOverMonth.percentage >= 0 ? '+' : ''}{monthOverMonth.percentage.toFixed(1)}%)
         </p>
       )}
     </div>
@@ -1231,6 +1233,7 @@ export default function PatientAnalysisPage() {
                           ? calculateMonthOverMonth(latestStat.totalPatients, firstStat.totalPatients)
                           : null
                     }
+                    isSingleMonth={isSingleMonthPeriod}
                   />
                   <StatCard
                     label="最新月 純初診"
@@ -1243,6 +1246,7 @@ export default function PatientAnalysisPage() {
                           ? calculateMonthOverMonth(latestStat.pureFirstVisits, firstStat.pureFirstVisits)
                           : null
                     }
+                    isSingleMonth={isSingleMonthPeriod}
                   />
                   <StatCard
                     label="最新月 再初診"
@@ -1255,6 +1259,7 @@ export default function PatientAnalysisPage() {
                           ? calculateMonthOverMonth(latestStat.returningFirstVisits, firstStat.returningFirstVisits)
                           : null
                     }
+                    isSingleMonth={isSingleMonthPeriod}
                   />
                   <StatCard
                     label="最新月 再診"
@@ -1267,6 +1272,7 @@ export default function PatientAnalysisPage() {
                           ? calculateMonthOverMonth(latestStat.revisitCount, firstStat.revisitCount)
                           : null
                     }
+                    isSingleMonth={isSingleMonthPeriod}
                   />
                   <StatCard
                     label="最新月 平均年齢"
@@ -1283,6 +1289,7 @@ export default function PatientAnalysisPage() {
                           ? { value: roundTo1Decimal(latestStat.averageAge - firstStat.averageAge), percentage: roundTo1Decimal(((latestStat.averageAge - firstStat.averageAge) / firstStat.averageAge) * 100) }
                           : null
                     }
+                    isSingleMonth={isSingleMonthPeriod}
                   />
                 </div>
                 <button
