@@ -46,72 +46,75 @@ export default function Navigation() {
     { href: "/correlation" as const, label: "相関分析" },
   ];
 
-  const toggleMenu = () => setIsOpen(!isOpen);
+  const toggleMenu = () => setIsOpen((value) => !value);
   const closeMenu = () => setIsOpen(false);
 
   const isPatientPage = pathname === "/" || pathname.startsWith("/patients");
 
   return (
     <nav className="sticky top-0 z-50 border-b border-brand-100/70 bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/70">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-4 sm:px-6">
-        <div className="flex items-center gap-3 py-4">
-          <h1 className="text-lg sm:text-xl font-bold tracking-wide text-brand-600">
-            マルミエ
-          </h1>
-          {isPatientPage && patientsPeriodLabel && (
-            <span className="hidden sm:inline-flex items-center rounded-full border border-brand-200 bg-white px-3 py-1 text-xs font-semibold text-brand-600 shadow-sm">
-              {patientsPeriodLabel}
-            </span>
-          )}
+      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 sm:px-6">
+        <div className="flex items-center justify-between gap-6">
+          <div className="flex items-center gap-3 py-4">
+            <h1 className="text-lg sm:text-xl font-bold tracking-wide text-brand-600">
+              マルミエ
+            </h1>
+            {isPatientPage && patientsPeriodLabel && (
+              <span className="hidden sm:inline-flex items-center rounded-full border border-brand-200 bg-white px-3 py-1 text-xs font-semibold text-brand-600 shadow-sm">
+                {patientsPeriodLabel}
+              </span>
+            )}
+          </div>
+
+          <div className="hidden md:flex gap-2 py-2">
+            {links.map((link) => {
+              const isActive =
+                link.href === "/"
+                  ? pathname === "/" || pathname.startsWith("/patients")
+                  : pathname === link.href || pathname.startsWith(`${link.href}/`);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                    isActive
+                      ? "bg-brand-500 text-white shadow-soft"
+                      : "text-slate-500 hover:bg-brand-50 hover:text-brand-600"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={toggleMenu}
+            className="md:hidden p-4 sm:p-5 rounded-2xl bg-brand-500 text-white hover:bg-brand-600 active:scale-95 transition-all shadow-lg"
+            aria-label="メニュー"
+          >
+            {isOpen ? (
+              <X className="h-8 w-8 sm:h-9 sm:w-9" />
+            ) : (
+              <Menu className="h-8 w-8 sm:h-9 sm:w-9" />
+            )}
+          </button>
         </div>
 
-        {/* デスクトップナビゲーション */}
-        <div className="hidden md:flex gap-2 py-2">
-          {links.map((link) => {
-            const isActive =
-              link.href === "/"
-                ? pathname === "/" || pathname.startsWith("/patients")
-                : pathname === link.href ||
-                  pathname.startsWith(`${link.href}/`);
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                  isActive
-                    ? "bg-brand-500 text-white shadow-soft"
-                    : "text-slate-500 hover:bg-brand-50 hover:text-brand-600"
-                }`}
-              >
-                {link.label}
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* モバイルハンバーガーボタン - 大幅に拡大 */}
-        <button
-          onClick={toggleMenu}
-          className="md:hidden p-4 sm:p-5 rounded-2xl bg-brand-500 text-white hover:bg-brand-600 active:scale-95 transition-all shadow-lg"
-          aria-label="メニュー"
-        >
-          {isOpen ? (
-            <X className="h-8 w-8 sm:h-9 sm:w-9" />
-          ) : (
-            <Menu className="h-8 w-8 sm:h-9 sm:w-9" />
-          )}
-        </button>
+        {isPatientPage && (
+          <div className="pb-3">
+            <div
+              id="patients-filter-slot"
+              className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-sm"
+            />
+          </div>
+        )}
       </div>
 
-      {/* モバイルメニュー背景オーバーレイ */}
       {isOpen && (
-        <div
-          className="md:hidden fixed inset-0 bg-black/30 z-40"
-          onClick={closeMenu}
-        />
+        <div className="md:hidden fixed inset-0 bg-black/30 z-40" onClick={closeMenu} />
       )}
 
-      {/* モバイル左側全画面メニュー */}
       <div
         className={`md:hidden fixed inset-0 bg-white z-50 transform transition-transform duration-300 ease-in-out ${
           isOpen ? "translate-x-0" : "-translate-x-full"
@@ -134,8 +137,7 @@ export default function Navigation() {
                 const isActive =
                   link.href === "/"
                     ? pathname === "/" || pathname.startsWith("/patients")
-                    : pathname === link.href ||
-                      pathname.startsWith(`${link.href}/`);
+                    : pathname === link.href || pathname.startsWith(`${link.href}/`);
                 return (
                   <Link
                     key={link.href}
