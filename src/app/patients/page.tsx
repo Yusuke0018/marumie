@@ -676,13 +676,24 @@ export default function PatientAnalysisPage() {
   const latestStat: KarteMonthlyStat | null =
     stats.length > 0 ? stats[stats.length - 1] : null;
 
-  const previousStat: KarteMonthlyStat | null =
-    stats.length > 1 ? stats[stats.length - 2] : null;
-
   const firstStat: KarteMonthlyStat | null =
     stats.length > 0 ? stats[0] : null;
 
   const isSingleMonthPeriod = startMonth === endMonth;
+
+  // 単月表示時の前月データを取得
+  const previousMonthStat = useMemo<KarteMonthlyStat | null>(() => {
+    if (!isSingleMonthPeriod || !startMonth) {
+      return null;
+    }
+
+    const startDate = new Date(startMonth + '-01');
+    const prevDate = new Date(startDate);
+    prevDate.setMonth(prevDate.getMonth() - 1);
+    const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+
+    return statsAll.find(stat => stat.month === prevMonth) || null;
+  }, [isSingleMonthPeriod, startMonth, statsAll]);
 
   const calculateMonthOverMonth = (current: number, previous: number | null) => {
     if (previous === null || previous === 0) return null;
@@ -1214,8 +1225,8 @@ export default function PatientAnalysisPage() {
                     value={`${latestStat.totalPatients.toLocaleString("ja-JP")}名`}
                     tone="brand"
                     monthOverMonth={
-                      isSingleMonthPeriod && previousStat
-                        ? calculateMonthOverMonth(latestStat.totalPatients, previousStat.totalPatients)
+                      isSingleMonthPeriod && previousMonthStat
+                        ? calculateMonthOverMonth(latestStat.totalPatients, previousMonthStat.totalPatients)
                         : !isSingleMonthPeriod && firstStat
                           ? calculateMonthOverMonth(latestStat.totalPatients, firstStat.totalPatients)
                           : null
@@ -1226,8 +1237,8 @@ export default function PatientAnalysisPage() {
                     value={`${latestStat.pureFirstVisits.toLocaleString("ja-JP")}名`}
                     tone="emerald"
                     monthOverMonth={
-                      isSingleMonthPeriod && previousStat
-                        ? calculateMonthOverMonth(latestStat.pureFirstVisits, previousStat.pureFirstVisits)
+                      isSingleMonthPeriod && previousMonthStat
+                        ? calculateMonthOverMonth(latestStat.pureFirstVisits, previousMonthStat.pureFirstVisits)
                         : !isSingleMonthPeriod && firstStat
                           ? calculateMonthOverMonth(latestStat.pureFirstVisits, firstStat.pureFirstVisits)
                           : null
@@ -1238,8 +1249,8 @@ export default function PatientAnalysisPage() {
                     value={`${latestStat.returningFirstVisits.toLocaleString("ja-JP")}名`}
                     tone="muted"
                     monthOverMonth={
-                      isSingleMonthPeriod && previousStat
-                        ? calculateMonthOverMonth(latestStat.returningFirstVisits, previousStat.returningFirstVisits)
+                      isSingleMonthPeriod && previousMonthStat
+                        ? calculateMonthOverMonth(latestStat.returningFirstVisits, previousMonthStat.returningFirstVisits)
                         : !isSingleMonthPeriod && firstStat
                           ? calculateMonthOverMonth(latestStat.returningFirstVisits, firstStat.returningFirstVisits)
                           : null
@@ -1250,8 +1261,8 @@ export default function PatientAnalysisPage() {
                     value={`${latestStat.revisitCount.toLocaleString("ja-JP")}名`}
                     tone="accent"
                     monthOverMonth={
-                      isSingleMonthPeriod && previousStat
-                        ? calculateMonthOverMonth(latestStat.revisitCount, previousStat.revisitCount)
+                      isSingleMonthPeriod && previousMonthStat
+                        ? calculateMonthOverMonth(latestStat.revisitCount, previousMonthStat.revisitCount)
                         : !isSingleMonthPeriod && firstStat
                           ? calculateMonthOverMonth(latestStat.revisitCount, firstStat.revisitCount)
                           : null
@@ -1266,8 +1277,8 @@ export default function PatientAnalysisPage() {
                     }
                     tone="muted"
                     monthOverMonth={
-                      isSingleMonthPeriod && previousStat && latestStat.averageAge !== null && previousStat.averageAge !== null
-                        ? { value: roundTo1Decimal(latestStat.averageAge - previousStat.averageAge), percentage: roundTo1Decimal(((latestStat.averageAge - previousStat.averageAge) / previousStat.averageAge) * 100) }
+                      isSingleMonthPeriod && previousMonthStat && latestStat.averageAge !== null && previousMonthStat.averageAge !== null
+                        ? { value: roundTo1Decimal(latestStat.averageAge - previousMonthStat.averageAge), percentage: roundTo1Decimal(((latestStat.averageAge - previousMonthStat.averageAge) / previousMonthStat.averageAge) * 100) }
                         : !isSingleMonthPeriod && firstStat && latestStat.averageAge !== null && firstStat.averageAge !== null
                           ? { value: roundTo1Decimal(latestStat.averageAge - firstStat.averageAge), percentage: roundTo1Decimal(((latestStat.averageAge - firstStat.averageAge) / firstStat.averageAge) * 100) }
                           : null
