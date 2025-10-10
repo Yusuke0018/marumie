@@ -11,6 +11,8 @@ import {
   RotateCcw,
   Undo2,
   Clock,
+  PieChart,
+  Repeat,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Papa from "papaparse";
@@ -458,6 +460,117 @@ const StatCard = ({
   );
 };
 
+type SummaryHighlight = {
+  id: string;
+  label: string;
+  value: string;
+  tone: "brand" | "accent" | "muted" | "emerald";
+  icon: LucideIcon;
+  tooltip: string;
+  deltaLabel?: string;
+  deltaStatus?: "up" | "down" | "neutral";
+  footnote?: string | null;
+};
+
+const SummaryHighlightCard = ({
+  label,
+  value,
+  tone,
+  icon: Icon,
+  tooltip,
+  deltaLabel,
+  deltaStatus,
+  footnote,
+}: SummaryHighlight) => {
+  const badgeClass =
+    tone === "brand"
+      ? "bg-brand-50 text-brand-600"
+      : tone === "emerald"
+        ? "bg-emerald-50 text-emerald-600"
+        : tone === "accent"
+          ? "bg-accent-50 text-accent-600"
+          : "bg-slate-100 text-slate-600";
+
+  const valueClass =
+    tone === "brand"
+      ? "text-brand-700"
+      : tone === "emerald"
+        ? "text-emerald-700"
+        : tone === "accent"
+          ? "text-accent-700"
+          : "text-slate-900";
+
+  const deltaClass =
+    deltaStatus === "up"
+      ? "text-emerald-600"
+      : deltaStatus === "down"
+        ? "text-red-600"
+        : "text-slate-500";
+
+  return (
+    <article
+      className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-card"
+      title={tooltip}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          {label}
+        </span>
+        <span className={`flex h-8 w-8 items-center justify-center rounded-full ${badgeClass}`}>
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <p className={`mt-3 text-2xl font-bold sm:text-3xl ${valueClass}`}>{value}</p>
+      {deltaLabel && (
+        <p className={`mt-1 text-xs font-medium ${deltaClass}`}>{deltaLabel}</p>
+      )}
+      {footnote && (
+        <p className="mt-2 text-[11px] text-slate-400">{footnote}</p>
+      )}
+    </article>
+  );
+};
+
+const formatSignedInteger = (value: number) => {
+  if (value > 0) {
+    return `+${value.toLocaleString("ja-JP")}`;
+  }
+  if (value < 0) {
+    return `-${Math.abs(value).toLocaleString("ja-JP")}`;
+  }
+  return "±0";
+};
+
+const formatSignedDecimal = (value: number) => {
+  const formatted = Math.abs(value).toLocaleString("ja-JP", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  if (value > 0) {
+    return `+${formatted}`;
+  }
+  if (value < 0) {
+    return `-${formatted}`;
+  }
+  return `±${formatted}`;
+};
+
+const determineDeltaStatus = (value: number | null | undefined): SummaryHighlight["deltaStatus"] => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (value > 0) {
+    return "up";
+  }
+  if (value < 0) {
+    return "down";
+  }
+  return "neutral";
+};
+
+const formatTimestampLabel = (value: string | null) =>
+  value ? new Date(value).toLocaleString("ja-JP") : "未登録";
+
 export default function PatientAnalysisPage() {
   const [records, setRecords] = useState<KarteRecord[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -472,6 +585,7 @@ export default function PatientAnalysisPage() {
   const [showTrendChart, setShowTrendChart] = useState(false);
   const [showDepartmentChart, setShowDepartmentChart] = useState(false);
   const [showWeekdayChart, setShowWeekdayChart] = useState(false);
+  const [insightTab, setInsightTab] = useState<"channel" | "department" | "time">("department");
   const [reservationStatus, setReservationStatus] = useState<{
     lastUpdated: string | null;
     total: number;
@@ -853,6 +967,106 @@ export default function PatientAnalysisPage() {
     }
   }, [classifiedRecords, startMonth, endMonth, isSingleMonthPeriod]);
 
+  const periodSummary = useMemo(() => {
+    if (periodFilteredRecords.length === 0) {
+      return null;
+    }
+
+    let total = 0;
+    let pure = 0;
+    let returning = 0;
+    let revisit = 0;
+    let ageSum = 0;
+    let ageCount = 0;
+
+    for (const record of periodFilteredRecords) {
+      total += 1;
+      if (record.category === "pureFirst") {
+        pure += 1;
+      } else if (record.category === "returningFirst") {
+        returning += 1;
+      } else if (record.category === "revisit") {
+        revisit += 1;
+      }
+
+      const age = calculateAge(record.birthDateIso ?? null, record.dateIso);
+      if (age !== null) {
+        ageSum += age;
+        ageCount += 1;
+      }
+    }
+
+    const averageAge =
+      ageCount > 0 ? roundTo1Decimal(ageSum / ageCount) : null;
+
+    const pureRate = total > 0 ? roundTo1Decimal((pure / total) * 100) : null;
+    const returningRate =
+      total > 0 ? roundTo1Decimal((returning / total) * 100) : null;
+    const revisitRate =
+      total > 0 ? roundTo1Decimal((revisit / total) * 100) : null;
+
+    return {
+      total,
+      pure,
+      returning,
+      revisit,
+      pureRate,
+      returningRate,
+      revisitRate,
+      averageAge,
+    };
+  }, [periodFilteredRecords]);
+
+  const previousPeriodSummary = useMemo(() => {
+    if (previousPeriodRecords.length === 0) {
+      return null;
+    }
+
+    let total = 0;
+    let pure = 0;
+    let returning = 0;
+    let revisit = 0;
+    let ageSum = 0;
+    let ageCount = 0;
+
+    for (const record of previousPeriodRecords) {
+      total += 1;
+      if (record.category === "pureFirst") {
+        pure += 1;
+      } else if (record.category === "returningFirst") {
+        returning += 1;
+      } else if (record.category === "revisit") {
+        revisit += 1;
+      }
+
+      const age = calculateAge(record.birthDateIso ?? null, record.dateIso);
+      if (age !== null) {
+        ageSum += age;
+        ageCount += 1;
+      }
+    }
+
+    const averageAge =
+      ageCount > 0 ? roundTo1Decimal(ageSum / ageCount) : null;
+
+    const pureRate = total > 0 ? roundTo1Decimal((pure / total) * 100) : null;
+    const returningRate =
+      total > 0 ? roundTo1Decimal((returning / total) * 100) : null;
+    const revisitRate =
+      total > 0 ? roundTo1Decimal((revisit / total) * 100) : null;
+
+    return {
+      total,
+      pure,
+      returning,
+      revisit,
+      pureRate,
+      returningRate,
+      revisitRate,
+      averageAge,
+    };
+  }, [previousPeriodRecords]);
+
   const departmentStats = useMemo<DepartmentStat[]>(() => {
     if (filteredClassified.length === 0) {
       return [];
@@ -1213,6 +1427,176 @@ export default function PatientAnalysisPage() {
     return `${formatMonthLabel(start)}〜${formatMonthLabel(end)}`;
   }, [previousDiagnosisRange]);
 
+  const summaryHighlights = useMemo<SummaryHighlight[]>(() => {
+    if (!periodSummary) {
+      return [];
+    }
+
+    const periodLabel = diagnosisRangeLabel;
+    const highlights: SummaryHighlight[] = [];
+
+    const totalDelta =
+      previousPeriodSummary !== null
+        ? periodSummary.total - previousPeriodSummary.total
+        : null;
+    const totalDeltaPct =
+      previousPeriodSummary !== null && previousPeriodSummary.total > 0 && totalDelta !== null
+        ? roundTo1Decimal((totalDelta / previousPeriodSummary.total) * 100)
+        : null;
+
+    highlights.push({
+      id: "total",
+      label: "期間総患者数",
+      value: `${periodSummary.total.toLocaleString("ja-JP")}名`,
+      tone: "brand",
+      icon: Users,
+      tooltip: "選択期間内に受診した患者数の合計です。",
+      deltaLabel:
+        totalDelta !== null && totalDeltaPct !== null
+          ? `前期間比 ${formatSignedInteger(totalDelta)}名 (${formatSignedDecimal(totalDeltaPct)}%)`
+          : undefined,
+      deltaStatus: determineDeltaStatus(totalDelta ?? undefined),
+      footnote: periodLabel,
+    });
+
+    if (periodSummary.pureRate !== null) {
+      const prevPureRate =
+        previousPeriodSummary && previousPeriodSummary.pureRate !== null
+          ? previousPeriodSummary.pureRate
+          : null;
+      const pureDiff =
+        prevPureRate !== null ? roundTo1Decimal(periodSummary.pureRate - prevPureRate) : null;
+      highlights.push({
+        id: "pure-rate",
+        label: "純初診率",
+        value: `${periodSummary.pureRate.toFixed(1)}%`,
+        tone: "emerald",
+        icon: PieChart,
+        tooltip: "純初診（初診かつ新患）が総患者に占める割合です。",
+        deltaLabel:
+          pureDiff !== null ? `前期間比 ${formatSignedDecimal(pureDiff)}pt` : undefined,
+        deltaStatus: determineDeltaStatus(pureDiff ?? undefined),
+      });
+    }
+
+    const pureDelta =
+      previousPeriodSummary !== null
+        ? periodSummary.pure - previousPeriodSummary.pure
+        : null;
+    highlights.push({
+      id: "pure-count",
+      label: "純初診数",
+      value: `${periodSummary.pure.toLocaleString("ja-JP")}名`,
+      tone: "emerald",
+      icon: UserPlus,
+      tooltip: "選択期間内に来院した純初診患者数です。",
+      deltaLabel:
+        pureDelta !== null ? `前期間比 ${formatSignedInteger(pureDelta)}名` : undefined,
+      deltaStatus: determineDeltaStatus(pureDelta ?? undefined),
+    });
+
+    if (periodSummary.revisitRate !== null) {
+      const prevRevisitRate =
+        previousPeriodSummary && previousPeriodSummary.revisitRate !== null
+          ? previousPeriodSummary.revisitRate
+          : null;
+      const revisitRateDiff =
+        prevRevisitRate !== null
+          ? roundTo1Decimal(periodSummary.revisitRate - prevRevisitRate)
+          : null;
+      highlights.push({
+        id: "revisit-rate",
+        label: "継続率（再診）",
+        value: `${periodSummary.revisitRate.toFixed(1)}%`,
+        tone: "accent",
+        icon: Repeat,
+        tooltip: "再診患者が総患者に占める割合です。",
+        deltaLabel:
+          revisitRateDiff !== null
+            ? `前期間比 ${formatSignedDecimal(revisitRateDiff)}pt`
+            : undefined,
+        deltaStatus: determineDeltaStatus(revisitRateDiff ?? undefined),
+      });
+    }
+
+    const revisitDelta =
+      previousPeriodSummary !== null
+        ? periodSummary.revisit - previousPeriodSummary.revisit
+        : null;
+    highlights.push({
+      id: "revisit-count",
+      label: "再診数",
+      value: `${periodSummary.revisit.toLocaleString("ja-JP")}名`,
+      tone: "muted",
+      icon: RotateCcw,
+      tooltip: "選択期間内に来院した再診患者数です。",
+      deltaLabel:
+        revisitDelta !== null ? `前期間比 ${formatSignedInteger(revisitDelta)}名` : undefined,
+      deltaStatus: determineDeltaStatus(revisitDelta ?? undefined),
+    });
+
+    const averageAgeDiff =
+      periodSummary.averageAge !== null &&
+      previousPeriodSummary &&
+      previousPeriodSummary.averageAge !== null
+        ? roundTo1Decimal(periodSummary.averageAge - previousPeriodSummary.averageAge)
+        : null;
+    highlights.push({
+      id: "average-age",
+      label: "平均年齢",
+      value:
+        periodSummary.averageAge !== null
+          ? `${periodSummary.averageAge.toFixed(1)}歳`
+          : "—",
+      tone: "muted",
+      icon: Clock,
+      tooltip: "選択期間内の患者平均年齢です（年齢情報がある患者のみで算出）。",
+      deltaLabel:
+        averageAgeDiff !== null ? `前期間比 ${formatSignedDecimal(averageAgeDiff)}歳` : undefined,
+      deltaStatus: determineDeltaStatus(averageAgeDiff ?? undefined),
+    });
+
+    return highlights;
+  }, [periodSummary, previousPeriodSummary, diagnosisRangeLabel]);
+
+  const channelSummaryCards = useMemo(() => {
+    const listingTotal = Object.values(listingStatus.totals).reduce(
+      (accumulator, value) => accumulator + value,
+      0,
+    );
+    return [
+      {
+        id: "reservation",
+        title: "予約ログ",
+        rawTotal: reservationStatus.total,
+        total: reservationStatus.total.toLocaleString("ja-JP"),
+        updated: formatTimestampLabel(reservationStatus.lastUpdated),
+        detail: `${reservationStatus.total.toLocaleString("ja-JP")}件の受付データを取り込み済みです。`,
+        helper: "受付時刻から初診・再診を自動判定し、予約ダッシュボードへ連携します。",
+      },
+      {
+        id: "survey",
+        title: "来院経路アンケート",
+        rawTotal: surveyStatus.total,
+        total: surveyStatus.total.toLocaleString("ja-JP"),
+        updated: formatTimestampLabel(surveyStatus.lastUpdated),
+        detail: `外来 ${surveyStatus.byType["外来"].toLocaleString("ja-JP")}件 / 内視鏡 ${surveyStatus.byType["内視鏡"].toLocaleString("ja-JP")}件`,
+        helper: "媒体別の認知・集患効果を可視化する基礎データです。",
+      },
+      {
+        id: "listing",
+        title: "リスティング広告",
+        rawTotal: listingTotal,
+        total: listingTotal.toLocaleString("ja-JP"),
+        updated: formatTimestampLabel(listingStatus.lastUpdated),
+        detail: LISTING_CATEGORIES.map(
+          (category) => `${category} ${listingStatus.totals[category].toLocaleString("ja-JP")}件`,
+        ).join(" / "),
+        helper: "広告クリックから来院成果までのCPAや時間帯別反応を分析できます。",
+      },
+    ];
+  }, [listingStatus, reservationStatus, surveyStatus]);
+
   const hasAnyRecords = records.length > 0;
   const hasPeriodRecords = periodFilteredRecords.length > 0;
   const hasDiagnosisRecords = filteredDiagnosisRecords.length > 0;
@@ -1534,7 +1918,9 @@ export default function PatientAnalysisPage() {
 
   return (
     <main className="min-h-screen bg-background">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-12">
+      <div className="mx-auto w-full max-w-6xl px-6 py-12">
+        <div className="flex flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start lg:gap-12">
+          <div className="flex flex-col gap-8">
         <section className="relative overflow-hidden rounded-3xl border border-brand-200 bg-gradient-to-r from-white via-brand-50 to-brand-100 p-8 shadow-card">
           <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
             <div className="space-y-4">
@@ -1577,40 +1963,70 @@ export default function PatientAnalysisPage() {
           )}
         </section>
 
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-semibold text-slate-700">開始月:</label>
-            <select
-              value={startMonth}
-              onChange={(event) => setStartMonth(event.target.value)}
-              disabled={allAvailableMonths.length === 0}
-              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <option value="">選択してください</option>
-              {allAvailableMonths.map((month) => (
-                <option key={month} value={month}>
-                  {formatMonthLabel(month)}
-                </option>
-              ))}
-            </select>
+        <section className="sticky top-4 z-30">
+          <div className="rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-soft backdrop-blur">
+            {summaryHighlights.length > 0 ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+                {summaryHighlights.map((highlight) => (
+                  <SummaryHighlightCard key={highlight.id} {...highlight} />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+                CSVをアップロードすると期間サマリーが表示されます。
+              </div>
+            )}
+            <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-semibold text-slate-700">開始月:</label>
+                  <select
+                    value={startMonth}
+                    onChange={(event) => setStartMonth(event.target.value)}
+                    disabled={allAvailableMonths.length === 0}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="">選択してください</option>
+                    {allAvailableMonths.map((month) => (
+                      <option key={month} value={month}>
+                        {formatMonthLabel(month)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-semibold text-slate-700">終了月:</label>
+                  <select
+                    value={endMonth}
+                    onChange={(event) => setEndMonth(event.target.value)}
+                    disabled={allAvailableMonths.length === 0}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="">選択してください</option>
+                    {allAvailableMonths.map((month) => (
+                      <option key={month} value={month}>
+                        {formatMonthLabel(month)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStartMonth("");
+                    setEndMonth("");
+                  }}
+                  className="inline-flex items-center justify-center rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-brand-300 hover:text-brand-600"
+                >
+                  期間をリセット
+                </button>
+              </div>
+              <div className="text-[11px] text-slate-500">
+                表示期間: {diagnosisRangeLabel}
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-semibold text-slate-700">終了月:</label>
-            <select
-              value={endMonth}
-              onChange={(event) => setEndMonth(event.target.value)}
-              disabled={allAvailableMonths.length === 0}
-              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <option value="">選択してください</option>
-              {allAvailableMonths.map((month) => (
-                <option key={month} value={month}>
-                  {formatMonthLabel(month)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+        </section>
 
         {stats.length > 0 ? (
           <>
@@ -1705,7 +2121,10 @@ export default function PatientAnalysisPage() {
                   {showSummaryChart ? "グラフを非表示" : "グラフを表示"}
                 </button>
                 {showSummaryChart && (
-                  <div className="mt-4">
+                  <div className="mt-4 space-y-2">
+                    <p className="text-[11px] text-slate-500">
+                      ※ 凡例をクリックすると系列を切り替え、ホバーで月次値の詳細を確認できます。
+                    </p>
                     <MonthlySummaryChart stats={stats} />
                   </div>
                 )}
@@ -1804,7 +2223,10 @@ export default function PatientAnalysisPage() {
                 {showTrendChart ? "グラフを非表示" : "グラフを表示"}
               </button>
               {showTrendChart && (
-                <div className="mt-4">
+                <div className="mt-4 space-y-2">
+                  <p className="text-[11px] text-slate-500">
+                    ※ 各系列は患者区分別の件数推移です。ポイントにカーソルを合わせると該当月の数値が表示されます。
+                  </p>
                   <MonthlyTrendChart stats={stats} />
                 </div>
               )}
@@ -1824,211 +2246,273 @@ export default function PatientAnalysisPage() {
         )}
 
         <SectionCard
-          title={startMonth && endMonth && startMonth !== endMonth
-            ? `診療科別 集計（${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}）`
-            : startMonth && endMonth && startMonth === endMonth
-              ? `診療科別 集計（${formatMonthLabel(startMonth)}）`
-              : "診療科別 集計"
-          }
-          description="診療科ごとの総患者・純初診・再初診・再診の件数です（「外国人自費」を含む診療科は除外しています）。"
+          title="視点別インサイト"
+          description="チャネル・診療科・時間帯を切り替えて主要指標とグラフを比較します。"
         >
-          {departmentStats.length > 0 ? (
-            <>
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {departmentStats.map((row) => {
-                const prevRow = previousDepartmentStats.get(row.department);
-                const totalMoM = prevRow ? calculateMonthOverMonth(row.total, prevRow.total) : null;
-                const pureMoM = prevRow ? calculateMonthOverMonth(row.pureFirst, prevRow.pureFirst) : null;
-                const returningMoM = prevRow ? calculateMonthOverMonth(row.returningFirst, prevRow.returningFirst) : null;
-                const revisitMoM = prevRow ? calculateMonthOverMonth(row.revisit, prevRow.revisit) : null;
-                const ageMoM = prevRow && row.averageAge !== null && prevRow.averageAge !== null
-                  ? { value: roundTo1Decimal(row.averageAge - prevRow.averageAge), percentage: roundTo1Decimal(((row.averageAge - prevRow.averageAge) / prevRow.averageAge) * 100) }
-                  : null;
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                { id: "department", label: "診療科" },
+                { id: "time", label: "時間帯" },
+                { id: "channel", label: "チャネル" },
+              ] as Array<{ id: typeof insightTab; label: string }>
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setInsightTab(tab.id)}
+                className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                  insightTab === tab.id
+                    ? "border-brand-300 bg-brand-50 text-brand-700"
+                    : "border-slate-200 text-slate-600 hover:border-brand-200 hover:text-brand-600"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div className="mt-6 space-y-6">
+            {insightTab === "department" && (
+              <div className="space-y-6">
+                {departmentStats.length > 0 ? (
+                  <>
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                      {departmentStats.map((row) => {
+                        const prevRow = previousDepartmentStats.get(row.department);
+                        const totalMoM = prevRow ? calculateMonthOverMonth(row.total, prevRow.total) : null;
+                        const pureMoM = prevRow ? calculateMonthOverMonth(row.pureFirst, prevRow.pureFirst) : null;
+                        const returningMoM = prevRow ? calculateMonthOverMonth(row.returningFirst, prevRow.returningFirst) : null;
+                        const revisitMoM = prevRow ? calculateMonthOverMonth(row.revisit, prevRow.revisit) : null;
+                        const ageMoM =
+                          prevRow && row.averageAge !== null && prevRow.averageAge !== null
+                            ? {
+                                value: roundTo1Decimal(row.averageAge - prevRow.averageAge),
+                                percentage: roundTo1Decimal(
+                                  ((row.averageAge - prevRow.averageAge) / prevRow.averageAge) * 100,
+                                ),
+                              }
+                            : null;
 
-                // 健康診断・人間ドック・予防接種は初再診の概念がないため非表示
-                const isPreventiveCare =
-                  row.department.includes("健康診断") ||
-                  row.department.includes("人間ドック") ||
-                  row.department.includes("予防接種");
+                        const isPreventiveCare =
+                          row.department.includes("健康診断") ||
+                          row.department.includes("人間ドック") ||
+                          row.department.includes("予防接種");
 
-                return (
-                  <div
-                    key={row.department}
-                    className="group rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-soft transition hover:-translate-y-1 hover:border-brand-200 hover:shadow-card"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <h3 className="text-sm font-semibold text-slate-900 sm:text-base">
-                        {row.department}
-                      </h3>
-                      <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-600">
-                        {row.total.toLocaleString("ja-JP")}名
-                      </span>
+                        return (
+                          <div
+                            key={row.department}
+                            className="group rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-soft transition hover:-translate-y-1 hover:border-brand-200 hover:shadow-card"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <h3 className="text-sm font-semibold text-slate-900 sm:text-base">
+                                {row.department}
+                              </h3>
+                              <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-600">
+                                {row.total.toLocaleString("ja-JP")}名
+                              </span>
+                            </div>
+                            <div className="mt-4 grid gap-2">
+                              <DepartmentMetric
+                                icon={Users}
+                                label="総患者"
+                                value={`${row.total.toLocaleString("ja-JP")}名`}
+                                accent="brand"
+                                monthOverMonth={totalMoM}
+                                isSingleMonth={isSingleMonthPeriod}
+                              />
+                              {!isPreventiveCare && (
+                                <>
+                                  <DepartmentMetric
+                                    icon={UserPlus}
+                                    label="純初診"
+                                    value={`${row.pureFirst.toLocaleString("ja-JP")}名`}
+                                    caption={`${row.pureRate}%`}
+                                    accent="emerald"
+                                    monthOverMonth={pureMoM}
+                                    isSingleMonth={isSingleMonthPeriod}
+                                  />
+                                  <DepartmentMetric
+                                    icon={Undo2}
+                                    label="再初診"
+                                    value={`${row.returningFirst.toLocaleString("ja-JP")}名`}
+                                    caption={`${row.returningRate}%`}
+                                    accent="accent"
+                                    monthOverMonth={returningMoM}
+                                    isSingleMonth={isSingleMonthPeriod}
+                                  />
+                                  <DepartmentMetric
+                                    icon={RotateCcw}
+                                    label="再診"
+                                    value={`${row.revisit.toLocaleString("ja-JP")}名`}
+                                    caption={`${row.revisitRate}%`}
+                                    accent="muted"
+                                    monthOverMonth={revisitMoM}
+                                    isSingleMonth={isSingleMonthPeriod}
+                                  />
+                                </>
+                              )}
+                              <DepartmentMetric
+                                icon={Clock}
+                                label="平均年齢"
+                                value={row.averageAge !== null ? `${row.averageAge}歳` : "データなし"}
+                                accent="muted"
+                                monthOverMonth={ageMoM}
+                                isSingleMonth={isSingleMonthPeriod}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div className="mt-4 grid gap-2">
-                      <DepartmentMetric
-                        icon={Users}
-                        label="総患者"
-                        value={`${row.total.toLocaleString("ja-JP")}名`}
-                        accent="brand"
-                        monthOverMonth={totalMoM}
-                        isSingleMonth={isSingleMonthPeriod}
-                      />
-                      {!isPreventiveCare && (
-                        <>
-                          <DepartmentMetric
-                            icon={UserPlus}
-                            label="純初診"
-                            value={`${row.pureFirst.toLocaleString("ja-JP")}名`}
-                            caption={`${row.pureRate}%`}
-                            accent="emerald"
-                            monthOverMonth={pureMoM}
-                            isSingleMonth={isSingleMonthPeriod}
-                          />
-                          <DepartmentMetric
-                            icon={Undo2}
-                            label="再初診"
-                            value={`${row.returningFirst.toLocaleString("ja-JP")}名`}
-                            caption={`${row.returningRate}%`}
-                            accent="accent"
-                            monthOverMonth={returningMoM}
-                            isSingleMonth={isSingleMonthPeriod}
-                          />
-                          <DepartmentMetric
-                            icon={RotateCcw}
-                            label="再診"
-                            value={`${row.revisit.toLocaleString("ja-JP")}名`}
-                            caption={`${row.revisitRate}%`}
-                            accent="muted"
-                            monthOverMonth={revisitMoM}
-                            isSingleMonth={isSingleMonthPeriod}
-                          />
-                        </>
-                      )}
-                      <DepartmentMetric
-                        icon={Clock}
-                        label="平均年齢"
-                        value={row.averageAge !== null ? `${row.averageAge}歳` : "データなし"}
-                        accent="muted"
-                        monthOverMonth={ageMoM}
-                        isSingleMonth={isSingleMonthPeriod}
-                      />
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold text-slate-700">カテゴリー別件数</h3>
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        {DIAGNOSIS_CATEGORIES.map((category) => {
+                          const current = diagnosisCategoryTotals[category] ?? 0;
+                          const previous = previousDiagnosisCategoryTotals[category] ?? 0;
+                          const diff = current - previous;
+                          const percentage =
+                            hasDiagnosisPrevious && previous > 0
+                              ? roundTo1Decimal((diff / previous) * 100)
+                              : null;
+                          const badgeClass = DIAGNOSIS_CATEGORY_BADGE_CLASSES[category];
+                          return (
+                            <div
+                              key={category}
+                              className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft"
+                            >
+                              <span
+                                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}
+                              >
+                                {category}
+                              </span>
+                              <p className="mt-3 text-2xl font-bold text-slate-900">
+                                {current.toLocaleString("ja-JP")}件
+                              </p>
+                              {hasDiagnosisPrevious && (
+                                <p
+                                  className={`mt-1 text-xs font-medium ${
+                                    diff >= 0 ? "text-emerald-600" : "text-red-600"
+                                  }`}
+                                >
+                                  {diff >= 0 ? "+" : ""}
+                                  {diff.toLocaleString("ja-JP")}件
+                                  {percentage !== null
+                                    ? ` (${percentage >= 0 ? "+" : ""}${percentage.toLocaleString("ja-JP", {
+                                        maximumFractionDigits: 1,
+                                      })}%)`
+                                    : previous === 0 && current > 0
+                                      ? " (新規)"
+                                      : ""}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-6 space-y-3">
-              <h3 className="text-sm font-semibold text-slate-700">カテゴリー別件数</h3>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {DIAGNOSIS_CATEGORIES.map((category) => {
-                  const current = diagnosisCategoryTotals[category] ?? 0;
-                  const previous = previousDiagnosisCategoryTotals[category] ?? 0;
-                  const diff = current - previous;
-                  const percentage =
-                    hasDiagnosisPrevious && previous > 0
-                      ? roundTo1Decimal((diff / previous) * 100)
-                      : null;
-                  const badgeClass = DIAGNOSIS_CATEGORY_BADGE_CLASSES[category];
-                  return (
-                    <div
-                      key={category}
-                      className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft"
+                  </>
+                ) : (
+                  <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                    {!hasAnyRecords
+                      ? "カルテ集計CSVをアップロードすると、診療科別の内訳が表示されます。"
+                      : !hasPeriodRecords
+                        ? "選択した期間に該当する診療科データがありません。"
+                        : "選択された月に該当する診療科データがありません。"}
+                  </p>
+                )}
+                {departmentStats.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => setShowDepartmentChart((value) => !value)}
+                      className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                     >
-                      <span
-                        className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}
-                      >
-                        {category}
-                      </span>
-                      <p className="mt-3 text-2xl font-bold text-slate-900">
-                        {current.toLocaleString("ja-JP")}件
-                      </p>
-                      {hasDiagnosisPrevious && (
-                        <p
-                          className={`mt-1 text-xs font-medium ${
-                            diff >= 0 ? "text-emerald-600" : "text-red-600"
-                          }`}
-                        >
-                          {diff >= 0 ? "+" : ""}
-                          {diff.toLocaleString("ja-JP")}件
-                          {percentage !== null
-                            ? ` (${percentage >= 0 ? "+" : ""}${percentage.toLocaleString("ja-JP", {
-                                maximumFractionDigits: 1,
-                              })}%)`
-                            : previous === 0 && current > 0
-                              ? " (新規)"
-                              : ""}
+                      {showDepartmentChart ? "グラフを非表示" : "診療科別グラフを表示"}
+                    </button>
+                    {showDepartmentChart && (
+                      <div className="mt-4 space-y-2">
+                        <p className="text-[11px] text-slate-500">
+                          ※ 円グラフは診療科別のシェアを示し、凡例で科を選択して比較できます。
                         </p>
-                      )}
-                    </div>
-                  );
-                })}
+                        <DepartmentChart records={filteredClassified} />
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
-            </div>
-            </>
-          ) : (
-            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-              {!hasAnyRecords
-                ? "カルテ集計CSVをアップロードすると、診療科別の内訳が表示されます。"
-                : !hasPeriodRecords
-                  ? "選択した期間に該当する診療科データがありません。"
-                  : "選択された月に該当する診療科データがありません。"}
-            </p>
-          )}
-          {departmentStats.length > 0 && (
-            <>
-              <button
-                onClick={() => setShowDepartmentChart(!showDepartmentChart)}
-                className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                {showDepartmentChart ? "グラフを非表示" : "グラフを表示"}
-              </button>
-              {showDepartmentChart && (
-                <div className="mt-4">
-                  <DepartmentChart records={filteredClassified} />
+            )}
+            {insightTab === "time" && (
+              <div>
+                {filteredClassified.length > 0 ? (
+                  <>
+                    <button
+                      onClick={() => setShowWeekdayChart((value) => !value)}
+                      className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                      {showWeekdayChart ? "グラフを非表示" : "曜日別グラフを表示"}
+                    </button>
+                    {showWeekdayChart && (
+                      <div className="mt-4 space-y-2">
+                        <p className="text-[11px] text-slate-500">
+                          ※ 祝日は独立したカテゴリとして集計し、平均件数は来院日ベースで算出しています。
+                        </p>
+                        <Suspense
+                          fallback={
+                            <div className="flex items-center justify-center py-8">
+                              <RefreshCw className="h-6 w-6 animate-spin text-brand-600" />
+                            </div>
+                          }
+                        >
+                          <WeekdayAverageChart
+                            records={filteredClassified}
+                            startMonth={startMonth}
+                            endMonth={endMonth}
+                          />
+                        </Suspense>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                    {!hasAnyRecords
+                      ? "カルテ集計CSVをアップロードすると、曜日別の平均患者数が表示されます。"
+                      : !hasPeriodRecords
+                        ? "選択した期間に該当するデータがありません。"
+                        : "選択された期間に該当するデータがありません。"}
+                  </p>
+                )}
+              </div>
+            )}
+            {insightTab === "channel" && (
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-3">
+                  {channelSummaryCards.map((card) => (
+                    <div
+                      key={card.id}
+                      className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{card.title}</p>
+                          <p className="text-[11px] text-slate-500">最終更新: {card.updated}</p>
+                        </div>
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                          {card.total}件
+                        </span>
+                      </div>
+                      <p className="mt-3 text-xs text-slate-500">{card.detail}</p>
+                      <p className="mt-2 text-[11px] text-slate-400">{card.helper}</p>
+                    </div>
+                  ))}
                 </div>
-              )}
-            </>
-          )}
-        </SectionCard>
-
-        <SectionCard
-          title={startMonth && endMonth && startMonth !== endMonth
-            ? `曜日別平均患者数（${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}）`
-            : startMonth && endMonth && startMonth === endMonth
-              ? `曜日別平均患者数（${formatMonthLabel(startMonth)}）`
-              : "曜日別平均患者数"
-          }
-          description="月曜日から日曜日および祝日（12月27日〜1月3日含む）の診療科別平均患者数です。総合診療科と内視鏡の2つの診療科グループで集計しています。"
-        >
-          {filteredClassified.length > 0 ? (
-            <>
-              <button
-                onClick={() => setShowWeekdayChart(!showWeekdayChart)}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                {showWeekdayChart ? "グラフを非表示" : "グラフを表示"}
-              </button>
-              {showWeekdayChart && (
-                <div className="mt-4">
-                  <Suspense fallback={<div className="flex items-center justify-center py-8"><RefreshCw className="h-6 w-6 animate-spin text-brand-600" /></div>}>
-                    <WeekdayAverageChart
-                      records={filteredClassified}
-                      startMonth={startMonth}
-                      endMonth={endMonth}
-                    />
-                  </Suspense>
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-              {!hasAnyRecords
-                ? "カルテ集計CSVをアップロードすると、曜日別の平均患者数が表示されます。"
-                : !hasPeriodRecords
-                  ? "選択した期間に該当するデータがありません。"
-                  : "選択された期間に該当するデータがありません。"}
-            </p>
-          )}
+                {channelSummaryCards.every((card) => card.rawTotal === 0) && (
+                  <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                    CSVを取り込むとチャネル別の実績サマリーが表示されます。
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         </SectionCard>
 
         <SectionCard
@@ -2110,7 +2594,10 @@ export default function PatientAnalysisPage() {
                     {showDiagnosisChart ? "グラフを非表示" : "月次トレンドを表示"}
                   </button>
                   {showDiagnosisChart && (
-                    <div className="mt-4">
+                    <div className="mt-4 space-y-2">
+                      <p className="text-[11px] text-slate-500">
+                        ※ 主病件数の推移に加えて前期間との差分を重ねて表示します。凡例で診療科の表示切替が可能です。
+                      </p>
                       <Suspense
                         fallback={
                           <div className="rounded-2xl border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-brand-600">
@@ -2285,289 +2772,289 @@ export default function PatientAnalysisPage() {
           )}
         </SectionCard>
 
-        <SectionCard
-          title="データ管理"
-          description="カルテ集計の差し替えや共有URL発行に加え、他指標のCSV取り込みもまとめて管理します。"
-        >
-          <div className="space-y-3">
-            <p className="text-xs text-slate-500">
-              {isReadOnly
-                ? "共有URLから閲覧中です。操作内容は公開データに即時反映されるため取り扱いにご注意ください。"
-                : "カルテ集計に加えて、予約ログ・アンケート・広告のCSVもこのページでまとめて更新できます。共有URLはコピーして関係者へ連携してください。"}
-            </p>
-            <div className="space-y-2">
-              {records.length > 0 && (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
-                  📊 カルテ集計データ: <span className="font-semibold">{records.length.toLocaleString("ja-JP")}件</span>
-                </div>
-              )}
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-emerald-200 px-4 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 sm:w-auto">
-                  <Upload className="h-4 w-4" />
-                  CSVを選択
-                  <input
-                    type="file"
-                    accept=".csv,text/csv"
-                    onChange={handleUpload}
-                    multiple
-                    className="hidden"
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={handleShare}
-                  disabled={isSharing || records.length === 0}
-                  className="flex w-full items-center justify-center gap-2 rounded-full border border-emerald-200 px-4 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                >
-                  {isSharing ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      生成中...
-                    </>
-                  ) : (
-                    <>
-                      <Share2 className="h-4 w-4" />
-                      共有URLを発行
-                    </>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  disabled={records.length === 0}
-                  className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  集計データをリセット
-                </button>
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
-              <p className="text-xs font-semibold text-slate-700">その他のデータ管理</p>
-              <p className="text-[11px] text-slate-500">
-                以下でアップロードすると予約ログ・アンケート・広告の各ページへ即時反映されます。
-              </p>
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <div className="rounded-2xl border border-brand-200 bg-white/90 p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-brand-700">予約ログCSV</p>
-                      <p className="text-xs text-slate-500">受付ログ分析ダッシュボードで利用します。</p>
-                    </div>
-                    <div className="text-right text-[11px] text-slate-500">
-                      <p>
-                        最終更新:{" "}
-                        {reservationStatus.lastUpdated
-                          ? new Date(reservationStatus.lastUpdated).toLocaleString("ja-JP")
-                          : "未登録"}
-                      </p>
-                      <p>
-                        登録件数: {reservationStatus.total.toLocaleString("ja-JP")}件
-                      </p>
-                    </div>
-                  </div>
-                  <label
-                    className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition sm:w-auto ${
-                      isUploadingReservation
-                        ? "pointer-events-none border-brand-100 bg-brand-50 text-brand-300"
-                        : "border-brand-200 text-brand-600 hover:bg-brand-50"
-                    }`}
-                  >
-                    <Upload className="h-4 w-4" />
-                    {isUploadingReservation ? "アップロード中..." : "予約ログCSVを選択"}
-                    <input
-                      type="file"
-                      accept=".csv,text/csv"
-                      onChange={handleReservationUpload}
-                      multiple
-                      disabled={isUploadingReservation}
-                      className="hidden"
-                    />
-                  </label>
-                  {reservationUploadError && (
-                    <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
-                      {reservationUploadError}
-                    </p>
-                  )}
-                </div>
-                <div className="rounded-2xl border border-purple-200 bg-white/90 p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-purple-700">アンケートCSV</p>
-                      <p className="text-xs text-slate-500">来院経路アンケートの可視化に利用します。</p>
-                    </div>
-                    <div className="text-right text-[11px] text-slate-500">
-                      <p>
-                        最終更新:{" "}
-                        {surveyStatus.lastUpdated
-                          ? new Date(surveyStatus.lastUpdated).toLocaleString("ja-JP")
-                          : "未登録"}
-                      </p>
-                      <p>
-                        登録件数: {surveyStatus.total.toLocaleString("ja-JP")}件
-                      </p>
-                      <p>
-                        内訳: 外来 {surveyStatus.byType["外来"].toLocaleString("ja-JP")}件 / 内視鏡 {surveyStatus.byType["内視鏡"].toLocaleString("ja-JP")}件
-                      </p>
-                    </div>
-                  </div>
-                  <label
-                    className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition sm:w-auto ${
-                      isUploadingSurvey
-                        ? "pointer-events-none border-purple-100 bg-purple-50 text-purple-300"
-                        : "border-purple-200 text-purple-600 hover:bg-purple-50"
-                    }`}
-                  >
-                    <Upload className="h-4 w-4" />
-                    {isUploadingSurvey ? "アップロード中..." : "アンケートCSVを選択"}
-                    <input
-                      type="file"
-                      accept=".csv,text/csv"
-                      onChange={handleSurveyUpload}
-                      multiple
-                      disabled={isUploadingSurvey}
-                      className="hidden"
-                    />
-                  </label>
-                  {surveyUploadError && (
-                    <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
-                      {surveyUploadError}
-                    </p>
-                  )}
-                </div>
-                <div className="rounded-2xl border border-amber-200 bg-white/90 p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-amber-700">傷病名CSV（主病）</p>
-                      <p className="text-xs text-slate-500">主病トレンド分析セクションで利用します。</p>
-                    </div>
-                    <div className="text-right text-[11px] text-slate-500">
-                      <p>
-                        最終更新:{" "}
-                        {diagnosisStatus.lastUpdated
-                          ? new Date(diagnosisStatus.lastUpdated).toLocaleString("ja-JP")
-                          : "未登録"}
-                      </p>
-                      <p>登録件数: {diagnosisStatus.total.toLocaleString("ja-JP")}件</p>
-                      <p>
-                        内訳:{" "}
-                        {DIAGNOSIS_TARGET_DEPARTMENTS.map((department, index) => (
-                          <span key={department}>
-                            {index > 0 ? " / " : ""}
-                            {department}{" "}
-                            {diagnosisStatus.byDepartment[department].toLocaleString("ja-JP")}件
-                          </span>
-                        ))}
-                      </p>
-                      <p>
-                        カテゴリ内訳:{" "}
-                        {DIAGNOSIS_CATEGORIES.map((category, index) => (
-                          <span key={category}>
-                            {index > 0 ? " / " : ""}
-                            {category}{" "}
-                            {diagnosisStatus.byCategory[category].toLocaleString("ja-JP")}件
-                          </span>
-                        ))}
-                      </p>
-                    </div>
-                  </div>
-                  <label
-                    className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition sm:w-auto ${
-                      isUploadingDiagnosis
-                        ? "pointer-events-none border-amber-100 bg-amber-50 text-amber-300"
-                        : "border-amber-200 text-amber-600 hover:bg-amber-50"
-                    }`}
-                  >
-                    <Upload className="h-4 w-4" />
-                    {isUploadingDiagnosis ? "アップロード中..." : "傷病名CSVを選択"}
-                    <input
-                      type="file"
-                      accept=".csv,text/csv"
-                      onChange={handleDiagnosisUpload}
-                      multiple
-                      disabled={isUploadingDiagnosis}
-                      className="hidden"
-                    />
-                  </label>
-                  {diagnosisUploadError && (
-                    <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
-                      {diagnosisUploadError}
-                    </p>
-                  )}
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 space-y-3 md:col-span-2">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-700">リスティング広告CSV</p>
-                      <p className="text-xs text-slate-500">カテゴリ別に広告実績を更新します。</p>
-                    </div>
-                    <div className="text-right text-[11px] text-slate-500">
-                      <p>
-                        最終更新:{" "}
-                        {listingStatus.lastUpdated
-                          ? new Date(listingStatus.lastUpdated).toLocaleString("ja-JP")
-                          : "未登録"}
-                      </p>
-                      <p>
-                        登録件数:{" "}
-                        {LISTING_CATEGORIES.map((category, index) => (
-                          <span key={category}>
-                            {index > 0 ? " / " : ""}
-                            {category} {listingStatus.totals[category].toLocaleString("ja-JP")}件
-                          </span>
-                        ))}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {LISTING_CATEGORIES.map((category) => {
-                      const uploading = isUploadingListing[category];
-                      return (
-                        <label
-                          key={category}
-                          className={`flex cursor-pointer items-center justify-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition ${
-                            uploading
-                              ? "pointer-events-none border-slate-100 bg-slate-50 text-slate-400"
-                              : "border-slate-200 text-slate-600 hover:bg-slate-100"
-                          }`}
-                        >
-                          <Upload className="h-4 w-4" />
-                          {category}CSV
-                          <input
-                            type="file"
-                            accept=".csv,text/csv"
-                            onChange={handleListingUpload(category)}
-                            multiple
-                            disabled={uploading}
-                            className="hidden"
-                          />
-                        </label>
-                      );
-                    })}
-                  </div>
-                  {listingUploadError && (
-                    <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
-                      {listingUploadError}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-            {shareUrl && (
-              <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3">
-                <p className="flex items-center gap-2 text-xs text-green-700">
-                  <LinkIcon className="h-4 w-4" />
-                  共有URL: <code className="rounded bg-white px-2 py-1">{shareUrl}</code>
-                </p>
-              </div>
-            )}
-            {uploadError && (
-              <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
-                {uploadError}
-              </p>
-            )}
           </div>
-        </SectionCard>
+          <aside className="space-y-6 lg:sticky lg:top-8">
+            <SectionCard
+              title="データ管理"
+              description="カルテ集計の差し替えや共有URL発行に加え、他指標のCSV取り込みもまとめて管理します。"
+            >
+              <div className="space-y-3">
+                <p className="text-xs text-slate-500">
+                  {isReadOnly
+                    ? "共有URLから閲覧中です。操作内容は公開データに即時反映されるため取り扱いにご注意ください。"
+                    : "カルテ集計に加えて、予約ログ・アンケート・広告のCSVもこのページでまとめて更新できます。共有URLはコピーして関係者へ連携してください。"}
+                </p>
+                <div className="space-y-2">
+                  {records.length > 0 && (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                      📊 カルテ集計データ:{" "}
+                      <span className="font-semibold">{records.length.toLocaleString("ja-JP")}件</span>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-emerald-200 px-4 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 sm:w-auto">
+                      <Upload className="h-4 w-4" />
+                      CSVを選択
+                      <input
+                        type="file"
+                        accept=".csv,text/csv"
+                        onChange={handleUpload}
+                        multiple
+                        className="hidden"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleShare}
+                      disabled={isSharing || records.length === 0}
+                      className="flex w-full items-center justify-center gap-2 rounded-full border border-emerald-200 px-4 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                    >
+                      {isSharing ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                          生成中...
+                        </>
+                      ) : (
+                        <>
+                          <Share2 className="h-4 w-4" />
+                          共有URLを発行
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleReset}
+                      disabled={records.length === 0}
+                      className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      集計データをリセット
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
+                  <p className="text-xs font-semibold text-slate-700">その他のデータ管理</p>
+                  <p className="text-[11px] text-slate-500">
+                    以下でアップロードすると予約ログ・アンケート・広告の各ページへ即時反映されます。
+                  </p>
+                  <div className="mt-3 grid gap-3">
+                    <div className="rounded-2xl border border-brand-200 bg-white/90 p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-brand-700">予約ログCSV</p>
+                          <p className="text-xs text-slate-500">受付ログ分析ダッシュボードで利用します。</p>
+                        </div>
+                        <div className="text-right text-[11px] text-slate-500">
+                          <p>
+                            最終更新:{" "}
+                            {reservationStatus.lastUpdated
+                              ? new Date(reservationStatus.lastUpdated).toLocaleString("ja-JP")
+                              : "未登録"}
+                          </p>
+                          <p>登録件数: {reservationStatus.total.toLocaleString("ja-JP")}件</p>
+                        </div>
+                      </div>
+                      <label
+                        className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                          isUploadingReservation
+                            ? "pointer-events-none border-brand-100 bg-brand-50 text-brand-300"
+                            : "border-brand-200 text-brand-600 hover:bg-brand-50"
+                        }`}
+                      >
+                        <Upload className="h-4 w-4" />
+                        {isUploadingReservation ? "アップロード中..." : "予約ログCSVを選択"}
+                        <input
+                          type="file"
+                          accept=".csv,text/csv"
+                          onChange={handleReservationUpload}
+                          multiple
+                          disabled={isUploadingReservation}
+                          className="hidden"
+                        />
+                      </label>
+                      {reservationUploadError && (
+                        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                          {reservationUploadError}
+                        </p>
+                      )}
+                    </div>
+                    <div className="rounded-2xl border border-purple-200 bg-white/90 p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-purple-700">アンケートCSV</p>
+                          <p className="text-xs text-slate-500">来院経路アンケートの可視化に利用します。</p>
+                        </div>
+                        <div className="text-right text-[11px] text-slate-500">
+                          <p>
+                            最終更新:{" "}
+                            {surveyStatus.lastUpdated
+                              ? new Date(surveyStatus.lastUpdated).toLocaleString("ja-JP")
+                              : "未登録"}
+                          </p>
+                          <p>登録件数: {surveyStatus.total.toLocaleString("ja-JP")}件</p>
+                          <p>
+                            内訳: 外来 {surveyStatus.byType["外来"].toLocaleString("ja-JP")}件 / 内視鏡{" "}
+                            {surveyStatus.byType["内視鏡"].toLocaleString("ja-JP")}件
+                          </p>
+                        </div>
+                      </div>
+                      <label
+                        className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                          isUploadingSurvey
+                            ? "pointer-events-none border-purple-100 bg-purple-50 text-purple-300"
+                            : "border-purple-200 text-purple-600 hover:bg-purple-50"
+                        }`}
+                      >
+                        <Upload className="h-4 w-4" />
+                        {isUploadingSurvey ? "アップロード中..." : "アンケートCSVを選択"}
+                        <input
+                          type="file"
+                          accept=".csv,text/csv"
+                          onChange={handleSurveyUpload}
+                          multiple
+                          disabled={isUploadingSurvey}
+                          className="hidden"
+                        />
+                      </label>
+                      {surveyUploadError && (
+                        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                          {surveyUploadError}
+                        </p>
+                      )}
+                    </div>
+                    <div className="rounded-2xl border border-amber-200 bg-white/90 p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-amber-700">傷病名CSV（主病）</p>
+                          <p className="text-xs text-slate-500">主病トレンド分析セクションで利用します。</p>
+                        </div>
+                        <div className="text-right text-[11px] text-slate-500">
+                          <p>
+                            最終更新:{" "}
+                            {diagnosisStatus.lastUpdated
+                              ? new Date(diagnosisStatus.lastUpdated).toLocaleString("ja-JP")
+                              : "未登録"}
+                          </p>
+                          <p>登録件数: {diagnosisStatus.total.toLocaleString("ja-JP")}件</p>
+                          <p>
+                            内訳:{" "}
+                            {DIAGNOSIS_TARGET_DEPARTMENTS.map((department, index) => (
+                              <span key={department}>
+                                {index > 0 ? " / " : ""}
+                                {department} {diagnosisStatus.byDepartment[department].toLocaleString("ja-JP")}件
+                              </span>
+                            ))}
+                          </p>
+                          <p>
+                            カテゴリ内訳:{" "}
+                            {DIAGNOSIS_CATEGORIES.map((category, index) => (
+                              <span key={category}>
+                                {index > 0 ? " / " : ""}
+                                {category} {diagnosisStatus.byCategory[category].toLocaleString("ja-JP")}件
+                              </span>
+                            ))}
+                          </p>
+                        </div>
+                      </div>
+                      <label
+                        className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                          isUploadingDiagnosis
+                            ? "pointer-events-none border-amber-100 bg-amber-50 text-amber-300"
+                            : "border-amber-200 text-amber-600 hover:bg-amber-50"
+                        }`}
+                      >
+                        <Upload className="h-4 w-4" />
+                        {isUploadingDiagnosis ? "アップロード中..." : "傷病名CSVを選択"}
+                        <input
+                          type="file"
+                          accept=".csv,text/csv"
+                          onChange={handleDiagnosisUpload}
+                          multiple
+                          disabled={isUploadingDiagnosis}
+                          className="hidden"
+                        />
+                      </label>
+                      {diagnosisUploadError && (
+                        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                          {diagnosisUploadError}
+                        </p>
+                      )}
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 space-y-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-700">リスティング広告CSV</p>
+                          <p className="text-xs text-slate-500">カテゴリ別に広告実績を更新します。</p>
+                        </div>
+                        <div className="text-right text-[11px] text-slate-500">
+                          <p>
+                            最終更新:{" "}
+                            {listingStatus.lastUpdated
+                              ? new Date(listingStatus.lastUpdated).toLocaleString("ja-JP")
+                              : "未登録"}
+                          </p>
+                          <p>
+                            登録件数:{" "}
+                            {LISTING_CATEGORIES.map((category, index) => (
+                              <span key={category}>
+                                {index > 0 ? " / " : ""}
+                                {category} {listingStatus.totals[category].toLocaleString("ja-JP")}件
+                              </span>
+                            ))}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {LISTING_CATEGORIES.map((category) => {
+                          const uploading = isUploadingListing[category];
+                          return (
+                            <label
+                              key={category}
+                              className={`flex cursor-pointer items-center justify-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                                uploading
+                                  ? "pointer-events-none border-slate-100 bg-slate-50 text-slate-400"
+                                  : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                              }`}
+                            >
+                              <Upload className="h-4 w-4" />
+                              {category}CSV
+                              <input
+                                type="file"
+                                accept=".csv,text/csv"
+                                onChange={handleListingUpload(category)}
+                                multiple
+                                disabled={uploading}
+                                className="hidden"
+                              />
+                            </label>
+                          );
+                        })}
+                      </div>
+                      {listingUploadError && (
+                        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                          {listingUploadError}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {shareUrl && (
+                  <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3">
+                    <p className="flex items-center gap-2 text-xs text-green-700">
+                      <LinkIcon className="h-4 w-4" />
+                      共有URL: <code className="rounded bg-white px-2 py-1">{shareUrl}</code>
+                    </p>
+                  </div>
+                )}
+                {uploadError && (
+                  <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+                    {uploadError}
+                  </p>
+                )}
+              </div>
+            </SectionCard>
+          </aside>
+        </div>
       </div>
     </main>
   );
