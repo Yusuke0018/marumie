@@ -1,0 +1,12 @@
+timestamp: 2025-10-11T08-50-01+0900
+branch: main
+commit: d6220baf734dec5494175595aaf48ee9add69a12
+diffstat:
+  src/app/patients/page.tsx | 2 +-
+commands:
+  - npm install (success)
+  - npm run lint (success)
+push: origin/main にプッシュ完了
+notes:
+  - 曜日・時間帯別インサイトの説明文に予約CSVの氏名列がI列であることを明記
+  - 予約CSVとカルテCSVの突合条件の誤案内(K列)を解消
