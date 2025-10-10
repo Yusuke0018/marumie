@@ -268,15 +268,15 @@ export default function CorrelationPage() {
     
     currentReservations.forEach(reservation => {
       // 予約データの安全性チェック
-      if (!reservation.reservationMonth || typeof reservation.reservationHour !== 'number') return;
-      
-      // 予約の年月日を取得（reservationMonthはYYYY/MM形式）
-      const resMonth = reservation.reservationMonth.replace('/', '-');
-      // その月のすべての日付に対して予約を振り分け
-      for (const [date, entry] of dateMap.entries()) {
-        if (date.startsWith(resMonth)) {
-          entry.reservationsByHour[reservation.reservationHour]++;
-        }
+      if (!reservation.reservationDate || typeof reservation.reservationHour !== 'number') return;
+
+      // 予約の実際の受診日を取得（reservationDateはYYYY-MM-DD形式）
+      const resDate = reservation.reservationDate;
+
+      // 同じ日付のエントリが存在する場合のみ予約を追加
+      if (dateMap.has(resDate)) {
+        const entry = dateMap.get(resDate)!;
+        entry.reservationsByHour[reservation.reservationHour]++;
       }
     });
     
