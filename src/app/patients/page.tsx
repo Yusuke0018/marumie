@@ -1223,7 +1223,7 @@ export default function PatientAnalysisPage() {
               >
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                   <StatCard
-                    label={`最新月 (${formatMonthLabel(latestStat.month)}) 総患者`}
+                    label={`${formatMonthLabel(latestStat.month)} 総患者`}
                     value={`${latestStat.totalPatients.toLocaleString("ja-JP")}名`}
                     tone="brand"
                     monthOverMonth={
@@ -1236,7 +1236,7 @@ export default function PatientAnalysisPage() {
                     isSingleMonth={isSingleMonthPeriod}
                   />
                   <StatCard
-                    label="最新月 純初診"
+                    label={`${formatMonthLabel(latestStat.month)} 純初診`}
                     value={`${latestStat.pureFirstVisits.toLocaleString("ja-JP")}名`}
                     tone="emerald"
                     monthOverMonth={
@@ -1249,7 +1249,7 @@ export default function PatientAnalysisPage() {
                     isSingleMonth={isSingleMonthPeriod}
                   />
                   <StatCard
-                    label="最新月 再初診"
+                    label={`${formatMonthLabel(latestStat.month)} 再初診`}
                     value={`${latestStat.returningFirstVisits.toLocaleString("ja-JP")}名`}
                     tone="muted"
                     monthOverMonth={
@@ -1262,7 +1262,7 @@ export default function PatientAnalysisPage() {
                     isSingleMonth={isSingleMonthPeriod}
                   />
                   <StatCard
-                    label="最新月 再診"
+                    label={`${formatMonthLabel(latestStat.month)} 再診`}
                     value={`${latestStat.revisitCount.toLocaleString("ja-JP")}名`}
                     tone="accent"
                     monthOverMonth={
@@ -1275,7 +1275,7 @@ export default function PatientAnalysisPage() {
                     isSingleMonth={isSingleMonthPeriod}
                   />
                   <StatCard
-                    label="最新月 平均年齢"
+                    label={`${formatMonthLabel(latestStat.month)} 平均年齢`}
                     value={
                       latestStat.averageAge !== null
                         ? `${roundTo1Decimal(latestStat.averageAge)}歳`
