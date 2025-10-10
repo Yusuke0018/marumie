@@ -24,6 +24,8 @@ type WeekdayBucket = {
   初診: number;
   再診: number;
   当日予約: number;
+  avgPerDay: number;
+  dayCount: number;
 };
 
 type WeekdayChartSectionProps = {
@@ -39,20 +41,20 @@ export const WeekdayChartSection = ({ weekdayData }: WeekdayChartSectionProps) =
             labels: weekdayData.map(d => d.weekday),
             datasets: [
               {
-                label: '初診',
-                data: weekdayData.map(d => d['初診']),
+                label: '初診（1日平均）',
+                data: weekdayData.map(d => d.dayCount > 0 ? d['初診'] / d.dayCount : 0),
                 backgroundColor: '#5DD4C3',
                 borderRadius: 4,
               },
               {
-                label: '再診',
-                data: weekdayData.map(d => d['再診']),
+                label: '再診（1日平均）',
+                data: weekdayData.map(d => d.dayCount > 0 ? d['再診'] / d.dayCount : 0),
                 backgroundColor: '#FFB8C8',
                 borderRadius: 4,
               },
               {
-                label: '当日予約',
-                data: weekdayData.map(d => d['当日予約']),
+                label: '当日予約（1日平均）',
+                data: weekdayData.map(d => d.dayCount > 0 ? d['当日予約'] / d.dayCount : 0),
                 backgroundColor: '#FFA500',
                 borderRadius: 4,
               },
@@ -73,7 +75,13 @@ export const WeekdayChartSection = ({ weekdayData }: WeekdayChartSectionProps) =
               tooltip: {
                 callbacks: {
                   label: (context) => {
-                    return `${context.dataset.label}: ${context.parsed.y.toLocaleString('ja-JP')}`;
+                    const value = context.parsed.y;
+                    return `${context.dataset.label}: ${value.toFixed(1)}`;
+                  },
+                  afterLabel: (context) => {
+                    const index = context.dataIndex;
+                    const bucket = weekdayData[index];
+                    return `(${bucket.dayCount}日分のデータ)`;
                   },
                 },
               },
@@ -85,7 +93,16 @@ export const WeekdayChartSection = ({ weekdayData }: WeekdayChartSectionProps) =
               },
               y: {
                 grid: { color: 'rgba(148, 163, 184, 0.2)' },
-                ticks: { font: { size: 12 }, color: '#64748B' },
+                ticks: {
+                  font: { size: 12 },
+                  color: '#64748B',
+                  callback: (value) => {
+                    if (typeof value === 'number') {
+                      return value.toFixed(1);
+                    }
+                    return value;
+                  },
+                },
               },
             },
             animation: false,

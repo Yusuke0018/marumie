@@ -218,6 +218,8 @@ type WeekdayBucket = {
   初診: number;
   再診: number;
   当日予約: number;
+  avgPerDay: number;
+  dayCount: number;
 };
 
 type DayTypeBucket = {
@@ -257,6 +259,7 @@ const aggregateReservationInsights = (
     "祝日",
   ];
   const weekdayMap = new Map<string, WeekdayBucket>();
+  const weekdayDays = new Map<string, Set<string>>();
   weekdayOrder.forEach((weekday) => {
     weekdayMap.set(weekday, {
       weekday,
@@ -264,7 +267,10 @@ const aggregateReservationInsights = (
       初診: 0,
       再診: 0,
       当日予約: 0,
+      avgPerDay: 0,
+      dayCount: 0,
     });
+    weekdayDays.set(weekday, new Set<string>());
   });
 
   const dayTypeMap = new Map<
@@ -347,6 +353,8 @@ const aggregateReservationInsights = (
       if (reservation.isSameDay) {
         weekdayBucket["当日予約"] += 1;
       }
+      // 曜日ごとの日数を追跡
+      weekdayDays.get(dayInfo.weekday)?.add(reservation.reservationDate);
     }
 
     let dayTypeBucket = dayTypeMap.get(dayInfo.dayType);
@@ -361,7 +369,13 @@ const aggregateReservationInsights = (
     }
   }
 
-  const weekdayData = weekdayOrder.map((weekday) => weekdayMap.get(weekday)!);
+  const weekdayData = weekdayOrder.map((weekday) => {
+    const bucket = weekdayMap.get(weekday)!;
+    const dayCount = weekdayDays.get(weekday)?.size ?? 0;
+    bucket.dayCount = dayCount;
+    bucket.avgPerDay = dayCount > 0 ? bucket.total / dayCount : 0;
+    return bucket;
+  });
 
   const dayTypeData: DayTypeBucket[] = Array.from(dayTypeMap.entries())
     .map(([dayType, data]) => ({
@@ -978,7 +992,7 @@ export default function HomePage() {
 
         <SectionCard
           title="曜日別 予約傾向"
-          description="曜日ごとの予約件数の分布を表示しています。"
+          description="曜日ごとの1日あたり平均予約件数を表示しています。"
         >
           {!showWeekdayChart ? (
             <button
