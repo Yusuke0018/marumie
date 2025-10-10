@@ -2109,20 +2109,23 @@ export default function PatientAnalysisPage() {
           )}
         </section>
 
-        <section className="sticky top-4 z-30">
-          <div className="rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-soft backdrop-blur">
-            {summaryHighlights.length > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-                {summaryHighlights.map((highlight) => (
-                  <SummaryHighlightCard key={highlight.id} {...highlight} />
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-                CSVをアップロードすると期間サマリーが表示されます。
-              </div>
-            )}
-            <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <section className="rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-soft">
+          {summaryHighlights.length > 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+              {summaryHighlights.map((highlight) => (
+                <SummaryHighlightCard key={highlight.id} {...highlight} />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+              CSVをアップロードすると期間サマリーが表示されます。
+            </div>
+          )}
+        </section>
+
+        <div className="sticky top-4 z-30">
+          <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-soft backdrop-blur">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
                   <label className="text-sm font-semibold text-slate-700">開始月:</label>
@@ -2184,7 +2187,7 @@ export default function PatientAnalysisPage() {
               </div>
             </div>
           </div>
-        </section>
+        </div>
 
         {stats.length > 0 ? (
           <>
