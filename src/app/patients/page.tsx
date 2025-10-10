@@ -63,6 +63,7 @@ import {
   saveDiagnosisToStorage,
   loadDiagnosisTimestamp,
   aggregateDiagnosisMonthly,
+  aggregateDiagnosisCategoryMonthly,
   filterDiagnosisByMonthRange,
   summarizeDiagnosisByDisease,
   extractDiagnosisMonths,
@@ -95,6 +96,11 @@ const WeekdayAverageChart = lazy(() =>
 const DiagnosisMonthlyChart = lazy(() =>
   import("@/components/patients/DiagnosisMonthlyChart").then((m) => ({
     default: m.DiagnosisMonthlyChart,
+  })),
+);
+const DiagnosisCategoryChart = lazy(() =>
+  import("@/components/patients/DiagnosisCategoryChart").then((m) => ({
+    default: m.DiagnosisCategoryChart,
   })),
 );
 
@@ -504,6 +510,7 @@ export default function PatientAnalysisPage() {
   const [isUploadingDiagnosis, setIsUploadingDiagnosis] = useState(false);
   const [diagnosisUploadError, setDiagnosisUploadError] = useState<string | null>(null);
   const [showDiagnosisChart, setShowDiagnosisChart] = useState(false);
+  const [showDiagnosisCategoryChart, setShowDiagnosisCategoryChart] = useState(false);
 
   const applySharedBundle = useCallback(
     (bundle: SharedDataBundle, fallbackTimestamp?: string) => {
@@ -1019,6 +1026,11 @@ export default function PatientAnalysisPage() {
     [filteredDiagnosisRecords],
   );
 
+  const diagnosisCategoryMonthlyInRange = useMemo(
+    () => aggregateDiagnosisCategoryMonthly(filteredDiagnosisRecords),
+    [filteredDiagnosisRecords],
+  );
+
   const diagnosisDepartmentTotals = useMemo(() => {
     if (filteredDiagnosisRecords.length === 0) {
       return createEmptyDiagnosisDepartmentTotals();
@@ -1205,6 +1217,7 @@ export default function PatientAnalysisPage() {
   const hasPeriodRecords = periodFilteredRecords.length > 0;
   const hasDiagnosisRecords = filteredDiagnosisRecords.length > 0;
   const canShowDiagnosisChart = diagnosisMonthlyInRange.length > 0;
+  const canShowDiagnosisCategoryChart = diagnosisCategoryMonthlyInRange.length > 0;
 
   const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -2062,6 +2075,29 @@ export default function PatientAnalysisPage() {
                         }
                       >
                         <DiagnosisMonthlyChart summaries={diagnosisMonthlyInRange} />
+                      </Suspense>
+                    </div>
+                  )}
+                </>
+              )}
+              {canShowDiagnosisCategoryChart && (
+                <>
+                  <button
+                    onClick={() => setShowDiagnosisCategoryChart((value) => !value)}
+                    className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    {showDiagnosisCategoryChart ? "カテゴリ別推移を非表示" : "カテゴリ別推移を表示"}
+                  </button>
+                  {showDiagnosisCategoryChart && (
+                    <div className="mt-4">
+                      <Suspense
+                        fallback={
+                          <div className="rounded-2xl border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-brand-600">
+                            グラフを準備中です...
+                          </div>
+                        }
+                      >
+                        <DiagnosisCategoryChart summaries={diagnosisCategoryMonthlyInRange} />
                       </Suspense>
                     </div>
                   )}

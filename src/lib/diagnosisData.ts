@@ -32,6 +32,11 @@ export type DiagnosisMonthlySummary = {
   totals: Record<DiagnosisDepartment, number>;
 };
 
+export type DiagnosisCategoryMonthlySummary = {
+  month: string;
+  totals: Record<DiagnosisCategory, number>;
+};
+
 export type DiagnosisDiseaseSummary = {
   department: DiagnosisDepartment;
   category: DiagnosisCategory;
@@ -353,6 +358,15 @@ const createEmptyTotals = () =>
     {} as Record<DiagnosisDepartment, number>,
   );
 
+const createEmptyDiagnosisCategoryTotals = () =>
+  DIAGNOSIS_CATEGORIES.reduce(
+    (acc, category) => {
+      acc[category] = 0;
+      return acc;
+    },
+    {} as Record<DiagnosisCategory, number>,
+  );
+
 export const aggregateDiagnosisMonthly = (
   records: DiagnosisRecord[],
 ): DiagnosisMonthlySummary[] => {
@@ -367,6 +381,30 @@ export const aggregateDiagnosisMonthly = (
     }
     const bucket = map.get(record.monthKey)!;
     bucket[record.department] += 1;
+  }
+
+  return Array.from(map.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([month, totals]) => ({
+      month,
+      totals,
+    }));
+};
+
+export const aggregateDiagnosisCategoryMonthly = (
+  records: DiagnosisRecord[],
+): DiagnosisCategoryMonthlySummary[] => {
+  if (records.length === 0) {
+    return [];
+  }
+
+  const map = new Map<string, Record<DiagnosisCategory, number>>();
+  for (const record of records) {
+    if (!map.has(record.monthKey)) {
+      map.set(record.monthKey, createEmptyDiagnosisCategoryTotals());
+    }
+    const bucket = map.get(record.monthKey)!;
+    bucket[record.category] += 1;
   }
 
   return Array.from(map.entries())
