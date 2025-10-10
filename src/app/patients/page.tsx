@@ -1319,7 +1319,7 @@ export default function PatientAnalysisPage() {
                         const returningMoM = prevStat ? calculateMonthOverMonth(stat.returningFirstVisits, prevStat.returningFirstVisits) : null;
                         const revisitMoM = prevStat ? calculateMonthOverMonth(stat.revisitCount, prevStat.revisitCount) : null;
                         const ageMoM = prevStat && stat.averageAge !== null && prevStat.averageAge !== null
-                          ? { value: stat.averageAge - prevStat.averageAge, percentage: ((stat.averageAge - prevStat.averageAge) / prevStat.averageAge) * 100 }
+                          ? { value: roundTo1Decimal(stat.averageAge - prevStat.averageAge), percentage: roundTo1Decimal(((stat.averageAge - prevStat.averageAge) / prevStat.averageAge) * 100) }
                           : null;
                         
                         return (
@@ -1331,7 +1331,7 @@ export default function PatientAnalysisPage() {
                             {stat.totalPatients.toLocaleString("ja-JP")}
                             {totalMoM && (
                               <span className={`ml-2 text-xs ${totalMoM.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                ({totalMoM.value >= 0 ? '+' : ''}{totalMoM.percentage.toFixed(1)}%)
+                                ({totalMoM.value >= 0 ? '+' : ''}{totalMoM.percentage}%)
                               </span>
                             )}
                           </td>
@@ -1339,7 +1339,7 @@ export default function PatientAnalysisPage() {
                             {stat.pureFirstVisits.toLocaleString("ja-JP")}
                             {pureMoM && (
                               <span className={`ml-2 text-xs ${pureMoM.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                ({pureMoM.value >= 0 ? '+' : ''}{pureMoM.percentage.toFixed(1)}%)
+                                ({pureMoM.value >= 0 ? '+' : ''}{pureMoM.percentage}%)
                               </span>
                             )}
                           </td>
@@ -1347,7 +1347,7 @@ export default function PatientAnalysisPage() {
                             {stat.returningFirstVisits.toLocaleString("ja-JP")}
                             {returningMoM && (
                               <span className={`ml-2 text-xs ${returningMoM.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                ({returningMoM.value >= 0 ? '+' : ''}{returningMoM.percentage.toFixed(1)}%)
+                                ({returningMoM.value >= 0 ? '+' : ''}{returningMoM.percentage}%)
                               </span>
                             )}
                           </td>
@@ -1355,15 +1355,15 @@ export default function PatientAnalysisPage() {
                             {stat.revisitCount.toLocaleString("ja-JP")}
                             {revisitMoM && (
                               <span className={`ml-2 text-xs ${revisitMoM.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                ({revisitMoM.value >= 0 ? '+' : ''}{revisitMoM.percentage.toFixed(1)}%)
+                                ({revisitMoM.value >= 0 ? '+' : ''}{revisitMoM.percentage}%)
                               </span>
                             )}
                           </td>
                           <td className="px-3 py-2">
-                            {stat.averageAge !== null ? `${stat.averageAge.toFixed(1)}歳` : "—"}
+                            {stat.averageAge !== null ? `${roundTo1Decimal(stat.averageAge)}歳` : "—"}
                             {ageMoM && (
                               <span className={`ml-2 text-xs ${ageMoM.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                ({ageMoM.value >= 0 ? '+' : ''}{ageMoM.percentage.toFixed(1)}%)
+                                ({ageMoM.value >= 0 ? '+' : ''}{roundTo1Decimal(ageMoM.percentage)}%)
                               </span>
                             )}
                           </td>
@@ -1417,7 +1417,7 @@ export default function PatientAnalysisPage() {
                 const returningMoM = prevRow ? calculateMonthOverMonth(row.returningFirst, prevRow.returningFirst) : null;
                 const revisitMoM = prevRow ? calculateMonthOverMonth(row.revisit, prevRow.revisit) : null;
                 const ageMoM = prevRow && row.averageAge !== null && prevRow.averageAge !== null
-                  ? { value: row.averageAge - prevRow.averageAge, percentage: ((row.averageAge - prevRow.averageAge) / prevRow.averageAge) * 100 }
+                  ? { value: roundTo1Decimal(row.averageAge - prevRow.averageAge), percentage: roundTo1Decimal(((row.averageAge - prevRow.averageAge) / prevRow.averageAge) * 100) }
                   : null;
                 
                 return (
