@@ -32,6 +32,9 @@ import {
   loadReservationTimestamp,
   saveReservationDiff,
   clearReservationDiff,
+  RESERVATION_STORAGE_KEY,
+  RESERVATION_TIMESTAMP_KEY,
+  RESERVATION_DIFF_STORAGE_KEY,
 } from "@/lib/reservationData";
 import {
   type SurveyData,
@@ -42,6 +45,8 @@ import {
   saveSurveyDataToStorage,
   loadSurveyTimestamp,
   type SurveyFileType,
+  SURVEY_STORAGE_KEY,
+  SURVEY_TIMESTAMP_KEY,
 } from "@/lib/surveyData";
 import {
   type ListingCategory,
@@ -52,6 +57,8 @@ import {
   loadListingDataFromStorage,
   saveListingDataToStorage,
   loadListingTimestamp,
+  LISTING_STORAGE_KEY,
+  LISTING_TIMESTAMP_KEY,
 } from "@/lib/listingData";
 import {
   type DiagnosisRecord,
@@ -70,6 +77,8 @@ import {
   calculatePreviousRange,
   DIAGNOSIS_TARGET_DEPARTMENTS,
   DIAGNOSIS_CATEGORIES,
+  DIAGNOSIS_STORAGE_KEY,
+  DIAGNOSIS_TIMESTAMP_KEY,
 } from "@/lib/diagnosisData";
 import type { SharedDataBundle } from "@/lib/sharedBundle";
 
@@ -1491,10 +1500,39 @@ export default function PatientAnalysisPage() {
     }
     window.localStorage.removeItem(KARTE_STORAGE_KEY);
     window.localStorage.removeItem(KARTE_TIMESTAMP_KEY);
+    window.localStorage.removeItem(RESERVATION_STORAGE_KEY);
+    window.localStorage.removeItem(RESERVATION_TIMESTAMP_KEY);
+    window.localStorage.removeItem(RESERVATION_DIFF_STORAGE_KEY);
+    window.localStorage.removeItem(SURVEY_STORAGE_KEY);
+    window.localStorage.removeItem(SURVEY_TIMESTAMP_KEY);
+    window.localStorage.removeItem(LISTING_STORAGE_KEY);
+    window.localStorage.removeItem(LISTING_TIMESTAMP_KEY);
+    window.localStorage.removeItem(DIAGNOSIS_STORAGE_KEY);
+    window.localStorage.removeItem(DIAGNOSIS_TIMESTAMP_KEY);
     setRecords([]);
     setShareUrl(null);
     setLastUpdated(null);
     setUploadError(null);
+    setReservationStatus({
+      lastUpdated: null,
+      total: 0,
+    });
+    setSurveyStatus({
+      lastUpdated: null,
+      total: 0,
+      byType: createEmptySurveyCounts(),
+    });
+    setListingStatus({
+      lastUpdated: null,
+      totals: createEmptyListingTotals(),
+    });
+    setDiagnosisRecords([]);
+    setDiagnosisStatus({
+      lastUpdated: null,
+      total: 0,
+      byDepartment: createEmptyDiagnosisDepartmentTotals(),
+      byCategory: createEmptyDiagnosisCategoryTotals(),
+    });
   };
 
   return (
