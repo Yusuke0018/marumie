@@ -8,7 +8,7 @@ export const DIAGNOSIS_TARGET_DEPARTMENTS: DiagnosisDepartment[] = [
   "オンライン診療（保険）",
 ];
 
-export type DiagnosisCategory = "生活習慣病" | "外科" | "皮膚科";
+export type DiagnosisCategory = "生活習慣病" | "外科" | "皮膚科" | "その他";
 
 export const DIAGNOSIS_CATEGORIES: DiagnosisCategory[] = [
   "生活習慣病",
@@ -245,7 +245,7 @@ const categorizeDiseaseName = (diseaseName: string): DiagnosisCategory => {
   if (includesKeyword(diseaseName, DERMATOLOGY_KEYWORDS)) {
     return "皮膚科";
   }
-  return "皮膚科";
+  return "その他";
 };
 
 export const parseDiagnosisCsv = (content: string): DiagnosisRecord[] => {
