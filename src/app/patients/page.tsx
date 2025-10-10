@@ -2123,8 +2123,8 @@ export default function PatientAnalysisPage() {
           )}
         </section>
 
-        <div className="sticky top-4 z-30">
-          <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-soft backdrop-blur">
+        <div className="sticky top-24 z-30 mt-4">
+          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-soft">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
