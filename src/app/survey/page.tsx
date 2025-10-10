@@ -25,6 +25,12 @@ const MonthlyTrendChart = lazy(() =>
   })),
 );
 
+const ComparisonChart = lazy(() =>
+  import("@/components/survey/ComparisonChart").then((m) => ({
+    default: m.ComparisonChart,
+  })),
+);
+
 const COLORS = [
   "#2A9D8F", "#FF7B7B", "#5DD4C3", "#E65C5C", "#75DBC3",
   "#FFB8C8", "#3FBFAA", "#FF9999", "#A3E7D7", "#FFC3CF"
@@ -51,6 +57,9 @@ export default function SurveyPage() {
   const [endMonth, setEndMonth] = useState<string>("");
   const [showGairaiChart, setShowGairaiChart] = useState(false);
   const [showNaishikyoChart, setShowNaishikyoChart] = useState(false);
+  const [showGairaiComparison, setShowGairaiComparison] = useState(false);
+  const [showNaishikyoComparison, setShowNaishikyoComparison] = useState(false);
+  const [comparisonType, setComparisonType] = useState<"count" | "percentage">("count");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -296,6 +305,9 @@ export default function SurveyPage() {
                     外来 - 来院経路の内訳
                   </h2>
                   <p className="mt-2 text-lg text-blue-50 font-semibold">
+                    📅 対象期間: {startMonth && endMonth ? (startMonth === endMonth ? startMonth : `${startMonth} 〜 ${endMonth}`) : "全期間"}
+                  </p>
+                  <p className="mt-1 text-lg text-blue-50 font-semibold">
                     総回答数: {gairaiChartData.reduce((sum, item) => sum + item.value, 0).toLocaleString("ja-JP")}件
                   </p>
                 </div>
@@ -360,12 +372,20 @@ export default function SurveyPage() {
                 </div>
                 {gairaiData.length > 0 && (
                   <>
-                    <button
-                      onClick={() => setShowGairaiChart(!showGairaiChart)}
-                      className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                    >
-                      {showGairaiChart ? "月次推移グラフを非表示" : "月次推移グラフを表示"}
-                    </button>
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        onClick={() => setShowGairaiChart(!showGairaiChart)}
+                        className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                      >
+                        {showGairaiChart ? "月次推移グラフを非表示" : "月次推移グラフを表示"}
+                      </button>
+                      <button
+                        onClick={() => setShowGairaiComparison(!showGairaiComparison)}
+                        className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                      >
+                        {showGairaiComparison ? "前月比較グラフを非表示" : "前月比較グラフを表示"}
+                      </button>
+                    </div>
                     {showGairaiChart && (
                       <Suspense
                         fallback={
@@ -376,6 +396,45 @@ export default function SurveyPage() {
                       >
                         <div className="mt-4">
                           <MonthlyTrendChart data={gairaiData} title="外来 - 来院経路の月次推移" />
+                        </div>
+                      </Suspense>
+                    )}
+                    {showGairaiComparison && (
+                      <Suspense
+                        fallback={
+                          <div className="mt-4 h-[400px] flex items-center justify-center text-slate-500">
+                            読み込み中...
+                          </div>
+                        }
+                      >
+                        <div className="mt-4 space-y-4">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setComparisonType("count")}
+                              className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${
+                                comparisonType === "count"
+                                  ? "border-blue-500 bg-blue-50 text-blue-700"
+                                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                              }`}
+                            >
+                              数の変化
+                            </button>
+                            <button
+                              onClick={() => setComparisonType("percentage")}
+                              className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${
+                                comparisonType === "percentage"
+                                  ? "border-blue-500 bg-blue-50 text-blue-700"
+                                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                              }`}
+                            >
+                              %の変化
+                            </button>
+                          </div>
+                          <ComparisonChart
+                            data={gairaiData}
+                            title="外来 - 来院経路の前月比較"
+                            comparisonType={comparisonType}
+                          />
                         </div>
                       </Suspense>
                     )}
@@ -392,6 +451,9 @@ export default function SurveyPage() {
                     内視鏡 - 来院経路の内訳
                   </h2>
                   <p className="mt-2 text-lg text-purple-50 font-semibold">
+                    📅 対象期間: {startMonth && endMonth ? (startMonth === endMonth ? startMonth : `${startMonth} 〜 ${endMonth}`) : "全期間"}
+                  </p>
+                  <p className="mt-1 text-lg text-purple-50 font-semibold">
                     総回答数: {naishikyoChartData.reduce((sum, item) => sum + item.value, 0).toLocaleString("ja-JP")}件
                   </p>
                 </div>
@@ -456,12 +518,20 @@ export default function SurveyPage() {
                 </div>
                 {naishikyoData.length > 0 && (
                   <>
-                    <button
-                      onClick={() => setShowNaishikyoChart(!showNaishikyoChart)}
-                      className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                    >
-                      {showNaishikyoChart ? "月次推移グラフを非表示" : "月次推移グラフを表示"}
-                    </button>
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        onClick={() => setShowNaishikyoChart(!showNaishikyoChart)}
+                        className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                      >
+                        {showNaishikyoChart ? "月次推移グラフを非表示" : "月次推移グラフを表示"}
+                      </button>
+                      <button
+                        onClick={() => setShowNaishikyoComparison(!showNaishikyoComparison)}
+                        className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                      >
+                        {showNaishikyoComparison ? "前月比較グラフを非表示" : "前月比較グラフを表示"}
+                      </button>
+                    </div>
                     {showNaishikyoChart && (
                       <Suspense
                         fallback={
@@ -472,6 +542,45 @@ export default function SurveyPage() {
                       >
                         <div className="mt-4">
                           <MonthlyTrendChart data={naishikyoData} title="内視鏡 - 来院経路の月次推移" />
+                        </div>
+                      </Suspense>
+                    )}
+                    {showNaishikyoComparison && (
+                      <Suspense
+                        fallback={
+                          <div className="mt-4 h-[400px] flex items-center justify-center text-slate-500">
+                            読み込み中...
+                          </div>
+                        }
+                      >
+                        <div className="mt-4 space-y-4">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setComparisonType("count")}
+                              className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${
+                                comparisonType === "count"
+                                  ? "border-purple-500 bg-purple-50 text-purple-700"
+                                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                              }`}
+                            >
+                              数の変化
+                            </button>
+                            <button
+                              onClick={() => setComparisonType("percentage")}
+                              className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${
+                                comparisonType === "percentage"
+                                  ? "border-purple-500 bg-purple-50 text-purple-700"
+                                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                              }`}
+                            >
+                              %の変化
+                            </button>
+                          </div>
+                          <ComparisonChart
+                            data={naishikyoData}
+                            title="内視鏡 - 来院経路の前月比較"
+                            comparisonType={comparisonType}
+                          />
                         </div>
                       </Suspense>
                     )}
