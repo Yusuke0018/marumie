@@ -3056,7 +3056,7 @@ export default function PatientAnalysisPage() {
                       </p>
                     )}
                     <p className="text-[11px] text-slate-500">
-                      ※ 予約CSVとカルテCSVの氏名・日付が一致したデータのみ集計しています。同姓同名の場合は先に一致した予約を使用します。
+                      ※ 予約CSV（I列: 氏名）とカルテCSVの氏名・日付が一致したデータのみ集計しています。同姓同名の場合は先に一致した予約を使用します。
                     </p>
                   </div>
                 )}
