@@ -2329,7 +2329,7 @@ export default function PatientAnalysisPage() {
               </button>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
-              <p className="text-xs font-semibold text-slate-700">他ページ向けCSVの取り込み</p>
+              <p className="text-xs font-semibold text-slate-700">その他のデータ管理</p>
               <p className="text-[11px] text-slate-500">
                 以下でアップロードすると予約ログ・アンケート・広告の各ページへ即時反映されます。
               </p>
