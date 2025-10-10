@@ -188,6 +188,7 @@ const DIAGNOSIS_CATEGORY_BADGE_CLASSES: Record<DiagnosisCategory, string> = {
   生活習慣病: "bg-emerald-50 text-emerald-600",
   外科: "bg-orange-50 text-orange-600",
   皮膚科: "bg-rose-50 text-rose-600",
+  その他: "bg-slate-50 text-slate-600",
 };
 
 const roundTo1Decimal = (value: number) => Math.round(value * 10) / 10;
