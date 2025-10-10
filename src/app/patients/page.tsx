@@ -53,6 +53,23 @@ import {
   saveListingDataToStorage,
   loadListingTimestamp,
 } from "@/lib/listingData";
+import {
+  type DiagnosisRecord,
+  type DiagnosisDepartment,
+  type DiagnosisCategory,
+  parseDiagnosisCsv,
+  mergeDiagnosisRecords,
+  loadDiagnosisFromStorage,
+  saveDiagnosisToStorage,
+  loadDiagnosisTimestamp,
+  aggregateDiagnosisMonthly,
+  filterDiagnosisByMonthRange,
+  summarizeDiagnosisByDisease,
+  extractDiagnosisMonths,
+  calculatePreviousRange,
+  DIAGNOSIS_TARGET_DEPARTMENTS,
+  DIAGNOSIS_CATEGORIES,
+} from "@/lib/diagnosisData";
 import type { SharedDataBundle } from "@/lib/sharedBundle";
 
 const MonthlySummaryChart = lazy(() =>
@@ -73,6 +90,11 @@ const DepartmentChart = lazy(() =>
 const WeekdayAverageChart = lazy(() =>
   import("@/components/patients/WeekdayAverageChart").then((m) => ({
     default: m.WeekdayAverageChart,
+  })),
+);
+const DiagnosisMonthlyChart = lazy(() =>
+  import("@/components/patients/DiagnosisMonthlyChart").then((m) => ({
+    default: m.DiagnosisMonthlyChart,
   })),
 );
 
@@ -107,6 +129,51 @@ const summarizeSurveyByType = (data: SurveyData[]): Record<SurveyFileType, numbe
     counts[item.fileType] = (counts[item.fileType] ?? 0) + 1;
   }
   return counts;
+};
+
+const createEmptyDiagnosisDepartmentTotals = (): Record<DiagnosisDepartment, number> =>
+  DIAGNOSIS_TARGET_DEPARTMENTS.reduce(
+    (acc, department) => {
+      acc[department] = 0;
+      return acc;
+    },
+    {} as Record<DiagnosisDepartment, number>,
+  );
+
+const calculateDiagnosisDepartmentTotals = (
+  records: DiagnosisRecord[],
+): Record<DiagnosisDepartment, number> => {
+  const totals = createEmptyDiagnosisDepartmentTotals();
+  for (const record of records) {
+    totals[record.department] = (totals[record.department] ?? 0) + 1;
+  }
+  return totals;
+};
+
+const createEmptyDiagnosisCategoryTotals = (): Record<DiagnosisCategory, number> =>
+  DIAGNOSIS_CATEGORIES.reduce(
+    (acc, category) => {
+      acc[category] = 0;
+      return acc;
+    },
+    {} as Record<DiagnosisCategory, number>,
+  );
+
+const calculateDiagnosisCategoryTotals = (
+  records: DiagnosisRecord[],
+): Record<DiagnosisCategory, number> => {
+  const totals = createEmptyDiagnosisCategoryTotals();
+  for (const record of records) {
+    totals[record.category] = (totals[record.category] ?? 0) + 1;
+  }
+  return totals;
+};
+
+const DIAGNOSIS_CATEGORY_BADGE_CLASSES: Record<DiagnosisCategory, string> = {
+  生活習慣病: "bg-emerald-50 text-emerald-600",
+  外科: "bg-orange-50 text-orange-600",
+  皮膚科: "bg-rose-50 text-rose-600",
+  その他: "bg-slate-100 text-slate-600",
 };
 
 const roundTo1Decimal = (value: number) => Math.round(value * 10) / 10;
@@ -422,6 +489,21 @@ export default function PatientAnalysisPage() {
     大腸カメラ: false,
   });
   const [listingUploadError, setListingUploadError] = useState<string | null>(null);
+  const [diagnosisRecords, setDiagnosisRecords] = useState<DiagnosisRecord[]>([]);
+  const [diagnosisStatus, setDiagnosisStatus] = useState<{
+    lastUpdated: string | null;
+    total: number;
+    byDepartment: Record<DiagnosisDepartment, number>;
+    byCategory: Record<DiagnosisCategory, number>;
+  }>({
+    lastUpdated: null,
+    total: 0,
+    byDepartment: createEmptyDiagnosisDepartmentTotals(),
+    byCategory: createEmptyDiagnosisCategoryTotals(),
+  });
+  const [isUploadingDiagnosis, setIsUploadingDiagnosis] = useState(false);
+  const [diagnosisUploadError, setDiagnosisUploadError] = useState<string | null>(null);
+  const [showDiagnosisChart, setShowDiagnosisChart] = useState(false);
 
   const applySharedBundle = useCallback(
     (bundle: SharedDataBundle, fallbackTimestamp?: string) => {
@@ -482,6 +564,21 @@ export default function PatientAnalysisPage() {
         setListingStatus({
           lastUpdated: listingTimestamp,
           totals,
+        });
+      }
+
+      if (Array.isArray(bundle.diagnosisData)) {
+        const diagnosisDataset = bundle.diagnosisData as DiagnosisRecord[];
+        const diagnosisTimestamp = saveDiagnosisToStorage(
+          diagnosisDataset,
+          bundle.diagnosisTimestamp ?? fallbackTimestamp ?? generatedAt,
+        );
+        setDiagnosisRecords(diagnosisDataset);
+        setDiagnosisStatus({
+          lastUpdated: diagnosisTimestamp,
+          total: diagnosisDataset.length,
+          byDepartment: calculateDiagnosisDepartmentTotals(diagnosisDataset),
+          byCategory: calculateDiagnosisCategoryTotals(diagnosisDataset),
         });
       }
     },
@@ -594,6 +691,16 @@ export default function PatientAnalysisPage() {
         byType: summarizeSurveyByType(existingSurvey),
       });
 
+      const existingDiagnosis = loadDiagnosisFromStorage();
+      const diagnosisTimestamp = loadDiagnosisTimestamp();
+      setDiagnosisRecords(existingDiagnosis);
+      setDiagnosisStatus({
+        lastUpdated: diagnosisTimestamp,
+        total: existingDiagnosis.length,
+        byDepartment: calculateDiagnosisDepartmentTotals(existingDiagnosis),
+        byCategory: calculateDiagnosisCategoryTotals(existingDiagnosis),
+      });
+
       const existingListing = loadListingDataFromStorage();
       const listingTimestamp = loadListingTimestamp();
       const totals = createEmptyListingTotals();
@@ -634,17 +741,23 @@ export default function PatientAnalysisPage() {
     return filtered;
   }, [classifiedRecords, startMonth, endMonth]);
 
+  const diagnosisMonths = useMemo(
+    () => extractDiagnosisMonths(diagnosisRecords),
+    [diagnosisRecords],
+  );
+
   const allAvailableMonths = useMemo(() => {
-    if (classifiedRecords.length === 0) {
-      return [];
+    const months = new Set<string>();
+    for (const record of classifiedRecords) {
+      if (record.monthKey >= KARTE_MIN_MONTH) {
+        months.add(record.monthKey);
+      }
     }
-    const months = new Set(
-      classifiedRecords
-        .filter((record) => record.monthKey >= KARTE_MIN_MONTH)
-        .map((record) => record.monthKey)
-    );
+    for (const month of diagnosisMonths) {
+      months.add(month);
+    }
     return Array.from(months).sort();
-  }, [classifiedRecords]);
+  }, [classifiedRecords, diagnosisMonths]);
 
 
 
@@ -892,8 +1005,206 @@ export default function PatientAnalysisPage() {
     return resultMap;
   }, [previousPeriodRecords]);
 
+  const filteredDiagnosisRecords = useMemo(() => {
+    if (diagnosisRecords.length === 0) {
+      return [];
+    }
+    const start = startMonth || undefined;
+    const end = endMonth || undefined;
+    return filterDiagnosisByMonthRange(diagnosisRecords, start, end);
+  }, [diagnosisRecords, startMonth, endMonth]);
+
+  const diagnosisMonthlyInRange = useMemo(
+    () => aggregateDiagnosisMonthly(filteredDiagnosisRecords),
+    [filteredDiagnosisRecords],
+  );
+
+  const diagnosisDepartmentTotals = useMemo(() => {
+    if (filteredDiagnosisRecords.length === 0) {
+      return createEmptyDiagnosisDepartmentTotals();
+    }
+    return calculateDiagnosisDepartmentTotals(filteredDiagnosisRecords);
+  }, [filteredDiagnosisRecords]);
+
+  const diagnosisCategoryTotals = useMemo(() => {
+    if (filteredDiagnosisRecords.length === 0) {
+      return createEmptyDiagnosisCategoryTotals();
+    }
+    return calculateDiagnosisCategoryTotals(filteredDiagnosisRecords);
+  }, [filteredDiagnosisRecords]);
+
+  const previousDiagnosisRange = useMemo(() => {
+    if (!startMonth || !endMonth) {
+      return null;
+    }
+    return calculatePreviousRange(startMonth, endMonth);
+  }, [startMonth, endMonth]);
+
+  const previousDiagnosisRecords = useMemo(() => {
+    if (!previousDiagnosisRange) {
+      return [];
+    }
+    return filterDiagnosisByMonthRange(
+      diagnosisRecords,
+      previousDiagnosisRange.start,
+      previousDiagnosisRange.end,
+    );
+  }, [diagnosisRecords, previousDiagnosisRange]);
+
+  const previousDiagnosisTotals = useMemo(() => {
+    if (previousDiagnosisRecords.length === 0) {
+      return createEmptyDiagnosisDepartmentTotals();
+    }
+    return calculateDiagnosisDepartmentTotals(previousDiagnosisRecords);
+  }, [previousDiagnosisRecords]);
+
+  const previousDiagnosisCategoryTotals = useMemo(() => {
+    if (previousDiagnosisRecords.length === 0) {
+      return createEmptyDiagnosisCategoryTotals();
+    }
+    return calculateDiagnosisCategoryTotals(previousDiagnosisRecords);
+  }, [previousDiagnosisRecords]);
+
+  const hasDiagnosisPrevious = Boolean(
+    previousDiagnosisRange && previousDiagnosisRecords.length > 0,
+  );
+
+  const diagnosisDiseaseSummaries = useMemo(
+    () => summarizeDiagnosisByDisease(filteredDiagnosisRecords),
+    [filteredDiagnosisRecords],
+  );
+
+  const previousDiagnosisDiseaseMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (previousDiagnosisRecords.length === 0) {
+      return map;
+    }
+    const summaries = summarizeDiagnosisByDisease(previousDiagnosisRecords);
+    for (const summary of summaries) {
+      map.set(`${summary.department}|${summary.diseaseName}`, summary.total);
+    }
+    return map;
+  }, [previousDiagnosisRecords]);
+
+  const previousDiagnosisCategoryDiseaseMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (previousDiagnosisRecords.length === 0) {
+      return map;
+    }
+    const summaries = summarizeDiagnosisByDisease(previousDiagnosisRecords);
+    for (const summary of summaries) {
+      map.set(`${summary.category}|${summary.diseaseName}`, summary.total);
+    }
+    return map;
+  }, [previousDiagnosisRecords]);
+
+  const diagnosisTopDiseasesByDepartment = useMemo(() => {
+    const grouped = new Map<
+      DiagnosisDepartment,
+      Array<{ diseaseName: string; total: number; diff: number; previous: number }>
+    >();
+
+    for (const summary of diagnosisDiseaseSummaries) {
+      const key = `${summary.department}|${summary.diseaseName}`;
+      const previous = previousDiagnosisDiseaseMap.get(key) ?? 0;
+      if (!grouped.has(summary.department)) {
+        grouped.set(summary.department, []);
+      }
+      grouped.get(summary.department)!.push({
+        diseaseName: summary.diseaseName,
+        total: summary.total,
+        previous,
+        diff: summary.total - previous,
+      });
+    }
+
+    const result: Array<{
+      department: DiagnosisDepartment;
+      items: Array<{ diseaseName: string; total: number; previous: number; diff: number }>;
+    }> = [];
+
+    for (const department of DIAGNOSIS_TARGET_DEPARTMENTS) {
+      const items = (grouped.get(department) ?? []).sort(
+        (a, b) => b.total - a.total || a.diseaseName.localeCompare(b.diseaseName, "ja"),
+      );
+      result.push({
+        department,
+        items: items.slice(0, 5),
+      });
+    }
+
+    return result;
+  }, [diagnosisDiseaseSummaries, previousDiagnosisDiseaseMap]);
+
+  const diagnosisTopDiseasesByCategory = useMemo(() => {
+    const grouped = new Map<
+      DiagnosisCategory,
+      Array<{ diseaseName: string; total: number; diff: number; previous: number }>
+    >();
+
+    for (const summary of diagnosisDiseaseSummaries) {
+      const key = `${summary.category}|${summary.diseaseName}`;
+      const previous = previousDiagnosisCategoryDiseaseMap.get(key) ?? 0;
+      if (!grouped.has(summary.category)) {
+        grouped.set(summary.category, []);
+      }
+      grouped.get(summary.category)!.push({
+        diseaseName: summary.diseaseName,
+        total: summary.total,
+        previous,
+        diff: summary.total - previous,
+      });
+    }
+
+    const result: Array<{
+      category: DiagnosisCategory;
+      items: Array<{ diseaseName: string; total: number; previous: number; diff: number }>;
+    }> = [];
+
+    for (const category of DIAGNOSIS_CATEGORIES) {
+      const items = (grouped.get(category) ?? []).sort(
+        (a, b) => b.total - a.total || a.diseaseName.localeCompare(b.diseaseName, "ja"),
+      );
+      result.push({
+        category,
+        items: items.slice(0, 5),
+      });
+    }
+
+    return result;
+  }, [diagnosisDiseaseSummaries, previousDiagnosisCategoryDiseaseMap]);
+
+  const diagnosisRangeLabel = useMemo(() => {
+    if (startMonth && endMonth) {
+      if (startMonth === endMonth) {
+        return formatMonthLabel(startMonth);
+      }
+      return `${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}`;
+    }
+    if (startMonth) {
+      return `${formatMonthLabel(startMonth)}以降`;
+    }
+    if (endMonth) {
+      return `${formatMonthLabel(endMonth)}まで`;
+    }
+    return "全期間";
+  }, [startMonth, endMonth]);
+
+  const diagnosisPreviousLabel = useMemo(() => {
+    if (!previousDiagnosisRange) {
+      return null;
+    }
+    const { start, end } = previousDiagnosisRange;
+    if (start === end) {
+      return formatMonthLabel(start);
+    }
+    return `${formatMonthLabel(start)}〜${formatMonthLabel(end)}`;
+  }, [previousDiagnosisRange]);
+
   const hasAnyRecords = records.length > 0;
   const hasPeriodRecords = periodFilteredRecords.length > 0;
+  const hasDiagnosisRecords = filteredDiagnosisRecords.length > 0;
+  const canShowDiagnosisChart = diagnosisMonthlyInRange.length > 0;
 
   const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -1076,6 +1387,45 @@ export default function PatientAnalysisPage() {
       }
     };
 
+  const handleDiagnosisUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const files = input.files ? Array.from(input.files) : [];
+    if (files.length === 0) {
+      return;
+    }
+
+    setDiagnosisUploadError(null);
+    setIsUploadingDiagnosis(true);
+
+    try {
+      const existing = loadDiagnosisFromStorage();
+      const incoming: DiagnosisRecord[] = [];
+
+      for (const file of files) {
+        const text = await file.text();
+        const parsed = parseDiagnosisCsv(text);
+        incoming.push(...parsed);
+      }
+
+      const merged = mergeDiagnosisRecords(existing, incoming);
+    const timestamp = saveDiagnosisToStorage(merged);
+
+    setDiagnosisRecords(merged);
+    setDiagnosisStatus({
+      lastUpdated: timestamp,
+      total: merged.length,
+      byDepartment: calculateDiagnosisDepartmentTotals(merged),
+      byCategory: calculateDiagnosisCategoryTotals(merged),
+    });
+  } catch (error) {
+      console.error(error);
+      setDiagnosisUploadError("傷病名CSVの解析に失敗しました。フォーマットをご確認ください。");
+    } finally {
+      input.value = "";
+      setIsUploadingDiagnosis(false);
+    }
+  };
+
   const handleShare = async () => {
     if (records.length === 0) {
       setUploadError("共有するカルテ集計データがありません。");
@@ -1090,6 +1440,7 @@ export default function PatientAnalysisPage() {
       const reservationsData = loadReservationsFromStorage();
       const surveyData = loadSurveyDataFromStorage();
       const listingData = loadListingDataFromStorage();
+      const diagnosisData = loadDiagnosisFromStorage();
 
       const bundle: SharedDataBundle = {
         version: 1,
@@ -1102,6 +1453,8 @@ export default function PatientAnalysisPage() {
         surveyTimestamp: loadSurveyTimestamp(),
         listingData,
         listingTimestamp: loadListingTimestamp(),
+        diagnosisData,
+        diagnosisTimestamp: loadDiagnosisTimestamp(),
       };
 
       const response = await uploadDataToR2({
@@ -1433,7 +1786,8 @@ export default function PatientAnalysisPage() {
           description="診療科ごとの総患者・純初診・再初診・再診の件数です（「外国人自費」を含む診療科は除外しています）。"
         >
           {departmentStats.length > 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {departmentStats.map((row) => {
                 const prevRow = previousDepartmentStats.get(row.department);
                 const totalMoM = prevRow ? calculateMonthOverMonth(row.total, prevRow.total) : null;
@@ -1445,65 +1799,115 @@ export default function PatientAnalysisPage() {
                   : null;
                 
                 return (
-                <div
-                  key={row.department}
-                  className="group rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-soft transition hover:-translate-y-1 hover:border-brand-200 hover:shadow-card"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-slate-900 sm:text-base">{row.department}</h3>
-                    <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-600">
-                      {row.total.toLocaleString("ja-JP")}名
-                    </span>
+                  <div
+                    key={row.department}
+                    className="group rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-soft transition hover:-translate-y-1 hover:border-brand-200 hover:shadow-card"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="text-sm font-semibold text-slate-900 sm:text-base">
+                        {row.department}
+                      </h3>
+                      <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-600">
+                        {row.total.toLocaleString("ja-JP")}名
+                      </span>
+                    </div>
+                    <div className="mt-4 grid gap-2">
+                      <DepartmentMetric
+                        icon={Users}
+                        label="総患者"
+                        value={`${row.total.toLocaleString("ja-JP")}名`}
+                        accent="brand"
+                        monthOverMonth={totalMoM}
+                        isSingleMonth={isSingleMonthPeriod}
+                      />
+                      <DepartmentMetric
+                        icon={UserPlus}
+                        label="純初診"
+                        value={`${row.pureFirst.toLocaleString("ja-JP")}名`}
+                        caption={`${row.pureRate}%`}
+                        accent="emerald"
+                        monthOverMonth={pureMoM}
+                        isSingleMonth={isSingleMonthPeriod}
+                      />
+                      <DepartmentMetric
+                        icon={Undo2}
+                        label="再初診"
+                        value={`${row.returningFirst.toLocaleString("ja-JP")}名`}
+                        caption={`${row.returningRate}%`}
+                        accent="accent"
+                        monthOverMonth={returningMoM}
+                        isSingleMonth={isSingleMonthPeriod}
+                      />
+                      <DepartmentMetric
+                        icon={RotateCcw}
+                        label="再診"
+                        value={`${row.revisit.toLocaleString("ja-JP")}名`}
+                        caption={`${row.revisitRate}%`}
+                        accent="muted"
+                        monthOverMonth={revisitMoM}
+                        isSingleMonth={isSingleMonthPeriod}
+                      />
+                      <DepartmentMetric
+                        icon={Clock}
+                        label="平均年齢"
+                        value={row.averageAge !== null ? `${row.averageAge}歳` : "データなし"}
+                        accent="muted"
+                        monthOverMonth={ageMoM}
+                        isSingleMonth={isSingleMonthPeriod}
+                      />
+                    </div>
                   </div>
-                  <div className="mt-4 grid gap-2">
-                    <DepartmentMetric
-                      icon={Users}
-                      label="総患者"
-                      value={`${row.total.toLocaleString("ja-JP")}名`}
-                      accent="brand"
-                      monthOverMonth={totalMoM}
-                      isSingleMonth={isSingleMonthPeriod}
-                    />
-                    <DepartmentMetric
-                      icon={UserPlus}
-                      label="純初診"
-                      value={`${row.pureFirst.toLocaleString("ja-JP")}名`}
-                      caption={`${row.pureRate}%`}
-                      accent="emerald"
-                      monthOverMonth={pureMoM}
-                      isSingleMonth={isSingleMonthPeriod}
-                    />
-                    <DepartmentMetric
-                      icon={Undo2}
-                      label="再初診"
-                      value={`${row.returningFirst.toLocaleString("ja-JP")}名`}
-                      caption={`${row.returningRate}%`}
-                      accent="accent"
-                      monthOverMonth={returningMoM}
-                      isSingleMonth={isSingleMonthPeriod}
-                    />
-                    <DepartmentMetric
-                      icon={RotateCcw}
-                      label="再診"
-                      value={`${row.revisit.toLocaleString("ja-JP")}名`}
-                      caption={`${row.revisitRate}%`}
-                      accent="muted"
-                      monthOverMonth={revisitMoM}
-                      isSingleMonth={isSingleMonthPeriod}
-                    />
-                    <DepartmentMetric
-                      icon={Clock}
-                      label="平均年齢"
-                      value={row.averageAge !== null ? `${row.averageAge}歳` : "データなし"}
-                      accent="muted"
-                      monthOverMonth={ageMoM}
-                      isSingleMonth={isSingleMonthPeriod}
-                    />
-                  </div>
-                </div>
                 );
               })}
             </div>
+            <div className="mt-6 space-y-3">
+              <h3 className="text-sm font-semibold text-slate-700">カテゴリー別件数</h3>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {DIAGNOSIS_CATEGORIES.map((category) => {
+                  const current = diagnosisCategoryTotals[category] ?? 0;
+                  const previous = previousDiagnosisCategoryTotals[category] ?? 0;
+                  const diff = current - previous;
+                  const percentage =
+                    hasDiagnosisPrevious && previous > 0
+                      ? roundTo1Decimal((diff / previous) * 100)
+                      : null;
+                  const badgeClass = DIAGNOSIS_CATEGORY_BADGE_CLASSES[category];
+                  return (
+                    <div
+                      key={category}
+                      className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft"
+                    >
+                      <span
+                        className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}
+                      >
+                        {category}
+                      </span>
+                      <p className="mt-3 text-2xl font-bold text-slate-900">
+                        {current.toLocaleString("ja-JP")}件
+                      </p>
+                      {hasDiagnosisPrevious && (
+                        <p
+                          className={`mt-1 text-xs font-medium ${
+                            diff >= 0 ? "text-emerald-600" : "text-red-600"
+                          }`}
+                        >
+                          {diff >= 0 ? "+" : ""}
+                          {diff.toLocaleString("ja-JP")}件
+                          {percentage !== null
+                            ? ` (${percentage >= 0 ? "+" : ""}${percentage.toLocaleString("ja-JP", {
+                                maximumFractionDigits: 1,
+                              })}%)`
+                            : previous === 0 && current > 0
+                              ? " (新規)"
+                              : ""}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            </>
           ) : (
             <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
               {!hasAnyRecords
@@ -1567,6 +1971,237 @@ export default function PatientAnalysisPage() {
                   ? "選択した期間に該当するデータがありません。"
                   : "選択された期間に該当するデータがありません。"}
             </p>
+          )}
+        </SectionCard>
+
+        <SectionCard
+          title="主病トレンド分析"
+          description="傷病名一覧CSV（主病フラグ）から総合診療・発熱外来・オンライン診療（保険）の件数推移と増減を確認します。"
+        >
+          {diagnosisStatus.total === 0 ? (
+            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+              傷病名CSVをアップロードすると、主病データの推移が表示されます。
+            </p>
+          ) : !hasDiagnosisRecords ? (
+            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+              選択期間（{diagnosisRangeLabel}）に該当する主病データがありません。期間を変更して再度ご確認ください。
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                <span>対象期間: {diagnosisRangeLabel}</span>
+                {hasDiagnosisPrevious && diagnosisPreviousLabel && (
+                  <span>比較期間: {diagnosisPreviousLabel}</span>
+                )}
+                {diagnosisStatus.lastUpdated && (
+                  <span>
+                    最終更新: {new Date(diagnosisStatus.lastUpdated).toLocaleString("ja-JP")}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                表示件数: {filteredDiagnosisRecords.length.toLocaleString("ja-JP")}件 / 登録総数:{" "}
+                {diagnosisStatus.total.toLocaleString("ja-JP")}件
+              </p>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {DIAGNOSIS_TARGET_DEPARTMENTS.map((department) => {
+                  const current = diagnosisDepartmentTotals[department] ?? 0;
+                  const previous = previousDiagnosisTotals[department] ?? 0;
+                  const diff = current - previous;
+                  const percentage =
+                    hasDiagnosisPrevious && previous > 0
+                      ? roundTo1Decimal((diff / previous) * 100)
+                      : null;
+                  return (
+                    <div
+                      key={department}
+                      className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {department}
+                      </p>
+                      <p className="mt-2 text-2xl font-bold text-slate-900">
+                        {current.toLocaleString("ja-JP")}件
+                      </p>
+                      {hasDiagnosisPrevious && (
+                        <p
+                          className={`mt-1 text-xs font-medium ${
+                            diff >= 0 ? "text-emerald-600" : "text-red-600"
+                          }`}
+                        >
+                          {diff >= 0 ? "+" : ""}
+                          {diff.toLocaleString("ja-JP")}件
+                          {percentage !== null
+                            ? ` (${percentage >= 0 ? "+" : ""}${percentage.toLocaleString("ja-JP", {
+                                maximumFractionDigits: 1,
+                              })}%)`
+                            : previous === 0 && current > 0
+                              ? " (新規)"
+                              : ""}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {canShowDiagnosisChart && (
+                <>
+                  <button
+                    onClick={() => setShowDiagnosisChart((value) => !value)}
+                    className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    {showDiagnosisChart ? "グラフを非表示" : "月次トレンドを表示"}
+                  </button>
+                  {showDiagnosisChart && (
+                    <div className="mt-4">
+                      <Suspense
+                        fallback={
+                          <div className="rounded-2xl border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-brand-600">
+                            グラフを準備中です...
+                          </div>
+                        }
+                      >
+                        <DiagnosisMonthlyChart summaries={diagnosisMonthlyInRange} />
+                      </Suspense>
+                    </div>
+                  )}
+                </>
+              )}
+              <div className="mt-6 grid gap-4 lg:grid-cols-3">
+                {diagnosisTopDiseasesByDepartment.map(({ department, items }) => (
+                  <div
+                    key={department}
+                    className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft"
+                  >
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-slate-900">{department}の上位傷病</h3>
+                      <span className="text-xs text-slate-500">
+                        {items.length > 0
+                          ? `${items.reduce((acc, item) => acc + item.total, 0).toLocaleString("ja-JP")}件`
+                          : "0件"}
+                      </span>
+                    </div>
+                    {items.length > 0 ? (
+                      <ol className="mt-3 space-y-2 text-sm text-slate-700">
+                        {items.map((item, index) => {
+                          const diff = item.diff;
+                          const percentage =
+                            hasDiagnosisPrevious && item.previous > 0
+                              ? roundTo1Decimal((diff / item.previous) * 100)
+                              : null;
+                          const diffLabel =
+                            hasDiagnosisPrevious && (diff !== 0 || item.previous > 0)
+                              ? `${diff >= 0 ? "+" : ""}${diff.toLocaleString("ja-JP")}件${
+                                  percentage !== null
+                                    ? ` (${percentage >= 0 ? "+" : ""}${percentage.toLocaleString("ja-JP", {
+                                        maximumFractionDigits: 1,
+                                      })}%)`
+                                    : ""
+                                }`
+                              : null;
+                          return (
+                            <li key={item.diseaseName} className="flex items-center justify-between gap-3">
+                              <span className="flex items-center gap-2">
+                                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-600">
+                                  {index + 1}
+                                </span>
+                                <span className="font-medium text-slate-800">{item.diseaseName}</span>
+                              </span>
+                              <span className="text-right text-xs text-slate-500">
+                                {item.total.toLocaleString("ja-JP")}件
+                                {diffLabel && (
+                                  <span
+                                    className={`ml-2 font-medium ${
+                                      diff >= 0 ? "text-emerald-600" : "text-red-600"
+                                    }`}
+                                  >
+                                    {diffLabel}
+                                  </span>
+                                )}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    ) : (
+                      <p className="mt-3 text-xs text-slate-500">
+                        この期間に登録された主病データはありません。
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-6 space-y-3">
+                <h3 className="text-sm font-semibold text-slate-700">カテゴリー別トップ傷病</h3>
+                <div className="grid gap-4 lg:grid-cols-3">
+                  {diagnosisTopDiseasesByCategory.map(({ category, items }) => (
+                    <div
+                      key={category}
+                      className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft"
+                    >
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-slate-900">{category}</h3>
+                        <span className="text-xs text-slate-500">
+                          {items.length > 0
+                            ? `${items.reduce((acc, item) => acc + item.total, 0).toLocaleString("ja-JP")}件`
+                            : "0件"}
+                        </span>
+                      </div>
+                      {items.length > 0 ? (
+                        <ol className="mt-3 space-y-2 text-sm text-slate-700">
+                          {items.map((item, index) => {
+                            const diff = item.diff;
+                            const percentage =
+                              hasDiagnosisPrevious && item.previous > 0
+                                ? roundTo1Decimal((diff / item.previous) * 100)
+                                : null;
+                            const diffLabel =
+                              hasDiagnosisPrevious && (diff !== 0 || item.previous > 0)
+                                ? `${diff >= 0 ? "+" : ""}${diff.toLocaleString("ja-JP")}件${
+                                    percentage !== null
+                                      ? ` (${percentage >= 0 ? "+" : ""}${percentage.toLocaleString("ja-JP", {
+                                          maximumFractionDigits: 1,
+                                        })}%)`
+                                      : ""
+                                  }`
+                                : null;
+                            return (
+                              <li
+                                key={`${category}-${item.diseaseName}`}
+                                className="flex items-center justify-between gap-3"
+                              >
+                                <span className="flex items-center gap-2">
+                                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">
+                                    {index + 1}
+                                  </span>
+                                  <span className="font-medium text-slate-800">{item.diseaseName}</span>
+                                </span>
+                                <span className="text-right text-xs text-slate-500">
+                                  {item.total.toLocaleString("ja-JP")}件
+                                  {diffLabel && (
+                                    <span
+                                      className={`ml-2 font-medium ${
+                                        diff >= 0 ? "text-emerald-600" : "text-red-600"
+                                      }`}
+                                    >
+                                      {diffLabel}
+                                    </span>
+                                  )}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      ) : (
+                        <p className="mt-3 text-xs text-slate-500">
+                          この期間に登録された該当カテゴリーの主病データはありません。
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
         </SectionCard>
 
@@ -1710,6 +2345,66 @@ export default function PatientAnalysisPage() {
                   {surveyUploadError && (
                     <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
                       {surveyUploadError}
+                    </p>
+                  )}
+                </div>
+                <div className="rounded-2xl border border-amber-200 bg-white/90 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-amber-700">傷病名CSV（主病）</p>
+                      <p className="text-xs text-slate-500">主病トレンド分析セクションで利用します。</p>
+                    </div>
+                    <div className="text-right text-[11px] text-slate-500">
+                      <p>
+                        最終更新:{" "}
+                        {diagnosisStatus.lastUpdated
+                          ? new Date(diagnosisStatus.lastUpdated).toLocaleString("ja-JP")
+                          : "未登録"}
+                      </p>
+                      <p>登録件数: {diagnosisStatus.total.toLocaleString("ja-JP")}件</p>
+                      <p>
+                        内訳:{" "}
+                        {DIAGNOSIS_TARGET_DEPARTMENTS.map((department, index) => (
+                          <span key={department}>
+                            {index > 0 ? " / " : ""}
+                            {department}{" "}
+                            {diagnosisStatus.byDepartment[department].toLocaleString("ja-JP")}件
+                          </span>
+                        ))}
+                      </p>
+                      <p>
+                        カテゴリ内訳:{" "}
+                        {DIAGNOSIS_CATEGORIES.map((category, index) => (
+                          <span key={category}>
+                            {index > 0 ? " / " : ""}
+                            {category}{" "}
+                            {diagnosisStatus.byCategory[category].toLocaleString("ja-JP")}件
+                          </span>
+                        ))}
+                      </p>
+                    </div>
+                  </div>
+                  <label
+                    className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition sm:w-auto ${
+                      isUploadingDiagnosis
+                        ? "pointer-events-none border-amber-100 bg-amber-50 text-amber-300"
+                        : "border-amber-200 text-amber-600 hover:bg-amber-50"
+                    }`}
+                  >
+                    <Upload className="h-4 w-4" />
+                    {isUploadingDiagnosis ? "アップロード中..." : "傷病名CSVを選択"}
+                    <input
+                      type="file"
+                      accept=".csv,text/csv"
+                      onChange={handleDiagnosisUpload}
+                      multiple
+                      disabled={isUploadingDiagnosis}
+                      className="hidden"
+                    />
+                  </label>
+                  {diagnosisUploadError && (
+                    <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                      {diagnosisUploadError}
                     </p>
                   )}
                 </div>
