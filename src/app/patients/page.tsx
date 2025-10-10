@@ -1920,7 +1920,11 @@ export default function PatientAnalysisPage() {
   return (
     <main className="min-h-screen bg-background">
       <div className="mx-auto w-full max-w-6xl px-6 py-12">
-        <div className="flex flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start lg:gap-12">
+        <div
+          className={`flex flex-col gap-8 ${
+            isManagementOpen ? "lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start lg:gap-12" : ""
+          }`}
+        >
           <div className="flex flex-col gap-8">
         <section className="relative overflow-hidden rounded-3xl border border-brand-200 bg-gradient-to-r from-white via-brand-50 to-brand-100 p-8 shadow-card">
           <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
