@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, lazy, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, lazy, Suspense, type ChangeEvent } from "react";
 import {
   RefreshCw,
   Share2,
@@ -68,6 +68,11 @@ const MonthlyTrendChart = lazy(() =>
 const DepartmentChart = lazy(() =>
   import("@/components/patients/DepartmentChart").then((m) => ({
     default: m.DepartmentChart,
+  })),
+);
+const WeekdayAverageChart = lazy(() =>
+  import("@/components/patients/WeekdayAverageChart").then((m) => ({
+    default: m.WeekdayAverageChart,
   })),
 );
 
@@ -383,6 +388,7 @@ export default function PatientAnalysisPage() {
   const [showSummaryChart, setShowSummaryChart] = useState(false);
   const [showTrendChart, setShowTrendChart] = useState(false);
   const [showDepartmentChart, setShowDepartmentChart] = useState(false);
+  const [showWeekdayChart, setShowWeekdayChart] = useState(false);
   const [reservationStatus, setReservationStatus] = useState<{
     lastUpdated: string | null;
     total: number;
@@ -1521,6 +1527,46 @@ export default function PatientAnalysisPage() {
                 </div>
               )}
             </>
+          )}
+        </SectionCard>
+
+        <SectionCard
+          title={startMonth && endMonth && startMonth !== endMonth
+            ? `曜日別平均患者数（${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}）`
+            : startMonth && endMonth && startMonth === endMonth
+              ? `曜日別平均患者数（${formatMonthLabel(startMonth)}）`
+              : "曜日別平均患者数"
+          }
+          description="月曜日から日曜日および祝日（12月27日〜1月3日含む）の診療科グループ別平均患者数です。"
+        >
+          {filteredClassified.length > 0 ? (
+            <>
+              <button
+                onClick={() => setShowWeekdayChart(!showWeekdayChart)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                {showWeekdayChart ? "グラフを非表示" : "グラフを表示"}
+              </button>
+              {showWeekdayChart && (
+                <div className="mt-4">
+                  <Suspense fallback={<div className="flex items-center justify-center py-8"><RefreshCw className="h-6 w-6 animate-spin text-brand-600" /></div>}>
+                    <WeekdayAverageChart
+                      records={filteredClassified}
+                      startMonth={startMonth}
+                      endMonth={endMonth}
+                    />
+                  </Suspense>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+              {!hasAnyRecords
+                ? "カルテ集計CSVをアップロードすると、曜日別の平均患者数が表示されます。"
+                : !hasPeriodRecords
+                  ? "選択した期間に該当するデータがありません。"
+                  : "選択された期間に該当するデータがありません。"}
+            </p>
           )}
         </SectionCard>
 
