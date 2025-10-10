@@ -94,7 +94,16 @@ export function classifyKarteRecords(records: KarteRecord[]): KarteRecordWithCat
     for (const record of currentRecords) {
       let category: KarteVisitCategory = "unknown";
 
-      if (record.visitType === "再診") {
+      // 健康診断・人間ドック・予防接種は初再診の概念がないため純初診として扱う
+      const department = record.department?.trim() ?? "";
+      const isPreventiveCare =
+        department.includes("健康診断") ||
+        department.includes("人間ドック") ||
+        department.includes("予防接種");
+
+      if (isPreventiveCare) {
+        category = "pureFirst";
+      } else if (record.visitType === "再診") {
         category = "revisit";
       } else if (record.visitType === "初診") {
         const patientNumber = record.patientNumber;
