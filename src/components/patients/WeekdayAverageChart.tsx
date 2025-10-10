@@ -21,12 +21,11 @@ type WeekdayAverageChartProps = {
 const DEPARTMENT_GROUPS = {
   総合診療: ["総合診療", "総合診療科"],
   内視鏡: ["内視鏡", "内視鏡（保険）", "内視鏡（自費）", "人間ドックA", "人間ドックB"],
-  オンライン診療: ["オンライン診療", "オンライン診療（保険）", "オンライン診療（自費）"],
 } as const;
 
 type DepartmentGroup = keyof typeof DEPARTMENT_GROUPS;
 
-const DEPARTMENT_ORDER: DepartmentGroup[] = ["総合診療", "内視鏡", "オンライン診療"];
+const DEPARTMENT_ORDER: DepartmentGroup[] = ["総合診療", "内視鏡"];
 
 const WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土", "日", "祝日"];
 
@@ -130,7 +129,6 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
   const COLORS: Record<DepartmentGroup, string> = {
     総合診療: "#2563eb",
     内視鏡: "#ec4899",
-    オンライン診療: "#14b8a6",
   };
 
   return (
