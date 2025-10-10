@@ -53,7 +53,10 @@ export const parseSurveyCsv = (content: string, fileType: SurveyFileType): Surve
       continue;
     }
 
-    const month = `${dateParts[0]}/${dateParts[1]}`;
+    // 月フォーマットをYYYY-MM形式に統一（文字列比較が正しく動作するように）
+    const year = dateParts[0];
+    const monthNum = dateParts[1].padStart(2, "0");
+    const month = `${year}-${monthNum}`;
 
     data.push({
       date: dateStr,

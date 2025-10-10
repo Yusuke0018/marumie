@@ -49,6 +49,11 @@ const CHANNEL_LABELS: Record<string, string> = {
   aiSearch: "AI検索",
 };
 
+const formatMonthLabel = (month: string): string => {
+  const [year, monthNum] = month.split("-");
+  return `${year}年${monthNum}月`;
+};
+
 export default function SurveyPage() {
   const [surveyData, setSurveyData] = useState<SurveyData[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -274,7 +279,7 @@ export default function SurveyPage() {
                   <option value="">選択してください</option>
                   {availableMonths.map((month) => (
                     <option key={month} value={month}>
-                      {month}
+                      {formatMonthLabel(month)}
                     </option>
                   ))}
                 </select>
@@ -290,7 +295,7 @@ export default function SurveyPage() {
                   <option value="">選択してください</option>
                   {availableMonths.map((month) => (
                     <option key={month} value={month}>
-                      {month}
+                      {formatMonthLabel(month)}
                     </option>
                   ))}
                 </select>
@@ -305,7 +310,7 @@ export default function SurveyPage() {
                     外来 - 来院経路の内訳
                   </h2>
                   <p className="mt-2 text-lg text-blue-50 font-semibold">
-                    📅 対象期間: {startMonth && endMonth ? (startMonth === endMonth ? startMonth : `${startMonth} 〜 ${endMonth}`) : "全期間"}
+                    📅 対象期間: {startMonth && endMonth ? (startMonth === endMonth ? formatMonthLabel(startMonth) : `${formatMonthLabel(startMonth)} 〜 ${formatMonthLabel(endMonth)}`) : "全期間"}
                   </p>
                   <p className="mt-1 text-lg text-blue-50 font-semibold">
                     総回答数: {gairaiChartData.reduce((sum, item) => sum + item.value, 0).toLocaleString("ja-JP")}件
@@ -451,7 +456,7 @@ export default function SurveyPage() {
                     内視鏡 - 来院経路の内訳
                   </h2>
                   <p className="mt-2 text-lg text-purple-50 font-semibold">
-                    📅 対象期間: {startMonth && endMonth ? (startMonth === endMonth ? startMonth : `${startMonth} 〜 ${endMonth}`) : "全期間"}
+                    📅 対象期間: {startMonth && endMonth ? (startMonth === endMonth ? formatMonthLabel(startMonth) : `${formatMonthLabel(startMonth)} 〜 ${formatMonthLabel(endMonth)}`) : "全期間"}
                   </p>
                   <p className="mt-1 text-lg text-purple-50 font-semibold">
                     総回答数: {naishikyoChartData.reduce((sum, item) => sum + item.value, 0).toLocaleString("ja-JP")}件
