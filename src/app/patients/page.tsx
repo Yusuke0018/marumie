@@ -2295,45 +2295,52 @@ export default function PatientAnalysisPage() {
                 ? "共有URLから閲覧中です。操作内容は公開データに即時反映されるため取り扱いにご注意ください。"
                 : "カルテ集計に加えて、予約ログ・アンケート・広告のCSVもこのページでまとめて更新できます。共有URLはコピーして関係者へ連携してください。"}
             </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-emerald-200 px-4 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 sm:w-auto">
-                <Upload className="h-4 w-4" />
-                CSVを選択
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={handleUpload}
-                  multiple
-                  className="hidden"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={handleShare}
-                disabled={isSharing || records.length === 0}
-                className="flex w-full items-center justify-center gap-2 rounded-full border border-emerald-200 px-4 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-              >
-                {isSharing ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    生成中...
-                  </>
-                ) : (
-                  <>
-                    <Share2 className="h-4 w-4" />
-                    共有URLを発行
-                  </>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={handleReset}
-                disabled={records.length === 0}
-                className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-              >
-                <RefreshCw className="h-4 w-4" />
-                集計データをリセット
-              </button>
+            <div className="space-y-2">
+              {records.length > 0 && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                  📊 カルテ集計データ: <span className="font-semibold">{records.length.toLocaleString("ja-JP")}件</span>
+                </div>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-emerald-200 px-4 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 sm:w-auto">
+                  <Upload className="h-4 w-4" />
+                  CSVを選択
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    onChange={handleUpload}
+                    multiple
+                    className="hidden"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={handleShare}
+                  disabled={isSharing || records.length === 0}
+                  className="flex w-full items-center justify-center gap-2 rounded-full border border-emerald-200 px-4 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                >
+                  {isSharing ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      生成中...
+                    </>
+                  ) : (
+                    <>
+                      <Share2 className="h-4 w-4" />
+                      共有URLを発行
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  disabled={records.length === 0}
+                  className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  集計データをリセット
+                </button>
+              </div>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
               <p className="text-xs font-semibold text-slate-700">その他のデータ管理</p>
