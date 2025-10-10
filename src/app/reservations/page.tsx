@@ -29,6 +29,7 @@ import {
 import { saveSurveyDataToStorage } from "@/lib/surveyData";
 import { saveListingDataToStorage } from "@/lib/listingData";
 import type { SharedDataBundle } from "@/lib/sharedBundle";
+import { setCompressedItem } from "@/lib/storageCompression";
 
 // グラフコンポーネントをReact.lazyで遅延ロード（初期バンドルサイズを削減）
 const WeekdayChartSection = lazy(() =>
@@ -534,7 +535,7 @@ export default function HomePage() {
           const karteTimestamp = bundle.karteTimestamp ?? fallbackTimestamp;
           if (typeof window !== "undefined") {
             try {
-              window.localStorage.setItem(
+              setCompressedItem(
                 KARTE_STORAGE_KEY,
                 JSON.stringify(bundle.karteRecords),
               );

@@ -48,6 +48,7 @@ import {
   SURVEY_STORAGE_KEY,
   SURVEY_TIMESTAMP_KEY,
 } from "@/lib/surveyData";
+import { setCompressedItem, getCompressedItem } from "@/lib/storageCompression";
 import {
   type ListingCategory,
   type ListingData,
@@ -534,10 +535,11 @@ export default function PatientAnalysisPage() {
 
     if (typeof window !== "undefined") {
       try {
-        window.localStorage.setItem(KARTE_STORAGE_KEY, JSON.stringify(karteRecords));
+        setCompressedItem(KARTE_STORAGE_KEY, JSON.stringify(karteRecords));
         window.localStorage.setItem(KARTE_TIMESTAMP_KEY, karteTimestamp);
       } catch (error) {
         console.error(error);
+        setUploadError("データの保存に失敗しました。データ量が多すぎる可能性があります。");
       }
     }
 
@@ -611,10 +613,11 @@ export default function PatientAnalysisPage() {
         setLastUpdated(timestamp);
         if (typeof window !== "undefined") {
           try {
-            window.localStorage.setItem(KARTE_STORAGE_KEY, JSON.stringify(payload));
+            setCompressedItem(KARTE_STORAGE_KEY, JSON.stringify(payload));
             window.localStorage.setItem(KARTE_TIMESTAMP_KEY, timestamp);
           } catch (error) {
             console.error(error);
+            setUploadError("データの保存に失敗しました。データ量が多すぎる可能性があります。");
           }
         }
         return true;
@@ -670,7 +673,7 @@ export default function PatientAnalysisPage() {
         });
     } else {
       try {
-        const stored = window.localStorage.getItem(KARTE_STORAGE_KEY);
+        const stored = getCompressedItem(KARTE_STORAGE_KEY);
         if (stored) {
           const parsed: KarteRecord[] = JSON.parse(stored);
           setRecords(parsed);
@@ -1266,8 +1269,13 @@ export default function PatientAnalysisPage() {
       setLastUpdated(timestamp);
 
       if (typeof window !== "undefined") {
-        window.localStorage.setItem(KARTE_STORAGE_KEY, JSON.stringify(merged));
-        window.localStorage.setItem(KARTE_TIMESTAMP_KEY, timestamp);
+        try {
+          setCompressedItem(KARTE_STORAGE_KEY, JSON.stringify(merged));
+          window.localStorage.setItem(KARTE_TIMESTAMP_KEY, timestamp);
+        } catch (storageError) {
+          console.error("保存エラー:", storageError);
+          throw new Error("データの保存に失敗しました。データ量が多すぎる可能性があります。");
+        }
       }
     } catch (error) {
       console.error(error);
