@@ -25,6 +25,7 @@ const CATEGORY_COLORS: Record<DiagnosisCategory, string> = {
   生活習慣病: "#059669",
   外科: "#ea580c",
   皮膚科: "#e11d48",
+  その他: "#64748b",
 };
 
 const formatMonthLabel = (month: string): string => {
