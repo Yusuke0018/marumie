@@ -223,6 +223,9 @@ type DepartmentStat = {
   pureFirst: number;
   returningFirst: number;
   revisit: number;
+  points: number;
+  averagePoints: number | null;
+  averageAmount: number | null;
   averageAge: number | null;
   pureRate: number;
   returningRate: number;
@@ -340,6 +343,18 @@ const parsePatientNumber = (raw: string | undefined) => {
   return value;
 };
 
+const parsePointValue = (raw: string | undefined): number | null => {
+  if (!raw) {
+    return null;
+  }
+  const trimmed = raw.trim().replace(/,/g, "");
+  if (trimmed.length === 0) {
+    return null;
+  }
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const parseKarteCsv = (text: string): KarteRecord[] => {
   const parsed = Papa.parse<Record<string, string>>(text, {
     header: true,
@@ -370,6 +385,7 @@ const parseKarteCsv = (text: string): KarteRecord[] => {
     const birthDate = parseSlashDate(row["患者生年月日"]);
     const birthDateIso = birthDate ? formatDateKey(birthDate) : null;
     const department = row["診療科"]?.trim() ?? "";
+    const points = parsePointValue(row["点数"]);
 
     records.push({
       dateIso,
@@ -378,6 +394,7 @@ const parseKarteCsv = (text: string): KarteRecord[] => {
       patientNumber,
       birthDateIso,
       department,
+      points,
     });
   }
 
@@ -567,6 +584,39 @@ const determineDeltaStatus = (value: number | null | undefined): SummaryHighligh
   }
   return "neutral";
 };
+
+type UnitPriceGroupId = "general" | "internal" | "endoscopy" | "fever";
+
+const normalizeUnitPriceDepartment = (value: string) =>
+  value.replace(/\s+/g, "").replace(/[()（）]/g, "");
+
+const UNIT_PRICE_GROUPS: Array<{
+  id: UnitPriceGroupId;
+  label: string;
+  matcher: (normalized: string) => boolean;
+}> = [
+  {
+    id: "general",
+    label: "総合診療",
+    matcher: (name) => name.includes("総合診療"),
+  },
+  {
+    id: "fever",
+    label: "発熱外来",
+    matcher: (name) => name.includes("発熱外来") || name.includes("発熱"),
+  },
+  {
+    id: "endoscopy",
+    label: "内視鏡（保険）",
+    matcher: (name) => name.includes("内視鏡") && !name.includes("自費"),
+  },
+  {
+    id: "internal",
+    label: "内科",
+    matcher: (name) =>
+      name.includes("内科") && !name.includes("内視鏡") && !name.includes("総合診療"),
+  },
+];
 
 const formatTimestampLabel = (value: string | null) =>
   value ? new Date(value).toLocaleString("ja-JP") : "未登録";
@@ -1081,6 +1131,7 @@ export default function PatientAnalysisPage() {
         pureFirst: number;
         returningFirst: number;
         revisit: number;
+        pointsSum: number;
         ageSum: number;
         ageCount: number;
       }
@@ -1099,6 +1150,7 @@ export default function PatientAnalysisPage() {
           pureFirst: 0,
           returningFirst: 0,
           revisit: 0,
+          pointsSum: 0,
           ageSum: 0,
           ageCount: 0,
         });
@@ -1115,6 +1167,11 @@ export default function PatientAnalysisPage() {
         bucket.revisit += 1;
       }
 
+      const points = record.points ?? 0;
+      if (Number.isFinite(points)) {
+        bucket.pointsSum += points;
+      }
+
       const age = calculateAge(record.birthDateIso ?? null, record.dateIso);
       if (age !== null) {
         bucket.ageSum += age;
@@ -1127,6 +1184,12 @@ export default function PatientAnalysisPage() {
         const pureRate = bucket.total > 0 ? (bucket.pureFirst / bucket.total) * 100 : 0;
         const returningRate = bucket.total > 0 ? (bucket.returningFirst / bucket.total) * 100 : 0;
         const revisitRate = bucket.total > 0 ? (bucket.revisit / bucket.total) * 100 : 0;
+        const averagePoints =
+          bucket.total > 0 && bucket.pointsSum > 0
+            ? roundTo1Decimal(bucket.pointsSum / bucket.total)
+            : null;
+        const averageAmount =
+          averagePoints !== null ? Math.round(averagePoints * 10) : null;
 
         return {
           department: bucket.department,
@@ -1134,6 +1197,9 @@ export default function PatientAnalysisPage() {
           pureFirst: bucket.pureFirst,
           returningFirst: bucket.returningFirst,
           revisit: bucket.revisit,
+          points: bucket.pointsSum,
+          averagePoints,
+          averageAmount,
           averageAge:
             bucket.ageCount > 0 ? roundTo1Decimal(bucket.ageSum / bucket.ageCount) : null,
           pureRate: roundTo1Decimal(pureRate),
@@ -1163,6 +1229,7 @@ export default function PatientAnalysisPage() {
         pureFirst: number;
         returningFirst: number;
         revisit: number;
+        pointsSum: number;
         ageSum: number;
         ageCount: number;
       }
@@ -1181,6 +1248,7 @@ export default function PatientAnalysisPage() {
           pureFirst: 0,
           returningFirst: 0,
           revisit: 0,
+          pointsSum: 0,
           ageSum: 0,
           ageCount: 0,
         });
@@ -1197,6 +1265,11 @@ export default function PatientAnalysisPage() {
         bucket.revisit += 1;
       }
 
+      const points = record.points ?? 0;
+      if (Number.isFinite(points)) {
+        bucket.pointsSum += points;
+      }
+
       const age = calculateAge(record.birthDateIso ?? null, record.dateIso);
       if (age !== null) {
         bucket.ageSum += age;
@@ -1209,6 +1282,12 @@ export default function PatientAnalysisPage() {
       const pureRate = bucket.total > 0 ? (bucket.pureFirst / bucket.total) * 100 : 0;
       const returningRate = bucket.total > 0 ? (bucket.returningFirst / bucket.total) * 100 : 0;
       const revisitRate = bucket.total > 0 ? (bucket.revisit / bucket.total) * 100 : 0;
+      const averagePoints =
+        bucket.total > 0 && bucket.pointsSum > 0
+          ? roundTo1Decimal(bucket.pointsSum / bucket.total)
+          : null;
+      const averageAmount =
+        averagePoints !== null ? Math.round(averagePoints * 10) : null;
 
       resultMap.set(bucket.department, {
         department: bucket.department,
@@ -1216,6 +1295,9 @@ export default function PatientAnalysisPage() {
         pureFirst: bucket.pureFirst,
         returningFirst: bucket.returningFirst,
         revisit: bucket.revisit,
+        points: bucket.pointsSum,
+        averagePoints,
+        averageAmount,
         averageAge:
           bucket.ageCount > 0 ? roundTo1Decimal(bucket.ageSum / bucket.ageCount) : null,
         pureRate: roundTo1Decimal(pureRate),
@@ -1226,6 +1308,65 @@ export default function PatientAnalysisPage() {
 
     return resultMap;
   }, [previousPeriodRecords]);
+
+  const unitPriceSummaries = useMemo(() => {
+    const accumulator = new Map<UnitPriceGroupId, { patients: number; points: number }>();
+    UNIT_PRICE_GROUPS.forEach((group) =>
+      accumulator.set(group.id, {
+        patients: 0,
+        points: 0,
+      }),
+    );
+
+    for (const record of filteredClassified) {
+      const departmentRaw = record.department?.trim() ?? "";
+      if (!departmentRaw || departmentRaw.includes("自費")) {
+        continue;
+      }
+      const normalized = normalizeUnitPriceDepartment(departmentRaw);
+      const matched = UNIT_PRICE_GROUPS.find((group) => group.matcher(normalized));
+      if (!matched) {
+        continue;
+      }
+      const bucket = accumulator.get(matched.id);
+      if (!bucket) {
+        continue;
+      }
+      bucket.patients += 1;
+      const points = record.points ?? 0;
+      if (Number.isFinite(points)) {
+        bucket.points += points;
+      }
+    }
+
+    return UNIT_PRICE_GROUPS.map((group) => {
+      const bucket = accumulator.get(group.id)!;
+      const averagePoints =
+        bucket.patients > 0 && bucket.points > 0
+          ? roundTo1Decimal(bucket.points / bucket.patients)
+          : null;
+      const averageAmount =
+        averagePoints !== null ? Math.round(averagePoints * 10) : null;
+
+      return {
+        id: group.id,
+        label: group.label,
+        patientCount: bucket.patients,
+        totalPoints: Math.round(bucket.points),
+        totalAmount: Math.round(bucket.points * 10),
+        averagePoints,
+        averageAmount,
+      };
+    });
+  }, [filteredClassified]);
+
+  const hasUnitPriceData = useMemo(
+    () =>
+      unitPriceSummaries.some(
+        (item) => item.patientCount > 0 && (item.totalPoints > 0 || item.averagePoints !== null),
+      ),
+    [unitPriceSummaries],
+  );
 
   const filteredDiagnosisRecords = useMemo(() => {
     if (diagnosisRecords.length === 0) {
@@ -2261,6 +2402,62 @@ export default function PatientAnalysisPage() {
             </p>
           </SectionCard>
         )}
+
+        <SectionCard
+          title="診療科別 平均単価（保険点数換算）"
+          description="カルテ集計CSVの点数列を基に、指定科目の平均点数と保険点数×10円による概算単価を算出しています。"
+        >
+          {hasUnitPriceData ? (
+            <>
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="w-full min-w-[560px] border-collapse text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold">科目</th>
+                      <th className="px-4 py-3 text-right font-semibold">患者数</th>
+                      <th className="px-4 py-3 text-right font-semibold">保険点数 合計</th>
+                      <th className="px-4 py-3 text-right font-semibold">平均点数</th>
+                      <th className="px-4 py-3 text-right font-semibold">平均単価（円）</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {unitPriceSummaries.map((item) => (
+                      <tr key={item.id}>
+                        <td className="px-4 py-3 text-slate-700">{item.label}</td>
+                        <td className="px-4 py-3 text-right text-slate-600">
+                          {item.patientCount.toLocaleString("ja-JP")}名
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-600">
+                          {item.totalPoints.toLocaleString("ja-JP")}点
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-600">
+                          {item.averagePoints !== null
+                            ? item.averagePoints.toLocaleString("ja-JP", {
+                                minimumFractionDigits: 1,
+                                maximumFractionDigits: 1,
+                              }) + "点"
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-600">
+                          {item.averageAmount !== null
+                            ? `¥${item.averageAmount.toLocaleString("ja-JP")}`
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-2 text-[11px] text-slate-500">
+                ※ 平均単価は保険点数を 10 円換算した概算額です。点数が未記入の診療は集計に含まれません。
+              </p>
+            </>
+          ) : (
+            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+              該当期間に保険点数が登録された診療データがありません。カルテ集計CSVの点数列をご確認ください。
+            </p>
+          )}
+        </SectionCard>
 
         <SectionCard
           title="視点別インサイト"

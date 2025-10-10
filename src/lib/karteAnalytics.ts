@@ -7,6 +7,7 @@ export type KarteRecord = {
   patientNumber: number | null;
   birthDateIso: string | null;
   department?: string | null;
+  points?: number | null;
 };
 
 export type KarteMonthlyStat = {
