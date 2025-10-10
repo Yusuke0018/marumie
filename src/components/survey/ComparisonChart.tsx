@@ -173,10 +173,11 @@ export const ComparisonChart = ({ data, title, comparisonType }: ComparisonChart
               beginAtZero: false,
               ticks: {
                 callback: (value) => {
+                  const numValue = typeof value === 'number' ? value : parseFloat(String(value));
                   if (comparisonType === "count") {
-                    return `${value > 0 ? '+' : ''}${value}件`;
+                    return `${numValue > 0 ? '+' : ''}${numValue}件`;
                   } else {
-                    return `${value > 0 ? '+' : ''}${value}%`;
+                    return `${numValue > 0 ? '+' : ''}${numValue}%`;
                   }
                 },
               },
