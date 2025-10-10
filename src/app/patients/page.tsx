@@ -1794,6 +1794,27 @@ export default function PatientAnalysisPage() {
     return "全期間";
   }, [startMonth, endMonth]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (diagnosisRangeLabel) {
+      window.localStorage.setItem(
+        "marumie/patients/periodLabel",
+        diagnosisRangeLabel,
+      );
+    } else {
+      window.localStorage.removeItem("marumie/patients/periodLabel");
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("patients:period-change", {
+        detail: { label: diagnosisRangeLabel },
+      }),
+    );
+  }, [diagnosisRangeLabel]);
+
   const diagnosisPreviousLabel = useMemo(() => {
     if (!previousDiagnosisRange) {
       return null;

@@ -2,12 +2,41 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 
 export default function Navigation() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const [patientsPeriodLabel, setPatientsPeriodLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const stored = window.localStorage.getItem("marumie/patients/periodLabel");
+    if (stored) {
+      setPatientsPeriodLabel(stored);
+    }
+
+    const handlePeriodChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ label?: string }>).detail;
+      setPatientsPeriodLabel(detail?.label ?? null);
+    };
+
+    window.addEventListener(
+      "patients:period-change",
+      handlePeriodChange as EventListener,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "patients:period-change",
+        handlePeriodChange as EventListener,
+      );
+    };
+  }, []);
 
   const links = [
     { href: "/" as const, label: "患者分析" },
@@ -20,12 +49,21 @@ export default function Navigation() {
   const toggleMenu = () => setIsOpen(!isOpen);
   const closeMenu = () => setIsOpen(false);
 
+  const isPatientPage = pathname === "/" || pathname.startsWith("/patients");
+
   return (
     <nav className="sticky top-0 z-50 border-b border-brand-100/70 bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/70">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-4 sm:px-6">
-        <h1 className="py-4 text-lg sm:text-xl font-bold tracking-wide text-brand-600">
-          マルミエ
-        </h1>
+        <div className="flex items-center gap-3 py-4">
+          <h1 className="text-lg sm:text-xl font-bold tracking-wide text-brand-600">
+            マルミエ
+          </h1>
+          {isPatientPage && patientsPeriodLabel && (
+            <span className="hidden sm:inline-flex items-center rounded-full border border-brand-200 bg-white px-3 py-1 text-xs font-semibold text-brand-600 shadow-sm">
+              {patientsPeriodLabel}
+            </span>
+          )}
+        </div>
 
         {/* デスクトップナビゲーション */}
         <div className="hidden md:flex gap-2 py-2">
