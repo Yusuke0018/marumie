@@ -21,11 +21,12 @@ type WeekdayAverageChartProps = {
 const DEPARTMENT_GROUPS = {
   総合診療科: ["総合診療科"],
   内視鏡: ["内視鏡（保険）", "内視鏡（自費）", "人間ドックA", "人間ドックB"],
-  発熱外来: ["発熱外来", "発熱・風邪症状外来"],
   オンライン診療: ["オンライン診療（保険）", "オンライン診療（自費）"],
 } as const;
 
 type DepartmentGroup = keyof typeof DEPARTMENT_GROUPS;
+
+const DEPARTMENT_ORDER: DepartmentGroup[] = ["総合診療科", "内視鏡", "オンライン診療"];
 
 const WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土", "日", "祝日"];
 
@@ -56,7 +57,7 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
     // 初期化（0=月曜日, 1=火曜日, ..., 6=日曜日, 7=祝日）
     for (let i = 0; i <= 7; i++) {
       const groupMap = new Map<DepartmentGroup, { count: number; days: Set<string> }>();
-      for (const group of Object.keys(DEPARTMENT_GROUPS) as DepartmentGroup[]) {
+      for (const group of DEPARTMENT_ORDER) {
         groupMap.set(group, { count: 0, days: new Set() });
       }
       weekdayMap.set(i, groupMap);
@@ -112,7 +113,7 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
 
       const entry: Record<string, string | number> = { weekday: weekdayLabel };
 
-      for (const group of Object.keys(DEPARTMENT_GROUPS) as DepartmentGroup[]) {
+      for (const group of DEPARTMENT_ORDER) {
         const groupData = groupMap.get(group)!;
         const daysCount = groupData.days.size;
         const average = daysCount > 0 ? Math.round((groupData.count / daysCount) * 10) / 10 : 0;
@@ -128,7 +129,6 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
   const COLORS: Record<DepartmentGroup, string> = {
     総合診療科: "#3FBFAA",
     内視鏡: "#FF7B7B",
-    発熱外来: "#FFB84D",
     オンライン診療: "#5DD4C3",
   };
 
@@ -141,7 +141,7 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
           <YAxis label={{ value: '平均患者数（人）', angle: -90, position: 'insideLeft', style: { fontSize: 12 } }} tick={{ fontSize: 12 }} />
           <Tooltip formatter={(value: number) => [`${value}人`, ""]} />
           <Legend />
-          {(Object.keys(DEPARTMENT_GROUPS) as DepartmentGroup[]).map((group) => (
+          {DEPARTMENT_ORDER.map((group) => (
             <Bar key={group} dataKey={group} fill={COLORS[group]} name={group} />
           ))}
         </BarChart>
