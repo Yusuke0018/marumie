@@ -59,6 +59,85 @@ export const normalizeVisitType = (value: string | undefined): VisitType => {
   return "未設定";
 };
 
+const isValidDateKey = (value: string): boolean => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    return false;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) {
+    return false;
+  }
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return false;
+  }
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+};
+
+const isValidMonthKey = (value: string): boolean => {
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!match) {
+    return false;
+  }
+  const month = Number(match[2]);
+  return !Number.isNaN(month) && month >= 1 && month <= 12;
+};
+
+const isValidReservationRecord = (record: unknown): record is Reservation => {
+  if (!record || typeof record !== "object") {
+    return false;
+  }
+
+  const item = record as Reservation;
+
+  if (
+    typeof item.department !== "string" ||
+    typeof item.visitType !== "string" ||
+    typeof item.receivedAtIso !== "string" ||
+    typeof item.reservationDate !== "string" ||
+    typeof item.reservationMonth !== "string" ||
+    typeof item.patientId !== "string" ||
+    typeof item.isSameDay !== "boolean"
+  ) {
+    return false;
+  }
+
+  if (!isValidDateKey(item.reservationDate) || !isValidMonthKey(item.reservationMonth)) {
+    return false;
+  }
+
+  if (
+    typeof item.reservationHour !== "number" ||
+    Number.isNaN(item.reservationHour) ||
+    item.reservationHour < 0 ||
+    item.reservationHour > 23
+  ) {
+    return false;
+  }
+
+  if (Number.isNaN(new Date(item.receivedAtIso).getTime())) {
+    return false;
+  }
+
+  if (item.appointmentIso !== null) {
+    if (typeof item.appointmentIso !== "string") {
+      return false;
+    }
+    if (Number.isNaN(new Date(item.appointmentIso).getTime())) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
 const parseJstDateTime = (raw: string | undefined): ParsedDateTime | null => {
   if (!raw) {
     return null;
@@ -91,6 +170,30 @@ const parseJstDateTime = (raw: string | undefined): ParsedDateTime | null => {
     Number.isNaN(day) ||
     Number.isNaN(hour) ||
     Number.isNaN(minute)
+  ) {
+    return null;
+  }
+
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31 ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return null;
+  }
+
+  const utcDate = new Date(Date.UTC(year, month - 1, day, hour, minute));
+  if (
+    utcDate.getUTCFullYear() !== year ||
+    utcDate.getUTCMonth() !== month - 1 ||
+    utcDate.getUTCDate() !== day ||
+    utcDate.getUTCHours() !== hour ||
+    utcDate.getUTCMinutes() !== minute
   ) {
     return null;
   }
@@ -204,7 +307,7 @@ export const loadReservationsFromStorage = (): Reservation[] => {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return parsed;
+    return parsed.filter(isValidReservationRecord);
   } catch (error) {
     console.error(error);
     return [];
