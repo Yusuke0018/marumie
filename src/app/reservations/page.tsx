@@ -969,22 +969,46 @@ export default function HomePage() {
 
         <section className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
           <StatCard
-            label="総予約数"
+            label={
+              startMonth && endMonth
+                ? startMonth === endMonth
+                  ? `${formatMonthLabel(startMonth)} 総予約数`
+                  : `${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)} 総予約数`
+                : "総予約数"
+            }
             value={totalReservations.toLocaleString("ja-JP")}
             tone="brand"
           />
           <StatCard
-            label="初診"
+            label={
+              startMonth && endMonth
+                ? startMonth === endMonth
+                  ? `${formatMonthLabel(startMonth)} 初診`
+                  : `${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)} 初診`
+                : "初診"
+            }
             value={initialCount.toLocaleString("ja-JP")}
             tone="brand"
           />
           <StatCard
-            label="再診"
+            label={
+              startMonth && endMonth
+                ? startMonth === endMonth
+                  ? `${formatMonthLabel(startMonth)} 再診`
+                  : `${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)} 再診`
+                : "再診"
+            }
             value={followupCount.toLocaleString("ja-JP")}
             tone="accent"
           />
           <StatCard
-            label="診療科数"
+            label={
+              startMonth && endMonth
+                ? startMonth === endMonth
+                  ? `${formatMonthLabel(startMonth)} 診療科数`
+                  : `${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)} 診療科数`
+                : "診療科数"
+            }
             value={departmentCount.toLocaleString("ja-JP")}
             tone="muted"
           />
