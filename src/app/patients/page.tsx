@@ -603,40 +603,6 @@ export default function PatientAnalysisPage() {
     [],
   );
 
-  const applySharedPayload = useCallback(
-    (payload: unknown, uploadedAt?: string): boolean => {
-      if (Array.isArray(payload)) {
-        const timestamp = uploadedAt ?? new Date().toISOString();
-        setUploadError(null);
-        setShareUrl(null);
-        setRecords(payload as KarteRecord[]);
-        setLastUpdated(timestamp);
-        if (typeof window !== "undefined") {
-          try {
-            setCompressedItem(KARTE_STORAGE_KEY, JSON.stringify(payload));
-            window.localStorage.setItem(KARTE_TIMESTAMP_KEY, timestamp);
-          } catch (error) {
-            console.error(error);
-            setUploadError("データの保存に失敗しました。データ量が多すぎる可能性があります。");
-          }
-        }
-        return true;
-      }
-
-      if (
-        payload &&
-        typeof payload === "object" &&
-        Array.isArray((payload as SharedDataBundle).karteRecords)
-      ) {
-        applySharedBundle(payload as SharedDataBundle, uploadedAt);
-        return true;
-      }
-
-      return false;
-    },
-    [applySharedBundle],
-  );
-
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -653,7 +619,28 @@ export default function PatientAnalysisPage() {
           if (response.type === "karte") {
             try {
               const parsed = JSON.parse(response.data);
-              if (!applySharedPayload(parsed, response.uploadedAt)) {
+              if (Array.isArray(parsed)) {
+                const timestamp = response.uploadedAt ?? new Date().toISOString();
+                setUploadError(null);
+                setShareUrl(null);
+                setRecords(parsed as KarteRecord[]);
+                setLastUpdated(timestamp);
+                if (typeof window !== "undefined") {
+                  try {
+                    setCompressedItem(KARTE_STORAGE_KEY, JSON.stringify(parsed));
+                    window.localStorage.setItem(KARTE_TIMESTAMP_KEY, timestamp);
+                  } catch (error) {
+                    console.error(error);
+                    setUploadError("データの保存に失敗しました。データ量が多すぎる可能性があります。");
+                  }
+                }
+              } else if (
+                parsed &&
+                typeof parsed === "object" &&
+                Array.isArray((parsed as SharedDataBundle).karteRecords)
+              ) {
+                applySharedBundle(parsed as SharedDataBundle, response.uploadedAt);
+              } else {
                 setUploadError("共有データの形式が不正です。");
               }
             } catch (error) {
@@ -687,7 +674,8 @@ export default function PatientAnalysisPage() {
         setUploadError("保存済みデータの読み込みに失敗しました。");
       }
     }
-  }, [applySharedPayload]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
