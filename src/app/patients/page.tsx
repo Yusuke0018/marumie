@@ -1991,7 +1991,7 @@ export default function PatientAnalysisPage() {
               ? `曜日別平均患者数（${formatMonthLabel(startMonth)}）`
               : "曜日別平均患者数"
           }
-          description="月曜日から日曜日および祝日（12月27日〜1月3日含む）の診療科別平均患者数です。総合診療科、内視鏡、オンライン診療の3つの診療科グループで集計しています。"
+          description="月曜日から日曜日および祝日（12月27日〜1月3日含む）の診療科別平均患者数です。総合診療科と内視鏡の2つの診療科グループで集計しています。"
         >
           {filteredClassified.length > 0 ? (
             <>
