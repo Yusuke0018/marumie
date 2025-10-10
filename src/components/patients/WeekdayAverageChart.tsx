@@ -19,14 +19,14 @@ type WeekdayAverageChartProps = {
 };
 
 const DEPARTMENT_GROUPS = {
-  総合診療科: ["総合診療科"],
-  内視鏡: ["内視鏡（保険）", "内視鏡（自費）", "人間ドックA", "人間ドックB"],
-  オンライン診療: ["オンライン診療（保険）", "オンライン診療（自費）"],
+  総合診療: ["総合診療", "総合診療科"],
+  内視鏡: ["内視鏡", "内視鏡（保険）", "内視鏡（自費）", "人間ドックA", "人間ドックB"],
+  オンライン診療: ["オンライン診療", "オンライン診療（保険）", "オンライン診療（自費）"],
 } as const;
 
 type DepartmentGroup = keyof typeof DEPARTMENT_GROUPS;
 
-const DEPARTMENT_ORDER: DepartmentGroup[] = ["総合診療科", "内視鏡", "オンライン診療"];
+const DEPARTMENT_ORDER: DepartmentGroup[] = ["総合診療", "内視鏡", "オンライン診療"];
 
 const WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土", "日", "祝日"];
 
@@ -65,7 +65,7 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
 
     // レコードを集計
     for (const record of records) {
-      const department = record.department?.trim() || "";
+      const departmentRaw = record.department?.trim() || "";
       const dateStr = record.dateIso;
 
       // 月フィルタ
@@ -74,9 +74,10 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
       if (endMonth && month > endMonth) continue;
 
       // 診療科グループを特定
+      const department = departmentRaw.replace(/\s+/g, "");
       let matchedGroup: DepartmentGroup | null = null;
       for (const [groupName, departments] of Object.entries(DEPARTMENT_GROUPS)) {
-        if (departments.some(d => department.includes(d))) {
+        if (departments.some((candidate) => department.includes(candidate.replace(/\s+/g, "")))) {
           matchedGroup = groupName as DepartmentGroup;
           break;
         }
@@ -127,9 +128,9 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
   }, [records, startMonth, endMonth]);
 
   const COLORS: Record<DepartmentGroup, string> = {
-    総合診療科: "#3FBFAA",
-    内視鏡: "#FF7B7B",
-    オンライン診療: "#5DD4C3",
+    総合診療: "#2563eb",
+    内視鏡: "#ec4899",
+    オンライン診療: "#14b8a6",
   };
 
   return (
@@ -138,9 +139,21 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
           <XAxis dataKey="weekday" tick={{ fontSize: 12 }} />
-          <YAxis label={{ value: '平均患者数（人）', angle: -90, position: 'insideLeft', style: { fontSize: 12 } }} tick={{ fontSize: 12 }} />
-          <Tooltip formatter={(value: number) => [`${value}人`, ""]} />
-          <Legend />
+          <YAxis
+            label={{
+              value: "平均患者数（人）",
+              angle: -90,
+              position: "insideLeft",
+              style: { fontSize: 12 },
+            }}
+            tick={{ fontSize: 12 }}
+          />
+          <Tooltip formatter={(value: number, name: string) => [`${value}人`, name]} />
+          <Legend
+            verticalAlign="bottom"
+            wrapperStyle={{ fontSize: 12 }}
+            formatter={(value: DepartmentGroup) => value}
+          />
           {DEPARTMENT_ORDER.map((group) => (
             <Bar key={group} dataKey={group} fill={COLORS[group]} name={group} />
           ))}
