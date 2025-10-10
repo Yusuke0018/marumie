@@ -2,6 +2,27 @@ import Papa from "papaparse";
 
 export type VisitType = "初診" | "再診" | "未設定";
 
+const normalizePatientName = (value: string | undefined): {
+  raw: string | null;
+  normalized: string | null;
+} => {
+  if (!value) {
+    return { raw: null, normalized: null };
+  }
+  const raw = value.trim();
+  if (raw.length === 0) {
+    return { raw: null, normalized: null };
+  }
+  const normalized = raw
+    .replace(/\u3000/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return {
+    raw,
+    normalized: normalized.length > 0 ? normalized : null,
+  };
+};
+
 export type Reservation = {
   key: string;
   department: string;
@@ -12,6 +33,8 @@ export type Reservation = {
   receivedAtIso: string;
   appointmentIso: string | null;
   patientId: string;
+  patientName?: string | null;
+  patientNameNormalized?: string | null;
   isSameDay: boolean;
 };
 
@@ -135,6 +158,14 @@ const isValidReservationRecord = (record: unknown): record is Reservation => {
     }
   }
 
+  if (
+    item.patientNameNormalized !== undefined &&
+    item.patientNameNormalized !== null &&
+    typeof item.patientNameNormalized !== "string"
+  ) {
+    return false;
+  }
+
   return true;
 };
 
@@ -234,6 +265,9 @@ export const parseReservationCsv = (content: string): Reservation[] => {
     const visitType = normalizeVisitType(row["初再診"]);
     const appointment = parseJstDateTime(row["予約日時"]);
     const patientId = row["患者ID"]?.trim() ?? "";
+    const { raw: patientName, normalized: patientNameNormalized } = normalizePatientName(
+      row["患者名"] ?? row["氏名"] ?? row["お名前"],
+    );
 
     const reservation: Reservation = {
       key: createReservationKey({
@@ -251,6 +285,8 @@ export const parseReservationCsv = (content: string): Reservation[] => {
       receivedAtIso: received.iso,
       appointmentIso: appointment?.iso ?? null,
       patientId,
+      patientName,
+      patientNameNormalized,
       isSameDay: (row["当日予約"] ?? "").trim().toLowerCase() === "true",
     };
 

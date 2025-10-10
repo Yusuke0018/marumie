@@ -232,6 +232,26 @@ type DepartmentStat = {
   revisitRate: number;
 };
 
+type ShiftInsightRow = {
+  key: string;
+  department: string;
+  weekday: number;
+  hour: number;
+  patientCount: number;
+  totalPoints: number;
+  averagePoints: number | null;
+  averageAmount: number | null;
+  averageAge: number | null;
+  pureRate: number | null;
+  returningRate: number | null;
+  revisitRate: number | null;
+};
+
+type ShiftAnalysisResult = {
+  departments: string[];
+  byDepartment: Map<string, ShiftInsightRow[]>;
+};
+
 const DepartmentMetric = ({
   icon: Icon,
   label,
@@ -386,6 +406,9 @@ const parseKarteCsv = (text: string): KarteRecord[] => {
     const birthDateIso = birthDate ? formatDateKey(birthDate) : null;
     const department = row["診療科"]?.trim() ?? "";
     const points = parsePointValue(row["点数"]);
+    const patientNameNormalized = normalizePatientName(
+      row["患者氏名"] ?? row["患者名"] ?? row["氏名"],
+    );
 
     records.push({
       dateIso,
@@ -395,6 +418,7 @@ const parseKarteCsv = (text: string): KarteRecord[] => {
       birthDateIso,
       department,
       points,
+      patientNameNormalized,
     });
   }
 
@@ -618,6 +642,24 @@ const UNIT_PRICE_GROUPS: Array<{
   },
 ];
 
+const normalizePatientName = (value: string | null | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+  const normalized = value
+    .replace(/\u3000/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return normalized.length > 0 ? normalized : null;
+};
+
+const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
+
+const formatHourLabel = (hour: number) => `${hour.toString().padStart(2, "0")}:00`;
+
+const normalizeDepartmentLabel = (value: string) =>
+  value.replace(/\s+/g, "").replace(/[()（）]/g, "");
+
 const formatTimestampLabel = (value: string | null) =>
   value ? new Date(value).toLocaleString("ja-JP") : "未登録";
 
@@ -637,6 +679,8 @@ export default function PatientAnalysisPage() {
   const [showWeekdayChart, setShowWeekdayChart] = useState(false);
   const [insightTab, setInsightTab] = useState<"channel" | "department" | "time">("department");
   const [isManagementOpen, setIsManagementOpen] = useState(false);
+  const [reservationsRecords, setReservationsRecords] = useState<Reservation[]>([]);
+  const [selectedShiftDepartment, setSelectedShiftDepartment] = useState<string>("");
   const [reservationStatus, setReservationStatus] = useState<{
     lastUpdated: string | null;
     total: number;
@@ -719,6 +763,7 @@ export default function PatientAnalysisPage() {
           lastUpdated: reservationsTimestamp,
           total: reservationsData.length,
         });
+        setReservationsRecords(reservationsData);
       }
 
       if (Array.isArray(bundle.surveyData)) {
@@ -854,6 +899,7 @@ export default function PatientAnalysisPage() {
         lastUpdated: reservationTimestamp,
         total: existingReservations.length,
       });
+      setReservationsRecords(existingReservations);
 
       const existingSurvey = loadSurveyDataFromStorage();
       const surveyTimestamp = loadSurveyTimestamp();
@@ -1368,6 +1414,196 @@ export default function PatientAnalysisPage() {
     [unitPriceSummaries],
   );
 
+  const shiftAnalysis = useMemo<ShiftAnalysisResult>(() => {
+    if (filteredClassified.length === 0 || reservationsRecords.length === 0) {
+      return { departments: [], byDepartment: new Map() };
+    }
+
+    const reservationMap = new Map<string, Reservation[]>();
+    reservationsRecords.forEach((reservation) => {
+      const normalizedName = normalizePatientName(
+        reservation.patientNameNormalized ?? reservation.patientName,
+      );
+      const appointmentSource = reservation.appointmentIso ?? reservation.receivedAtIso;
+      if (!normalizedName || !appointmentSource) {
+        return;
+      }
+      const dateKey = appointmentSource.split("T")[0];
+      if (!dateKey) {
+        return;
+      }
+      const key = `${normalizedName}|${dateKey}`;
+      if (!reservationMap.has(key)) {
+        reservationMap.set(key, []);
+      }
+      reservationMap.get(key)!.push(reservation);
+    });
+
+    type ShiftStat = {
+      department: string;
+      weekday: number;
+      hour: number;
+      patientCount: number;
+      totalPoints: number;
+      ageSum: number;
+      ageCount: number;
+      pureCount: number;
+      returningCount: number;
+      revisitCount: number;
+    };
+
+    const departmentMap = new Map<string, Map<string, ShiftStat>>();
+
+    filteredClassified.forEach((record) => {
+      const patientName = normalizePatientName(record.patientNameNormalized);
+      const points = record.points ?? null;
+      const departmentRaw = record.department?.trim() ?? "";
+      if (!patientName || points === null) {
+        return;
+      }
+
+      const dateKey = record.dateIso;
+      const reservationKey = `${patientName}|${dateKey}`;
+      const candidates = reservationMap.get(reservationKey);
+      if (!candidates || candidates.length === 0) {
+        return;
+      }
+
+      const normalizedDept = normalizeDepartmentLabel(departmentRaw);
+      const matchIndex = candidates.findIndex((candidate) => {
+        const candidateDept = normalizeDepartmentLabel(candidate.department ?? "");
+        return candidateDept === normalizedDept;
+      });
+      const match = matchIndex >= 0 ? candidates.splice(matchIndex, 1)[0] : candidates.shift();
+      if (!match) {
+        return;
+      }
+
+      const appointmentIso = match.appointmentIso ?? match.receivedAtIso;
+      if (!appointmentIso) {
+        return;
+      }
+      const visitDate = new Date(appointmentIso);
+      if (Number.isNaN(visitDate.getTime())) {
+        return;
+      }
+
+      const weekday = visitDate.getDay();
+      const hour = visitDate.getHours();
+      const department = departmentRaw.length > 0 ? departmentRaw : "診療科未分類";
+
+      if (!departmentMap.has(department)) {
+        departmentMap.set(department, new Map<string, ShiftStat>());
+      }
+      const slotKey = `${weekday}|${hour}`;
+      const slotMap = departmentMap.get(department)!;
+      if (!slotMap.has(slotKey)) {
+        slotMap.set(slotKey, {
+          department,
+          weekday,
+          hour,
+          patientCount: 0,
+          totalPoints: 0,
+          ageSum: 0,
+          ageCount: 0,
+          pureCount: 0,
+          returningCount: 0,
+          revisitCount: 0,
+        });
+      }
+      const stat = slotMap.get(slotKey)!;
+      stat.patientCount += 1;
+      stat.totalPoints += points;
+
+      const age = calculateAge(record.birthDateIso ?? null, record.dateIso);
+      if (age !== null) {
+        stat.ageSum += age;
+        stat.ageCount += 1;
+      }
+
+      if (record.category === "pureFirst") {
+        stat.pureCount += 1;
+      } else if (record.category === "returningFirst") {
+        stat.returningCount += 1;
+      } else if (record.category === "revisit") {
+        stat.revisitCount += 1;
+      }
+    });
+
+    const byDepartment = new Map<string, ShiftInsightRow[]>();
+    departmentMap.forEach((slotMap, department) => {
+      const rows: ShiftInsightRow[] = Array.from(slotMap.values()).map((stat) => {
+        const averagePoints =
+          stat.patientCount > 0 ? roundTo1Decimal(stat.totalPoints / stat.patientCount) : null;
+        const averageAmount =
+          averagePoints !== null ? Math.round(averagePoints * 10) : null;
+        const averageAge =
+          stat.ageCount > 0 ? roundTo1Decimal(stat.ageSum / stat.ageCount) : null;
+        const pureRate =
+          stat.patientCount > 0
+            ? roundTo1Decimal((stat.pureCount / stat.patientCount) * 100)
+            : null;
+        const returningRate =
+          stat.patientCount > 0
+            ? roundTo1Decimal((stat.returningCount / stat.patientCount) * 100)
+            : null;
+        const revisitRate =
+          stat.patientCount > 0
+            ? roundTo1Decimal((stat.revisitCount / stat.patientCount) * 100)
+            : null;
+
+        return {
+          key: `${department}|${stat.weekday}|${stat.hour}`,
+          department,
+          weekday: stat.weekday,
+          hour: stat.hour,
+          patientCount: stat.patientCount,
+          totalPoints: Math.round(stat.totalPoints),
+          averagePoints,
+          averageAmount,
+          averageAge,
+          pureRate,
+          returningRate,
+          revisitRate,
+        };
+      });
+
+      rows.sort((a, b) => {
+        if (a.weekday !== b.weekday) {
+          return a.weekday - b.weekday;
+        }
+        return a.hour - b.hour;
+      });
+
+      byDepartment.set(department, rows);
+    });
+
+    const departments = Array.from(byDepartment.keys()).sort((a, b) =>
+      a.localeCompare(b, "ja"),
+    );
+
+    return { departments, byDepartment };
+  }, [filteredClassified, reservationsRecords]);
+
+  const shiftDepartmentOptions = shiftAnalysis.departments;
+
+  useEffect(() => {
+    if (shiftDepartmentOptions.length === 0) {
+      if (selectedShiftDepartment !== "") {
+        setSelectedShiftDepartment("");
+      }
+      return;
+    }
+    if (!shiftDepartmentOptions.includes(selectedShiftDepartment)) {
+      setSelectedShiftDepartment(shiftDepartmentOptions[0]);
+    }
+  }, [shiftDepartmentOptions, selectedShiftDepartment]);
+
+  const shiftRows =
+    selectedShiftDepartment && shiftAnalysis.byDepartment.has(selectedShiftDepartment)
+      ? shiftAnalysis.byDepartment.get(selectedShiftDepartment)!
+      : [];
+
   const filteredDiagnosisRecords = useMemo(() => {
     if (diagnosisRecords.length === 0) {
       return [];
@@ -1836,6 +2072,7 @@ export default function PatientAnalysisPage() {
         lastUpdated: timestamp,
         total: merged.length,
       });
+      setReservationsRecords(merged);
     } catch (error) {
       console.error(error);
       setReservationUploadError("予約ログCSVの解析に失敗しました。フォーマットをご確認ください。");
@@ -2036,6 +2273,7 @@ export default function PatientAnalysisPage() {
     setShareUrl(null);
     setLastUpdated(null);
     setUploadError(null);
+    setReservationsRecords([]);
     setReservationStatus({
       lastUpdated: null,
       total: 0,
@@ -2655,6 +2893,97 @@ export default function PatientAnalysisPage() {
                       </div>
                     )}
                   </>
+                )}
+                {shiftDepartmentOptions.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h3 className="text-sm font-semibold text-slate-700">時間帯別 平均単価</h3>
+                      <select
+                        value={selectedShiftDepartment}
+                        onChange={(event) => setSelectedShiftDepartment(event.target.value)}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
+                      >
+                        {shiftDepartmentOptions.map((department) => (
+                          <option key={department} value={department}>
+                            {department}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {shiftRows.length > 0 ? (
+                      <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                        <table className="w-full min-w-[640px] border-collapse text-sm">
+                          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                            <tr>
+                              <th className="px-4 py-3 text-left font-semibold">曜日</th>
+                              <th className="px-4 py-3 text-left font-semibold">時間帯</th>
+                              <th className="px-4 py-3 text-right font-semibold">患者数</th>
+                              <th className="px-4 py-3 text-right font-semibold">平均点数</th>
+                              <th className="px-4 py-3 text-right font-semibold">平均単価(円)</th>
+                              <th className="px-4 py-3 text-right font-semibold">平均年齢</th>
+                              <th className="px-4 py-3 text-right font-semibold">初診率</th>
+                              <th className="px-4 py-3 text-right font-semibold">再診率</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 bg-white">
+                            {shiftRows.map((row) => (
+                              <tr key={row.key}>
+                                <td className="px-4 py-3 text-slate-700">{WEEKDAY_LABELS[row.weekday]}</td>
+                                <td className="px-4 py-3 text-slate-700">{formatHourLabel(row.hour)}</td>
+                                <td className="px-4 py-3 text-right text-slate-600">
+                                  {row.patientCount.toLocaleString("ja-JP")}名
+                                </td>
+                                <td className="px-4 py-3 text-right text-slate-600">
+                                  {row.averagePoints !== null
+                                    ? `${row.averagePoints.toLocaleString("ja-JP", {
+                                        minimumFractionDigits: 1,
+                                        maximumFractionDigits: 1,
+                                      })}点`
+                                    : "—"}
+                                </td>
+                                <td className="px-4 py-3 text-right text-slate-600">
+                                  {row.averageAmount !== null
+                                    ? `¥${row.averageAmount.toLocaleString("ja-JP")}`
+                                    : "—"}
+                                </td>
+                                <td className="px-4 py-3 text-right text-slate-600">
+                                  {row.averageAge !== null
+                                    ? `${row.averageAge.toLocaleString("ja-JP", {
+                                        minimumFractionDigits: 1,
+                                        maximumFractionDigits: 1,
+                                      })}歳`
+                                    : "—"}
+                                </td>
+                                <td className="px-4 py-3 text-right text-slate-600">
+                                  {row.pureRate !== null
+                                    ? `${row.pureRate.toLocaleString("ja-JP", {
+                                        minimumFractionDigits: 1,
+                                        maximumFractionDigits: 1,
+                                      })}%`
+                                    : "—"}
+                                </td>
+                                <td className="px-4 py-3 text-right text-slate-600">
+                                  {row.revisitRate !== null
+                                    ? `${row.revisitRate.toLocaleString("ja-JP", {
+                                        minimumFractionDigits: 1,
+                                        maximumFractionDigits: 1,
+                                      })}%`
+                                    : "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                        選択した診療科で結合可能な予約データが見つかりませんでした。
+                      </p>
+                    )}
+                    <p className="text-[11px] text-slate-500">
+                      ※ 予約CSVとカルテCSVの氏名・日付が一致したデータのみ集計しています。同姓同名の場合は先に一致した予約を使用します。
+                    </p>
+                  </div>
                 )}
               </div>
             )}
