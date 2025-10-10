@@ -1848,7 +1848,13 @@ export default function PatientAnalysisPage() {
                 const ageMoM = prevRow && row.averageAge !== null && prevRow.averageAge !== null
                   ? { value: roundTo1Decimal(row.averageAge - prevRow.averageAge), percentage: roundTo1Decimal(((row.averageAge - prevRow.averageAge) / prevRow.averageAge) * 100) }
                   : null;
-                
+
+                // 健康診断・人間ドック・予防接種は初再診の概念がないため非表示
+                const isPreventiveCare =
+                  row.department.includes("健康診断") ||
+                  row.department.includes("人間ドック") ||
+                  row.department.includes("予防接種");
+
                 return (
                   <div
                     key={row.department}
@@ -1871,33 +1877,37 @@ export default function PatientAnalysisPage() {
                         monthOverMonth={totalMoM}
                         isSingleMonth={isSingleMonthPeriod}
                       />
-                      <DepartmentMetric
-                        icon={UserPlus}
-                        label="純初診"
-                        value={`${row.pureFirst.toLocaleString("ja-JP")}名`}
-                        caption={`${row.pureRate}%`}
-                        accent="emerald"
-                        monthOverMonth={pureMoM}
-                        isSingleMonth={isSingleMonthPeriod}
-                      />
-                      <DepartmentMetric
-                        icon={Undo2}
-                        label="再初診"
-                        value={`${row.returningFirst.toLocaleString("ja-JP")}名`}
-                        caption={`${row.returningRate}%`}
-                        accent="accent"
-                        monthOverMonth={returningMoM}
-                        isSingleMonth={isSingleMonthPeriod}
-                      />
-                      <DepartmentMetric
-                        icon={RotateCcw}
-                        label="再診"
-                        value={`${row.revisit.toLocaleString("ja-JP")}名`}
-                        caption={`${row.revisitRate}%`}
-                        accent="muted"
-                        monthOverMonth={revisitMoM}
-                        isSingleMonth={isSingleMonthPeriod}
-                      />
+                      {!isPreventiveCare && (
+                        <>
+                          <DepartmentMetric
+                            icon={UserPlus}
+                            label="純初診"
+                            value={`${row.pureFirst.toLocaleString("ja-JP")}名`}
+                            caption={`${row.pureRate}%`}
+                            accent="emerald"
+                            monthOverMonth={pureMoM}
+                            isSingleMonth={isSingleMonthPeriod}
+                          />
+                          <DepartmentMetric
+                            icon={Undo2}
+                            label="再初診"
+                            value={`${row.returningFirst.toLocaleString("ja-JP")}名`}
+                            caption={`${row.returningRate}%`}
+                            accent="accent"
+                            monthOverMonth={returningMoM}
+                            isSingleMonth={isSingleMonthPeriod}
+                          />
+                          <DepartmentMetric
+                            icon={RotateCcw}
+                            label="再診"
+                            value={`${row.revisit.toLocaleString("ja-JP")}名`}
+                            caption={`${row.revisitRate}%`}
+                            accent="muted"
+                            monthOverMonth={revisitMoM}
+                            isSingleMonth={isSingleMonthPeriod}
+                          />
+                        </>
+                      )}
                       <DepartmentMetric
                         icon={Clock}
                         label="平均年齢"
