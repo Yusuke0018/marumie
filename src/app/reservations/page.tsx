@@ -1015,7 +1015,13 @@ export default function HomePage() {
         </section>
 
         <SectionCard
-          title="曜日別 予約傾向"
+          title={
+            startMonth && endMonth
+              ? startMonth === endMonth
+                ? `曜日別 予約傾向（${formatMonthLabel(startMonth)}）`
+                : `曜日別 予約傾向（${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}）`
+              : "曜日別 予約傾向"
+          }
           description="曜日ごとの1日あたり平均予約件数を表示しています。"
         >
           {!showWeekdayChart ? (
@@ -1039,7 +1045,13 @@ export default function HomePage() {
         </SectionCard>
 
         <SectionCard
-          title="日付タイプ別 予約傾向"
+          title={
+            startMonth && endMonth
+              ? startMonth === endMonth
+                ? `日付タイプ別 予約傾向（${formatMonthLabel(startMonth)}）`
+                : `日付タイプ別 予約傾向（${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}）`
+              : "日付タイプ別 予約傾向"
+          }
           description="平日・休日・祝日・連休など、日付のタイプごとの予約パターンを表示しています。"
         >
           <div className="overflow-x-auto">
@@ -1087,7 +1099,13 @@ export default function HomePage() {
         </SectionCard>
 
         <SectionCard
-          title="時間帯別 予約数（受付基準）"
+          title={
+            startMonth && endMonth
+              ? startMonth === endMonth
+                ? `時間帯別 予約数（${formatMonthLabel(startMonth)}）`
+                : `時間帯別 予約数（${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}）`
+              : "時間帯別 予約数（受付基準）"
+          }
           description="1時間単位で予約受付が集中する時間帯を診療科別に表示しています。"
         >
           <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -1151,7 +1169,13 @@ export default function HomePage() {
         </SectionCard>
 
         <SectionCard
-          title="日別 予約推移（受付基準）"
+          title={
+            startMonth && endMonth
+              ? startMonth === endMonth
+                ? `日別 予約推移（${formatMonthLabel(startMonth)}）`
+                : `日別 予約推移（${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}）`
+              : "日別 予約推移（受付基準）"
+          }
           description="日ごとの予約受付件数の推移を確認できます。"
         >
           {!showDailyChart ? (
