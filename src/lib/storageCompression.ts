@@ -3,6 +3,9 @@
  * LZ-string互換の軽量圧縮を実装
  */
 
+const RAW_PREFIX = "__raw__:";
+const COMPRESSED_PREFIX = "__lz__:";
+
 /**
  * 文字列をUTF-16でエンコード
  */
@@ -394,9 +397,31 @@ function decompress(compressed: string): string {
  * LocalStorageに圧縮して保存
  */
 export function setCompressedItem(key: string, value: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
   try {
     const compressed = compress(value);
-    window.localStorage.setItem(key, compressed);
+    let useRaw = compressed.length === 0 && value.length > 0;
+
+    if (!useRaw) {
+      try {
+        const restored = decompress(compressed);
+        if (restored !== value) {
+          useRaw = true;
+        }
+      } catch (error) {
+        console.error("圧縮データ検証エラー:", error);
+        useRaw = true;
+      }
+    }
+
+    if (useRaw) {
+      window.localStorage.setItem(key, `${RAW_PREFIX}${value}`);
+    } else {
+      window.localStorage.setItem(key, `${COMPRESSED_PREFIX}${compressed}`);
+    }
   } catch (error) {
     console.error("圧縮保存エラー:", error);
     throw new Error(`LocalStorageへの保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`);
@@ -407,12 +432,25 @@ export function setCompressedItem(key: string, value: string): void {
  * LocalStorageから解凍して取得
  */
 export function getCompressedItem(key: string): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
   try {
     const compressed = window.localStorage.getItem(key);
     if (!compressed) {
       return null;
     }
-    return decompress(compressed);
+
+    if (compressed.startsWith(RAW_PREFIX)) {
+      return compressed.slice(RAW_PREFIX.length);
+    }
+
+    const payload = compressed.startsWith(COMPRESSED_PREFIX)
+      ? compressed.slice(COMPRESSED_PREFIX.length)
+      : compressed;
+
+    return decompress(payload);
   } catch (error) {
     console.error("解凍取得エラー:", error);
     return null;
