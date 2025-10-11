@@ -5,4 +5,4 @@ summary: keep all 主病 rows with stable ids and broader dept mapping
 tests:
   - npm run lint (pass)
   - npm run build (pass)
-push: origin/main (pending)
+push: origin/main (success)
