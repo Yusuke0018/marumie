@@ -19,6 +19,8 @@ export const DIAGNOSIS_CATEGORIES: DiagnosisCategory[] = [
 export type DiagnosisRecord = {
   id: string;
   patientNumber: string | null;
+  patientNameNormalized: string | null;
+  birthDateIso: string | null;
   diseaseName: string;
   startDate: string;
   monthKey: string;
@@ -123,6 +125,17 @@ const normalizeDepartment = (value: string | undefined): DiagnosisDepartment | n
   }
 
   return null;
+};
+
+const normalizePatientName = (value: string | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+  const normalized = value
+    .replace(/\u3000/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return normalized.length > 0 ? normalized : null;
 };
 
 const normalizeDiseaseName = (value: string | undefined): string | null => {
@@ -284,6 +297,10 @@ export const parseDiagnosisCsv = (content: string): DiagnosisRecord[] => {
     const category = categorizeDiseaseName(diseaseName);
 
     const patientNumber = normalizePatientNumber(row["患者番号"]);
+    const patientNameNormalized = normalizePatientName(
+      row["患者氏名"] ?? row["患者名"] ?? row["患者"] ?? row["氏名"],
+    );
+    const birthDateIso = parseDate(row["患者生年月日"]);
     const monthKey = toMonthKey(startDate);
     const id = [
       department,
@@ -296,6 +313,8 @@ export const parseDiagnosisCsv = (content: string): DiagnosisRecord[] => {
     map.set(id, {
       id,
       patientNumber,
+      patientNameNormalized,
+      birthDateIso,
       diseaseName,
       startDate,
       monthKey,

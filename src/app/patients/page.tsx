@@ -923,6 +923,21 @@ const selectLifestyleStatus = (daysSinceLast: number | null): LifestyleStatus | 
   return "atRisk";
 };
 
+const createLifestylePatientKey = (
+  patientNumber: string | null | undefined,
+  patientName: string | null | undefined,
+  birthDateIso: string | null | undefined,
+) => {
+  if (patientNumber && patientNumber.trim().length > 0) {
+    return `pn:${patientNumber.trim()}`;
+  }
+  const normalizedName = normalizePatientName(patientName);
+  if (normalizedName && birthDateIso) {
+    return `nb:${normalizedName}|${birthDateIso}`;
+  }
+  return null;
+};
+
 const formatDateLabel = (iso: string) => {
   const [year, month, day] = iso.split("-");
   if (!year || !month || !day) {
@@ -942,7 +957,8 @@ const formatPercentage = (value: number | null | undefined) => {
 };
 
 type LifestylePatientSummary = {
-  patientNumber: string;
+  key: string;
+  patientNumber: string | null;
   patientName: string | null;
   anonymizedId: string;
   diseaseType: LifestyleDiseaseType;
@@ -2022,18 +2038,29 @@ export default function PatientAnalysisPage() {
       return null;
     }
 
-    const patientDiseaseMap = new Map<string, { diseaseNames: Set<string> }>();
+    const patientDiseaseMap = new Map<
+      string,
+      {
+        diseaseNames: Set<string>;
+      }
+    >();
 
     for (const record of diagnosisRecords) {
       if (record.category !== "生活習慣病") {
         continue;
       }
-      if (!record.patientNumber) {
+      const key = createLifestylePatientKey(
+        record.patientNumber,
+        record.patientNameNormalized,
+        record.birthDateIso,
+      );
+      if (!key) {
         continue;
       }
-      const key = record.patientNumber;
       if (!patientDiseaseMap.has(key)) {
-        patientDiseaseMap.set(key, { diseaseNames: new Set<string>() });
+        patientDiseaseMap.set(key, {
+          diseaseNames: new Set<string>(),
+        });
       }
       patientDiseaseMap.get(key)!.diseaseNames.add(record.diseaseName);
     }
@@ -2067,22 +2094,26 @@ export default function PatientAnalysisPage() {
       if (record.dateIso < rangeStartIso) {
         rangeStartIso = record.dateIso;
       }
-      if (record.patientNumber === null) {
+      const patientKey = createLifestylePatientKey(
+        record.patientNumber !== null ? String(record.patientNumber) : null,
+        record.patientNameNormalized ?? null,
+        record.birthDateIso ?? null,
+      );
+      if (!patientKey) {
         continue;
       }
-      const patientNumber = String(record.patientNumber);
-      if (!patientDiseaseMap.has(patientNumber)) {
+      if (!patientDiseaseMap.has(patientKey)) {
         continue;
       }
-      if (!patientVisitMap.has(patientNumber)) {
-        patientVisitMap.set(patientNumber, {
+      if (!patientVisitMap.has(patientKey)) {
+        patientVisitMap.set(patientKey, {
           entries: [],
           visitDates: new Set<string>(),
           birthDateIso: null,
           patientName: null,
         });
       }
-      const slot = patientVisitMap.get(patientNumber)!;
+      const slot = patientVisitMap.get(patientKey)!;
       slot.entries.push(record);
       slot.visitDates.add(record.dateIso);
       if (!slot.birthDateIso && record.birthDateIso) {
@@ -2095,8 +2126,8 @@ export default function PatientAnalysisPage() {
 
     const patients: LifestylePatientSummary[] = [];
 
-    patientVisitMap.forEach((slot, patientNumber) => {
-      const diseaseMeta = patientDiseaseMap.get(patientNumber);
+    patientVisitMap.forEach((slot, patientKey) => {
+      const diseaseMeta = patientDiseaseMap.get(patientKey);
       if (!diseaseMeta) {
         return;
       }
@@ -2150,9 +2181,15 @@ export default function PatientAnalysisPage() {
       const firstVisitType = firstEntry?.visitType ?? null;
 
       const age = calculateAge(slot.birthDateIso ?? null, baselineDateIso);
+      const patientNumberEntry = sortedEntries.find((entry) => entry.patientNumber !== null);
+      const patientNumberValue =
+        patientNumberEntry && patientNumberEntry.patientNumber !== null
+          ? String(patientNumberEntry.patientNumber)
+          : null;
 
       patients.push({
-        patientNumber,
+        key: patientKey,
+        patientNumber: patientNumberValue,
         patientName: slot.patientName,
         anonymizedId: "",
         diseaseType,
@@ -2174,7 +2211,7 @@ export default function PatientAnalysisPage() {
     }
 
     patients
-      .sort((a, b) => a.patientNumber.localeCompare(b.patientNumber, "en"))
+      .sort((a, b) => a.key.localeCompare(b.key, "en"))
       .forEach((patient, index) => {
         patient.anonymizedId = `LS-${String(index + 1).padStart(3, "0")}`;
       });
@@ -3768,7 +3805,7 @@ export default function PatientAnalysisPage() {
                         </thead>
                         <tbody className="divide-y divide-rose-100">
                           {lifestyleAnalysis.initialStats.singleVisit.list.map((patient) => (
-                            <tr key={`single-${patient.patientNumber}`} className="bg-white">
+                            <tr key={`single-${patient.key}`} className="bg-white">
                               <td className="px-3 py-2 text-slate-700">{patient.anonymizedId}</td>
                               <td className="px-3 py-2 text-slate-600">
                                 {formatDateLabel(patient.firstVisitDate)}
@@ -3866,7 +3903,7 @@ export default function PatientAnalysisPage() {
                         </thead>
                         <tbody className="divide-y divide-amber-100">
                           {lifestyleAnalysis.delayedPatients.list.map((patient) => (
-                            <tr key={`delayed-${patient.patientNumber}`} className="bg-white">
+                            <tr key={`delayed-${patient.key}`} className="bg-white">
                               <td className="px-3 py-2 text-slate-700">{patient.anonymizedId}</td>
                               <td className="px-3 py-2 text-slate-600">
                                 {formatDateLabel(patient.lastVisitDate)}
@@ -3915,7 +3952,7 @@ export default function PatientAnalysisPage() {
                         </thead>
                         <tbody className="divide-y divide-rose-100">
                           {lifestyleAnalysis.atRiskPatients.list.map((patient) => (
-                            <tr key={`risk-${patient.patientNumber}`} className="bg-white">
+                            <tr key={`risk-${patient.key}`} className="bg-white">
                               <td className="px-3 py-2 text-slate-700">{patient.anonymizedId}</td>
                               <td className="px-3 py-2 text-slate-600">
                                 {formatDateLabel(patient.lastVisitDate)}
