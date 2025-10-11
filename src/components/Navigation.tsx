@@ -63,90 +63,22 @@ export default function Navigation() {
   const showPeriodBadge = isFilterablePage && analysisPeriodLabel;
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-brand-100/70 bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/70">
-      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 sm:px-6">
-        <div className="flex items-center justify-between gap-6">
-          <div className="flex items-center gap-3 py-4">
-            <h1 className="text-lg sm:text-xl font-bold tracking-wide text-brand-600">
-              マルミエ
-            </h1>
-            {showPeriodBadge && (
-              <span className="hidden sm:inline-flex items-center rounded-full border border-brand-200 bg-white px-3 py-1 text-xs font-semibold text-brand-600 shadow-sm">
-                {analysisPeriodLabel}
-              </span>
-            )}
-          </div>
+    <>
+      <nav className="sticky top-0 z-50 border-b border-brand-100/70 bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/70">
+        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 sm:px-6">
+          <div className="flex items-center justify-between gap-6">
+            <div className="flex items-center gap-3 py-4">
+              <h1 className="text-lg sm:text-xl font-bold tracking-wide text-brand-600">
+                マルミエ
+              </h1>
+              {showPeriodBadge && (
+                <span className="hidden sm:inline-flex items-center rounded-full border border-brand-200 bg-white px-3 py-1 text-xs font-semibold text-brand-600 shadow-sm">
+                  {analysisPeriodLabel}
+                </span>
+              )}
+            </div>
 
-          <div className="hidden md:flex gap-2 py-2">
-            {links.map((link) => {
-              const isActive =
-                link.href === "/"
-                  ? pathname === "/"
-                  : link.href === "/patients"
-                    ? pathname === "/patients" ||
-                      (pathname.startsWith("/patients/") && !pathname.startsWith("/patients/lifestyle"))
-                    : pathname === link.href || pathname.startsWith(`${link.href}/`);
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-                    isActive
-                      ? "bg-brand-500 text-white shadow-soft"
-                      : "text-slate-500 hover:bg-brand-50 hover:text-brand-600"
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              );
-            })}
-          </div>
-
-          <button
-            onClick={toggleMenu}
-            className="md:hidden p-4 sm:p-5 rounded-2xl bg-brand-500 text-white hover:bg-brand-600 active:scale-95 transition-all shadow-lg"
-            aria-label="メニュー"
-          >
-            {isOpen ? (
-              <X className="h-8 w-8 sm:h-9 sm:w-9" />
-            ) : (
-              <Menu className="h-8 w-8 sm:h-9 sm:w-9" />
-            )}
-          </button>
-        </div>
-
-        {isFilterablePage && (
-          <div className="pb-3">
-            <div
-              id={ANALYSIS_FILTER_SLOT_ID}
-              className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-sm"
-            />
-          </div>
-        )}
-      </div>
-
-      {isOpen && (
-        <div className="md:hidden fixed inset-0 bg-black/30 z-40" onClick={closeMenu} />
-      )}
-
-      <div
-        className={`md:hidden fixed inset-0 bg-white z-50 transform transition-transform duration-300 ease-in-out ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <div className="flex flex-col h-full">
-          <div className="flex items-center justify-between p-6 border-b border-slate-200 shadow-sm">
-            <h2 className="text-2xl font-bold text-brand-600">メニュー</h2>
-            <button
-              onClick={closeMenu}
-              className="p-3 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-95 transition-all"
-              aria-label="閉じる"
-            >
-              <X className="h-7 w-7" />
-            </button>
-          </div>
-          <div className="flex-1 flex flex-col p-6">
-            <nav className="flex flex-col flex-1 justify-around gap-3">
+            <div className="hidden md:flex gap-2 py-2">
               {links.map((link) => {
                 const isActive =
                   link.href === "/"
@@ -159,23 +91,93 @@ export default function Navigation() {
                   <Link
                     key={link.href}
                     href={link.href}
-                    onClick={closeMenu}
-                    className={`flex items-center justify-center flex-1 px-6 text-2xl font-bold rounded-2xl transition-all shadow-lg ${
+                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
                       isActive
-                        ? "bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-xl scale-105"
-                        : "bg-slate-100 text-slate-700 hover:bg-brand-50 hover:text-brand-600 hover:scale-105 hover:shadow-xl active:scale-95"
+                        ? "bg-brand-500 text-white shadow-soft"
+                        : "text-slate-500 hover:bg-brand-50 hover:text-brand-600"
                     }`}
                   >
                     {link.label}
                   </Link>
                 );
               })}
-            </nav>
+            </div>
+
+            <button
+              onClick={toggleMenu}
+              className="md:hidden p-4 sm:p-5 rounded-2xl bg-brand-500 text-white hover:bg-brand-600 active:scale-95 transition-all shadow-lg"
+              aria-label="メニュー"
+            >
+              {isOpen ? (
+                <X className="h-8 w-8 sm:h-9 sm:w-9" />
+              ) : (
+                <Menu className="h-8 w-8 sm:h-9 sm:w-9" />
+              )}
+            </button>
           </div>
         </div>
-      </div>
 
-      <div className="h-1 bg-gradient-to-r from-brand-500/80 via-accent-400/80 to-brand-500/80" />
-    </nav>
+        {isOpen && (
+          <div className="md:hidden fixed inset-0 bg-black/30 z-40" onClick={closeMenu} />
+        )}
+
+        <div
+          className={`md:hidden fixed inset-0 bg-white z-50 transform transition-transform duration-300 ease-in-out ${
+            isOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <div className="flex flex-col h-full">
+            <div className="flex items-center justify-between p-6 border-b border-slate-200 shadow-sm">
+              <h2 className="text-2xl font-bold text-brand-600">メニュー</h2>
+              <button
+                onClick={closeMenu}
+                className="p-3 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-95 transition-all"
+                aria-label="閉じる"
+              >
+                <X className="h-7 w-7" />
+              </button>
+            </div>
+            <div className="flex-1 flex flex-col p-6">
+              <nav className="flex flex-col flex-1 justify-around gap-3">
+                {links.map((link) => {
+                  const isActive =
+                    link.href === "/"
+                      ? pathname === "/"
+                      : link.href === "/patients"
+                        ? pathname === "/patients" ||
+                          (pathname.startsWith("/patients/") && !pathname.startsWith("/patients/lifestyle"))
+                        : pathname === link.href || pathname.startsWith(`${link.href}/`);
+                  return (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      onClick={closeMenu}
+                      className={`flex items-center justify-center flex-1 px-6 text-2xl font-bold rounded-2xl transition-all shadow-lg ${
+                        isActive
+                          ? "bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-xl scale-105"
+                          : "bg-slate-100 text-slate-700 hover:bg-brand-50 hover:text-brand-600 hover:scale-105 hover:shadow-xl active:scale-95"
+                      }`}
+                    >
+                      {link.label}
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+          </div>
+        </div>
+
+        <div className="h-1 bg-gradient-to-r from-brand-500/80 via-accent-400/80 to-brand-500/80" />
+      </nav>
+
+      {isFilterablePage && (
+        <div className="mx-auto w-full max-w-6xl px-4 pb-3 sm:px-6 md:px-6 lg:px-8">
+          <div
+            id={ANALYSIS_FILTER_SLOT_ID}
+            className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-sm"
+          />
+        </div>
+      )}
+    </>
   );
 }
