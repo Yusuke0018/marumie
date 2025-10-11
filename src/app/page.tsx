@@ -24,10 +24,36 @@ import {
 } from "@/lib/diagnosisData";
 import { classifyKarteRecords, type KarteRecord } from "@/lib/karteAnalytics";
 
+const ENDOSCOPY_DEPARTMENT_KEYWORDS = [
+  "内視鏡（保険）",
+  "内視鏡（自費）",
+  "内視鏡(保険)",
+  "内視鏡(自費)",
+  "人間ドックA",
+  "人間ドックB",
+];
+
+const normalizeDepartment = (value: string | null | undefined) =>
+  typeof value === "string" ? value.replace(/\s+/g, "") : "";
+
+const isEndoscopyDepartment = (department: string | null | undefined) => {
+  if (!department) {
+    return false;
+  }
+  const normalized = normalizeDepartment(department);
+  if (!normalized) {
+    return false;
+  }
+  return ENDOSCOPY_DEPARTMENT_KEYWORDS.some((keyword) =>
+    normalized.includes(keyword.replace(/\s+/g, "")),
+  );
+};
+
 type DashboardStats = {
   totalPatients: number | null;
   pureFirstVisits: number | null;
   revisitCount: number | null;
+  endoscopyPatients: number | null;
   lifestyleDiseasePatients: number | null;
   internalReferrals: number | null;
   patientUpdated: string | null;
@@ -40,6 +66,7 @@ const INITIAL_STATS: DashboardStats = {
   totalPatients: null,
   pureFirstVisits: null,
   revisitCount: null,
+  endoscopyPatients: null,
   lifestyleDiseasePatients: null,
   internalReferrals: null,
   patientUpdated: null,
@@ -131,6 +158,9 @@ export default function HomePage() {
               (record) => record.monthKey === latestMonth,
             );
             next.totalPatients = latestRecords.length;
+            next.endoscopyPatients = latestRecords.filter((record) =>
+              isEndoscopyDepartment(record.department),
+            ).length;
 
             // 純初診数と再診数を計算
             const classified = classifyKarteRecords(karteRecords);
@@ -284,6 +314,17 @@ export default function HomePage() {
         : "再来院された患者数",
       icon: Users,
       gradient: "from-sky-500 to-sky-400",
+    },
+    {
+      id: "endoscopy",
+      label: "内視鏡人数",
+      value: formatCount(stats.endoscopyPatients),
+      unit: "人",
+      hint: stats.kartePeriodLabel
+        ? `内視鏡・人間ドック合計（${stats.kartePeriodLabel}の集計）`
+        : "内視鏡（保険・自費）と人間ドックA/Bの合計",
+      icon: Activity,
+      gradient: "from-purple-500 to-purple-400",
     },
     {
       id: "lifestyle",
