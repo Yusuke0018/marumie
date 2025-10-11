@@ -1,0 +1,8 @@
+timestamp: 2025-10-11 17:39:54 JST
+branch: main
+commit: 346b3a80307a8d1aabb269afcfe182a0d0c5b4f8
+summary: adjust reservation hero gradient and simplify day-type table
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (success)
