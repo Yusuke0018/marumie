@@ -11,7 +11,6 @@ import {
   Suspense,
   type ChangeEvent,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   RefreshCw,
   Share2,
@@ -73,6 +72,9 @@ import {
   LISTING_TIMESTAMP_KEY,
 } from "@/lib/listingData";
 import { isHoliday } from "@/lib/dateUtils";
+import { AnalysisFilterPortal } from "@/components/AnalysisFilterPortal";
+import { useAnalysisPeriodRange } from "@/hooks/useAnalysisPeriodRange";
+import { setAnalysisPeriodLabel } from "@/lib/analysisPeriod";
 import {
   type DiagnosisRecord,
   type DiagnosisDepartment,
@@ -134,12 +136,6 @@ const DiagnosisCategoryChart = lazy(() =>
 );
 
 const KARTE_MIN_MONTH = "2000-01";
-const PATIENTS_PERIOD_STORAGE_KEY = "marumie/patients/periodRange";
-
-type StoredPeriodRange = {
-  startMonth: string | null;
-  endMonth: string | null;
-};
 
 const LISTING_CATEGORIES: ListingCategory[] = ["内科", "胃カメラ", "大腸カメラ"];
 const SURVEY_FILE_TYPES: SurveyFileType[] = ["外来", "内視鏡"];
@@ -271,102 +267,6 @@ type ShiftInsightRow = {
 type ShiftAnalysisResult = {
   departments: string[];
   byDepartment: Map<string, ShiftInsightRow[]>;
-};
-
-type PatientsFilterPortalProps = {
-  allMonths: string[];
-  startMonth: string;
-  endMonth: string;
-  onChangeStart: (value: string) => void;
-  onChangeEnd: (value: string) => void;
-  onReset: () => void;
-  diagnosisRangeLabel: string;
-  isManagementOpen: boolean;
-  openManagement: () => void;
-};
-
-const PatientsFilterPortal = ({
-  allMonths,
-  startMonth,
-  endMonth,
-  onChangeStart,
-  onChangeEnd,
-  onReset,
-  diagnosisRangeLabel,
-  isManagementOpen,
-  openManagement,
-}: PatientsFilterPortalProps) => {
-  const [mountNode, setMountNode] = useState<HTMLElement | null>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    const node = document.getElementById("patients-filter-slot");
-    setMountNode(node as HTMLElement | null);
-  }, []);
-
-  if (!mountNode) {
-    return null;
-  }
-
-  return createPortal(
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-semibold text-slate-700">開始月:</label>
-          <select
-            value={startMonth}
-            onChange={(event) => onChangeStart(event.target.value)}
-            disabled={allMonths.length === 0}
-            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <option value="">選択してください</option>
-            {allMonths.map((month) => (
-              <option key={month} value={month}>
-                {formatMonthLabel(month)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-semibold text-slate-700">終了月:</label>
-          <select
-            value={endMonth}
-            onChange={(event) => onChangeEnd(event.target.value)}
-            disabled={allMonths.length === 0}
-            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <option value="">選択してください</option>
-            {allMonths.map((month) => (
-              <option key={month} value={month}>
-                {formatMonthLabel(month)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <button
-          type="button"
-          onClick={onReset}
-          className="inline-flex items-center justify-center rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-brand-300 hover:text-brand-600"
-        >
-          期間をリセット
-        </button>
-      </div>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-[11px] text-slate-500">表示期間: {diagnosisRangeLabel}</p>
-        <button
-          type="button"
-          onClick={openManagement}
-          disabled={isManagementOpen}
-          className="inline-flex items-center justify-center rounded-full border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-600 transition hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          データ管理を{isManagementOpen ? "表示中" : "開く"}
-        </button>
-      </div>
-    </div>,
-    mountNode,
-  );
 };
 
 const DepartmentMetric = ({
@@ -977,9 +877,6 @@ function PatientAnalysisPageContent() {
   const [isSharing, setIsSharing] = useState(false);
   const [isLoadingShared, setIsLoadingShared] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
-  const [startMonth, setStartMonth] = useState<string>("");
-  const [endMonth, setEndMonth] = useState<string>("");
-  const [isPeriodInitialized, setIsPeriodInitialized] = useState(false);
   const [showSummaryChart, setShowSummaryChart] = useState(false);
   const [showTrendChart, setShowTrendChart] = useState(false);
   const [showDepartmentChart, setShowDepartmentChart] = useState(false);
@@ -1248,25 +1145,6 @@ function PatientAnalysisPageContent() {
     }
     return classifyKarteRecords(records);
   }, [records]);
-  const periodFilteredRecords = useMemo(() => {
-    if (classifiedRecords.length === 0) {
-      return [];
-    }
-    let filtered = classifiedRecords.filter((record) => record.monthKey >= KARTE_MIN_MONTH);
-    
-    if (startMonth && endMonth) {
-      filtered = filtered.filter(
-        (record) => record.monthKey >= startMonth && record.monthKey <= endMonth
-      );
-    } else if (startMonth) {
-      filtered = filtered.filter((record) => record.monthKey >= startMonth);
-    } else if (endMonth) {
-      filtered = filtered.filter((record) => record.monthKey <= endMonth);
-    }
-    
-    return filtered;
-  }, [classifiedRecords, startMonth, endMonth]);
-
   const diagnosisMonths = useMemo(
     () => extractDiagnosisMonths(diagnosisRecords),
     [diagnosisRecords],
@@ -1285,104 +1163,32 @@ function PatientAnalysisPageContent() {
     return Array.from(months).sort();
   }, [classifiedRecords, diagnosisMonths]);
 
-  useEffect(() => {
-    if (typeof window === "undefined" || isPeriodInitialized) {
-      return;
+  const {
+    startMonth,
+    endMonth,
+    setStartMonth,
+    setEndMonth,
+    resetPeriod,
+  } = useAnalysisPeriodRange(allAvailableMonths);
+
+  const periodFilteredRecords = useMemo(() => {
+    if (classifiedRecords.length === 0) {
+      return [];
+    }
+    let filtered = classifiedRecords.filter((record) => record.monthKey >= KARTE_MIN_MONTH);
+
+    if (startMonth && endMonth) {
+      filtered = filtered.filter(
+        (record) => record.monthKey >= startMonth && record.monthKey <= endMonth,
+      );
+    } else if (startMonth) {
+      filtered = filtered.filter((record) => record.monthKey >= startMonth);
+    } else if (endMonth) {
+      filtered = filtered.filter((record) => record.monthKey <= endMonth);
     }
 
-    if (allAvailableMonths.length === 0) {
-      return;
-    }
-
-    try {
-      const stored = window.localStorage.getItem(PATIENTS_PERIOD_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as StoredPeriodRange | null;
-        if (parsed) {
-          const availableSet = new Set(allAvailableMonths);
-          const storedStart =
-            parsed.startMonth && availableSet.has(parsed.startMonth)
-              ? parsed.startMonth
-              : "";
-          const storedEnd =
-            parsed.endMonth && availableSet.has(parsed.endMonth)
-              ? parsed.endMonth
-              : "";
-
-          if (storedStart) {
-            setStartMonth(storedStart);
-          }
-          if (storedEnd) {
-            const normalizedEnd =
-              storedStart && storedEnd < storedStart ? storedStart : storedEnd;
-            setEndMonth(normalizedEnd);
-          } else if (!parsed.endMonth) {
-            setEndMonth("");
-          }
-        }
-      }
-    } catch (error) {
-      console.error("期間選択の復元に失敗しました:", error);
-    } finally {
-      setIsPeriodInitialized(true);
-    }
-  }, [allAvailableMonths, isPeriodInitialized]);
-
-
-
-  useEffect(() => {
-    if (!isPeriodInitialized || allAvailableMonths.length === 0) {
-      return;
-    }
-
-    if (startMonth || endMonth) {
-      return;
-    }
-
-    const latestMonth = allAvailableMonths[allAvailableMonths.length - 1];
-    if (latestMonth) {
-      setStartMonth(latestMonth);
-      setEndMonth(latestMonth);
-    }
-  }, [allAvailableMonths, startMonth, endMonth, isPeriodInitialized]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !isPeriodInitialized) {
-      return;
-    }
-
-    if (!startMonth && !endMonth) {
-      window.localStorage.removeItem(PATIENTS_PERIOD_STORAGE_KEY);
-      return;
-    }
-
-    const payload: StoredPeriodRange = {
-      startMonth: startMonth || null,
-      endMonth: endMonth || null,
-    };
-    window.localStorage.setItem(PATIENTS_PERIOD_STORAGE_KEY, JSON.stringify(payload));
-  }, [startMonth, endMonth, isPeriodInitialized]);
-
-  useEffect(() => {
-    if (!isPeriodInitialized || allAvailableMonths.length === 0) {
-      return;
-    }
-
-    const availableSet = new Set(allAvailableMonths);
-    const normalizedStart = startMonth && availableSet.has(startMonth) ? startMonth : "";
-    const normalizedEnd = endMonth && availableSet.has(endMonth) ? endMonth : "";
-    const adjustedEnd =
-      normalizedStart && normalizedEnd && normalizedEnd < normalizedStart
-        ? normalizedStart
-        : normalizedEnd;
-
-    if (normalizedStart !== startMonth) {
-      setStartMonth(normalizedStart);
-    }
-    if (adjustedEnd !== endMonth) {
-      setEndMonth(adjustedEnd);
-    }
-  }, [allAvailableMonths, startMonth, endMonth, isPeriodInitialized]);
+    return filtered;
+  }, [classifiedRecords, endMonth, startMonth]);
 
   const filteredClassified = useMemo(() => {
     return periodFilteredRecords;
@@ -2509,24 +2315,7 @@ function PatientAnalysisPageContent() {
   }, [startMonth, endMonth]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    if (diagnosisRangeLabel) {
-      window.localStorage.setItem(
-        "marumie/patients/periodLabel",
-        diagnosisRangeLabel,
-      );
-    } else {
-      window.localStorage.removeItem("marumie/patients/periodLabel");
-    }
-
-    window.dispatchEvent(
-      new CustomEvent("patients:period-change", {
-        detail: { label: diagnosisRangeLabel },
-      }),
-    );
+    setAnalysisPeriodLabel(diagnosisRangeLabel);
   }, [diagnosisRangeLabel]);
 
   const diagnosisPreviousLabel = useMemo(() => {
@@ -3009,19 +2798,25 @@ function PatientAnalysisPageContent() {
             )}
           </section>
         )}
-        <PatientsFilterPortal
-          allMonths={allAvailableMonths}
+        <AnalysisFilterPortal
+          months={allAvailableMonths}
           startMonth={startMonth}
           endMonth={endMonth}
           onChangeStart={setStartMonth}
           onChangeEnd={setEndMonth}
-          onReset={() => {
-            setStartMonth("");
-            setEndMonth("");
-          }}
-          diagnosisRangeLabel={diagnosisRangeLabel}
-          isManagementOpen={isManagementOpen}
-          openManagement={() => setIsManagementOpen(true)}
+          onReset={resetPeriod}
+          label={diagnosisRangeLabel}
+          renderMonthLabel={formatMonthLabel}
+          rightContent={
+            <button
+              type="button"
+              onClick={() => setIsManagementOpen(true)}
+              disabled={isManagementOpen}
+              className="inline-flex items-center justify-center rounded-full border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-600 transition hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              データ管理を{isManagementOpen ? "表示中" : "開く"}
+            </button>
+          }
         />
 
         {!lifestyleOnly && (

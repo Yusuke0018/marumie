@@ -24,14 +24,15 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { AnalysisFilterPortal } from "@/components/AnalysisFilterPortal";
+import { useAnalysisPeriodRange } from "@/hooks/useAnalysisPeriodRange";
+import { setAnalysisPeriodLabel } from "@/lib/analysisPeriod";
 
 export default function ListingPage() {
   const [categoryData, setCategoryData] = useState<ListingCategoryData[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<ListingCategory>("内科");
-  const [startMonth, setStartMonth] = useState<string>("");
-  const [endMonth, setEndMonth] = useState<string>("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -78,18 +79,33 @@ export default function ListingPage() {
     return Array.from(months).sort();
   }, [categoryData, selectedCategory]);
 
-  useEffect(() => {
-    if (availableMonths.length === 0) {
-      return;
-    }
+  const {
+    startMonth,
+    endMonth,
+    setStartMonth,
+    setEndMonth,
+    resetPeriod,
+  } = useAnalysisPeriodRange(availableMonths);
 
-    const latestMonth = availableMonths[availableMonths.length - 1];
-    
-    if (!startMonth && !endMonth) {
-      setStartMonth(latestMonth);
-      setEndMonth(latestMonth);
+  const listingRangeLabel = useMemo(() => {
+    if (startMonth && endMonth) {
+      if (startMonth === endMonth) {
+        return startMonth;
+      }
+      return `${startMonth}〜${endMonth}`;
     }
-  }, [availableMonths, startMonth, endMonth]);
+    if (startMonth) {
+      return `${startMonth}以降`;
+    }
+    if (endMonth) {
+      return `${endMonth}まで`;
+    }
+    return "全期間";
+  }, [endMonth, startMonth]);
+
+  useEffect(() => {
+    setAnalysisPeriodLabel(listingRangeLabel);
+  }, [listingRangeLabel]);
 
   const currentData = useMemo(() => {
     let data = categoryData.find(c => c.category === selectedCategory)?.data || [];
@@ -143,8 +159,7 @@ export default function ListingPage() {
     clearListingStorage();
     setCategoryData([]);
     setLastUpdated(null);
-    setStartMonth("");
-    setEndMonth("");
+    resetPeriod();
     setUploadError(null);
   };
 
@@ -197,52 +212,26 @@ export default function ListingPage() {
               最終更新: {new Date(lastUpdated).toLocaleString("ja-JP")}
             </p>
           )}
-          {uploadError && (
-            <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {uploadError}
-            </p>
-          )}
-        </section>
+        {uploadError && (
+          <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {uploadError}
+          </p>
+        )}
+      </section>
 
-        {categoryData.length > 0 && (
-          <>
+      <AnalysisFilterPortal
+        months={availableMonths}
+        startMonth={startMonth}
+        endMonth={endMonth}
+        onChangeStart={setStartMonth}
+        onChangeEnd={setEndMonth}
+        onReset={resetPeriod}
+        label={listingRangeLabel}
+      />
+
+      {categoryData.length > 0 && (
+        <>
             <div className="flex flex-wrap items-center gap-4">
-              {availableMonths.length > 0 && (
-                <>
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm font-semibold text-slate-700">開始月:</label>
-                    <select
-                      value={startMonth}
-                      onChange={(e) => setStartMonth(e.target.value)}
-                      disabled={availableMonths.length === 0}
-                      className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <option value="">選択してください</option>
-                      {availableMonths.map((month) => (
-                        <option key={month} value={month}>
-                          {month}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm font-semibold text-slate-700">終了月:</label>
-                    <select
-                      value={endMonth}
-                      onChange={(e) => setEndMonth(e.target.value)}
-                      disabled={availableMonths.length === 0}
-                      className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <option value="">選択してください</option>
-                      {availableMonths.map((month) => (
-                        <option key={month} value={month}>
-                          {month}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </>
-              )}
               <div className="flex items-center gap-3">
                 <label className="text-sm font-semibold text-slate-700">カテゴリ:</label>
                 <div className="flex gap-3">

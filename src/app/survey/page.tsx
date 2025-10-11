@@ -18,6 +18,9 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
+import { AnalysisFilterPortal } from "@/components/AnalysisFilterPortal";
+import { useAnalysisPeriodRange } from "@/hooks/useAnalysisPeriodRange";
+import { setAnalysisPeriodLabel } from "@/lib/analysisPeriod";
 
 const MonthlyTrendChart = lazy(() =>
   import("@/components/survey/MonthlyTrendChart").then((m) => ({
@@ -58,8 +61,6 @@ export default function SurveyPage() {
   const [surveyData, setSurveyData] = useState<SurveyData[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [startMonth, setStartMonth] = useState<string>("");
-  const [endMonth, setEndMonth] = useState<string>("");
   const [showGairaiChart, setShowGairaiChart] = useState(false);
   const [showNaishikyoChart, setShowNaishikyoChart] = useState(false);
   const [showGairaiComparison, setShowGairaiComparison] = useState(false);
@@ -101,18 +102,13 @@ export default function SurveyPage() {
     return Array.from(months).sort();
   }, [surveyData]);
 
-  useEffect(() => {
-    if (availableMonths.length === 0) {
-      return;
-    }
-
-    const latestMonth = availableMonths[availableMonths.length - 1];
-    
-    if (!startMonth && !endMonth) {
-      setStartMonth(latestMonth);
-      setEndMonth(latestMonth);
-    }
-  }, [availableMonths, startMonth, endMonth]);
+  const {
+    startMonth,
+    endMonth,
+    setStartMonth,
+    setEndMonth,
+    resetPeriod,
+  } = useAnalysisPeriodRange(availableMonths);
 
   const gairaiData = useMemo(() => {
     let data = surveyData.filter(d => d.fileType === "外来");
@@ -141,6 +137,26 @@ export default function SurveyPage() {
     
     return data;
   }, [surveyData, startMonth, endMonth]);
+
+  const surveyRangeLabel = useMemo(() => {
+    if (startMonth && endMonth) {
+      if (startMonth === endMonth) {
+        return formatMonthLabel(startMonth);
+      }
+      return `${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}`;
+    }
+    if (startMonth) {
+      return `${formatMonthLabel(startMonth)}以降`;
+    }
+    if (endMonth) {
+      return `${formatMonthLabel(endMonth)}まで`;
+    }
+    return "全期間";
+  }, [endMonth, startMonth]);
+
+  useEffect(() => {
+    setAnalysisPeriodLabel(surveyRangeLabel);
+  }, [surveyRangeLabel]);
 
   const gairaiChartData = useMemo(() => {
     const totals: Record<string, number> = {
@@ -204,8 +220,7 @@ export default function SurveyPage() {
     clearSurveyStorage();
     setSurveyData([]);
     setLastUpdated(null);
-    setStartMonth("");
-    setEndMonth("");
+    resetPeriod();
     setUploadError(null);
   };
 
@@ -258,50 +273,26 @@ export default function SurveyPage() {
               最終更新: {new Date(lastUpdated).toLocaleString("ja-JP")}
             </p>
           )}
-          {uploadError && (
-            <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {uploadError}
-            </p>
-          )}
-        </section>
+        {uploadError && (
+          <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {uploadError}
+          </p>
+        )}
+      </section>
 
-        {surveyData.length > 0 && (
-          <>
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-semibold text-slate-700">開始月:</label>
-                <select
-                  value={startMonth}
-                  onChange={(e) => setStartMonth(e.target.value)}
-                  disabled={availableMonths.length === 0}
-                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <option value="">選択してください</option>
-                  {availableMonths.map((month) => (
-                    <option key={month} value={month}>
-                      {formatMonthLabel(month)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-semibold text-slate-700">終了月:</label>
-                <select
-                  value={endMonth}
-                  onChange={(e) => setEndMonth(e.target.value)}
-                  disabled={availableMonths.length === 0}
-                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <option value="">選択してください</option>
-                  {availableMonths.map((month) => (
-                    <option key={month} value={month}>
-                      {formatMonthLabel(month)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+      <AnalysisFilterPortal
+        months={availableMonths}
+        startMonth={startMonth}
+        endMonth={endMonth}
+        onChangeStart={setStartMonth}
+        onChangeEnd={setEndMonth}
+        onReset={resetPeriod}
+        label={surveyRangeLabel}
+        renderMonthLabel={formatMonthLabel}
+      />
 
+      {surveyData.length > 0 && (
+        <>
             {gairaiChartData.length > 0 && (
               <section className="rounded-3xl border-2 border-blue-300 bg-gradient-to-br from-blue-50 to-white p-8 shadow-lg">
                 <div className="mb-6 rounded-2xl bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-4 shadow-md">

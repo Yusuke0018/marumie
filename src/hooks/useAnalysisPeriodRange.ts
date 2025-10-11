@@ -1,0 +1,156 @@
+import { useCallback, useEffect, useState } from "react";
+import {
+  ANALYSIS_PERIOD_RANGE_STORAGE_KEY,
+  type StoredPeriodRange,
+} from "@/lib/analysisPeriod";
+
+type UseAnalysisPeriodRangeOptions = {
+  autoSelectLatest?: boolean;
+};
+
+export const useAnalysisPeriodRange = (
+  availableMonths: string[],
+  options: UseAnalysisPeriodRangeOptions = { autoSelectLatest: true },
+) => {
+  const [startMonth, setStartMonthState] = useState<string>("");
+  const [endMonth, setEndMonthState] = useState<string>("");
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (isInitialized) {
+      return;
+    }
+    if (availableMonths.length === 0) {
+      return;
+    }
+
+    try {
+      const stored = window.localStorage.getItem(ANALYSIS_PERIOD_RANGE_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as StoredPeriodRange | null;
+        if (parsed) {
+          const availableSet = new Set(availableMonths);
+          const storedStart =
+            parsed.startMonth && availableSet.has(parsed.startMonth)
+              ? parsed.startMonth
+              : "";
+          const storedEnd =
+            parsed.endMonth && availableSet.has(parsed.endMonth)
+              ? parsed.endMonth
+              : "";
+
+          if (storedStart) {
+            setStartMonthState(storedStart);
+          }
+          if (storedEnd) {
+            const normalizedEnd =
+              storedStart && storedEnd < storedStart ? storedStart : storedEnd;
+            setEndMonthState(normalizedEnd);
+          } else if (parsed.endMonth === null) {
+            setEndMonthState("");
+          }
+        }
+      }
+    } catch (error) {
+      console.error("期間選択の復元に失敗しました:", error);
+    } finally {
+      setIsInitialized(true);
+    }
+  }, [availableMonths, isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized) {
+      return;
+    }
+    if (availableMonths.length === 0) {
+      if (startMonth || endMonth) {
+        setStartMonthState("");
+        setEndMonthState("");
+      }
+      return;
+    }
+
+    const availableSet = new Set(availableMonths);
+    const normalizedStart =
+      startMonth && availableSet.has(startMonth) ? startMonth : "";
+    const normalizedEnd =
+      endMonth && availableSet.has(endMonth) ? endMonth : "";
+    const adjustedEnd =
+      normalizedStart && normalizedEnd && normalizedEnd < normalizedStart
+        ? normalizedStart
+        : normalizedEnd;
+
+    if (normalizedStart !== startMonth) {
+      setStartMonthState(normalizedStart);
+    }
+    if (adjustedEnd !== endMonth) {
+      setEndMonthState(adjustedEnd);
+    }
+  }, [availableMonths, endMonth, isInitialized, startMonth]);
+
+  useEffect(() => {
+    if (!isInitialized) {
+      return;
+    }
+    if (!options.autoSelectLatest) {
+      return;
+    }
+    if (availableMonths.length === 0) {
+      return;
+    }
+    if (startMonth || endMonth) {
+      return;
+    }
+
+    const latestMonth = availableMonths[availableMonths.length - 1];
+    if (latestMonth) {
+      setStartMonthState(latestMonth);
+      setEndMonthState(latestMonth);
+    }
+  }, [availableMonths, endMonth, isInitialized, options.autoSelectLatest, startMonth]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (!isInitialized) {
+      return;
+    }
+
+    if (!startMonth && !endMonth) {
+      window.localStorage.removeItem(ANALYSIS_PERIOD_RANGE_STORAGE_KEY);
+      return;
+    }
+
+    const payload: StoredPeriodRange = {
+      startMonth: startMonth || null,
+      endMonth: endMonth || null,
+    };
+    window.localStorage.setItem(ANALYSIS_PERIOD_RANGE_STORAGE_KEY, JSON.stringify(payload));
+  }, [endMonth, isInitialized, startMonth]);
+
+  const setStartMonth = useCallback((value: string) => {
+    setStartMonthState(value);
+  }, []);
+
+  const setEndMonth = useCallback((value: string) => {
+    setEndMonthState(value);
+  }, []);
+
+  const resetPeriod = useCallback(() => {
+    setStartMonthState("");
+    setEndMonthState("");
+  }, []);
+
+  return {
+    startMonth,
+    endMonth,
+    setStartMonth,
+    setEndMonth,
+    resetPeriod,
+    isInitialized,
+  };
+};

@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getMonthKey } from "@/lib/dateUtils";
+import { AnalysisFilterPortal } from "@/components/AnalysisFilterPortal";
+import { useAnalysisPeriodRange } from "@/hooks/useAnalysisPeriodRange";
+import { setAnalysisPeriodLabel } from "@/lib/analysisPeriod";
 import {
   ComposedChart,
   Bar,
@@ -138,8 +141,6 @@ export default function CorrelationPage() {
   const [listingData, setListingData] = useState<CategoryData[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<"内科" | "胃カメラ" | "大腸カメラ">("内科");
-  const [startMonth, setStartMonth] = useState<string>("");
-  const [endMonth, setEndMonth] = useState<string>("");
   const [lambda, setLambda] = useState<number>(0.5);
 
   useEffect(() => {
@@ -166,12 +167,37 @@ export default function CorrelationPage() {
     }
   }, []);
 
+  const availableMonths = useMemo(() => {
+    const category = listingData.find((c) => c.category === selectedCategory);
+    if (!category) {
+      return [];
+    }
+    const months = new Set<string>();
+    category.data.forEach((day) => {
+      const key = getMonthKey(day.date);
+      if (key) {
+        months.add(key);
+      }
+    });
+    return Array.from(months).sort();
+  }, [listingData, selectedCategory]);
+
+  const {
+    startMonth,
+    endMonth,
+    setStartMonth,
+    setEndMonth,
+    resetPeriod,
+  } = useAnalysisPeriodRange(availableMonths);
+
   const currentListingData = useMemo(() => {
-    const categoryData = listingData.find(c => c.category === selectedCategory);
-    if (!categoryData) return [];
+    const categoryData = listingData.find((c) => c.category === selectedCategory);
+    if (!categoryData) {
+      return [];
+    }
 
     let data = categoryData.data;
-    
+
     if (startMonth && endMonth) {
       data = data.filter((item) => {
         const month = getMonthKey(item.date);
@@ -188,36 +214,29 @@ export default function CorrelationPage() {
         return month && month <= endMonth;
       });
     }
-    
-    return data;
-  }, [listingData, selectedCategory, startMonth, endMonth]);
 
-  const availableMonths = useMemo(() => {
-    const category = listingData.find((c) => c.category === selectedCategory);
-    if (!category) {
-      return [];
-    }
-    const months = new Set<string>();
-    category.data.forEach((day) => {
-      const key = getMonthKey(day.date);
-      if (key) {
-        months.add(key);
+    return data;
+  }, [endMonth, listingData, selectedCategory, startMonth]);
+
+  const correlationRangeLabel = useMemo(() => {
+    if (startMonth && endMonth) {
+      if (startMonth === endMonth) {
+        return startMonth;
       }
-    });
-    return Array.from(months).sort();
-  }, [listingData, selectedCategory]);
+      return `${startMonth}〜${endMonth}`;
+    }
+    if (startMonth) {
+      return `${startMonth}以降`;
+    }
+    if (endMonth) {
+      return `${endMonth}まで`;
+    }
+    return "全期間";
+  }, [endMonth, startMonth]);
 
   useEffect(() => {
-    if (availableMonths.length === 0) {
-      return;
-    }
-
-    const latestMonth = availableMonths[availableMonths.length - 1];
-    if (startMonth === "" && endMonth === "") {
-      setStartMonth(latestMonth);
-      setEndMonth(latestMonth);
-    }
-  }, [availableMonths, startMonth, endMonth]);
+    setAnalysisPeriodLabel(correlationRangeLabel);
+  }, [correlationRangeLabel]);
 
   const currentReservations = useMemo(() => {
     const departments = CATEGORY_MAPPING[selectedCategory];
@@ -454,6 +473,16 @@ export default function CorrelationPage() {
           </div>
         </section>
 
+        <AnalysisFilterPortal
+          months={availableMonths}
+          startMonth={startMonth}
+          endMonth={endMonth}
+          onChangeStart={setStartMonth}
+          onChangeEnd={setEndMonth}
+          onReset={resetPeriod}
+          label={correlationRangeLabel}
+        />
+
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <label className="text-sm font-semibold text-slate-700">カテゴリ:</label>
@@ -472,48 +501,6 @@ export default function CorrelationPage() {
                 </button>
               ))}
             </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-4">
-            {availableMonths.length > 0 && (
-              <>
-                <div className="flex items-center gap-3">
-                  <label className="text-sm font-semibold text-slate-700">開始月:</label>
-                  <select
-                    value={startMonth}
-                    onChange={(e) => setStartMonth(e.target.value)}
-                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
-                  >
-                    <option value="">未選択</option>
-                    {availableMonths.map(month => (
-                      <option key={month} value={month}>{month}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="text-sm font-semibold text-slate-700">終了月:</label>
-                  <select
-                    value={endMonth}
-                    onChange={(e) => setEndMonth(e.target.value)}
-                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none"
-                  >
-                    <option value="">未選択</option>
-                    {availableMonths.map(month => (
-                      <option key={month} value={month}>{month}</option>
-                    ))}
-                  </select>
-                </div>
-                <button
-                  onClick={() => {
-                    setStartMonth("");
-                    setEndMonth("");
-                  }}
-                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50"
-                >
-                  リセット
-                </button>
-              </>
-            )}
           </div>
         </div>
 

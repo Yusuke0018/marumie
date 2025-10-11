@@ -30,6 +30,9 @@ import { saveSurveyDataToStorage } from "@/lib/surveyData";
 import { saveListingDataToStorage } from "@/lib/listingData";
 import type { SharedDataBundle } from "@/lib/sharedBundle";
 import { setCompressedItem } from "@/lib/storageCompression";
+import { AnalysisFilterPortal } from "@/components/AnalysisFilterPortal";
+import { useAnalysisPeriodRange } from "@/hooks/useAnalysisPeriodRange";
+import { setAnalysisPeriodLabel } from "@/lib/analysisPeriod";
 
 // グラフコンポーネントをReact.lazyで遅延ロード（初期バンドルサイズを削減）
 const WeekdayChartSection = lazy(() =>
@@ -497,8 +500,6 @@ export default function HomePage() {
   const [isLoadingShared, setIsLoadingShared] = useState(false);
   const [diffMonthly, setDiffMonthly] = useState<MonthlyBucket[] | null>(null);
   const [isReadOnly, setIsReadOnly] = useState(false);
-  const [startMonth, setStartMonth] = useState<string>("");
-  const [endMonth, setEndMonth] = useState<string>("");
   const [showWeekdayChart, setShowWeekdayChart] = useState(false);
   const [showHourlyChart, setShowHourlyChart] = useState(false);
   const [showDailyChart, setShowDailyChart] = useState(false);
@@ -718,19 +719,13 @@ export default function HomePage() {
     return Array.from(months).sort();
   }, [reservations]);
 
-  useEffect(() => {
-    if (availableMonths.length === 0) {
-      return;
-    }
-
-    const latestMonth = availableMonths[availableMonths.length - 1];
-    
-    // 開始月・終了月が未設定の場合、最新月を設定
-    if (!startMonth && !endMonth) {
-      setStartMonth(latestMonth);
-      setEndMonth(latestMonth);
-    }
-  }, [availableMonths, startMonth, endMonth]);
+  const {
+    startMonth,
+    endMonth,
+    setStartMonth,
+    setEndMonth,
+    resetPeriod,
+  } = useAnalysisPeriodRange(availableMonths);
 
   const filteredReservations = useMemo(() => {
     let filtered = reservations;
@@ -747,6 +742,26 @@ export default function HomePage() {
 
     return filtered;
   }, [reservations, startMonth, endMonth]);
+
+  const reservationRangeLabel = useMemo(() => {
+    if (startMonth && endMonth) {
+      if (startMonth === endMonth) {
+        return formatMonthLabel(startMonth);
+      }
+      return `${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}`;
+    }
+    if (startMonth) {
+      return `${formatMonthLabel(startMonth)}以降`;
+    }
+    if (endMonth) {
+      return `${formatMonthLabel(endMonth)}まで`;
+    }
+    return "全期間";
+  }, [endMonth, startMonth]);
+
+  useEffect(() => {
+    setAnalysisPeriodLabel(reservationRangeLabel);
+  }, [reservationRangeLabel]);
 
   const aggregatedInsights = useMemo(
     () => aggregateReservationInsights(filteredReservations),
@@ -931,42 +946,16 @@ export default function HomePage() {
           )}
         </section>
 
-        {reservations.length > 0 && (
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-semibold text-slate-700">開始月:</label>
-              <select
-                value={startMonth}
-                onChange={(e) => setStartMonth(e.target.value)}
-                disabled={availableMonths.length === 0}
-                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <option value="">選択してください</option>
-                {availableMonths.map((month) => (
-                  <option key={month} value={month}>
-                    {formatMonthLabel(month)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-semibold text-slate-700">終了月:</label>
-              <select
-                value={endMonth}
-                onChange={(e) => setEndMonth(e.target.value)}
-                disabled={availableMonths.length === 0}
-                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:border-brand-300 focus:border-brand-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <option value="">選択してください</option>
-                {availableMonths.map((month) => (
-                  <option key={month} value={month}>
-                    {formatMonthLabel(month)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
+        <AnalysisFilterPortal
+          months={availableMonths}
+          startMonth={startMonth}
+          endMonth={endMonth}
+          onChangeStart={setStartMonth}
+          onChangeEnd={setEndMonth}
+          onReset={resetPeriod}
+          label={reservationRangeLabel}
+          renderMonthLabel={formatMonthLabel}
+        />
 
         <section className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
           <StatCard

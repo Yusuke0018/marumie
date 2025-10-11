@@ -2,37 +2,39 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Menu, X } from "lucide-react";
+import {
+  ANALYSIS_FILTER_SLOT_ID,
+  ANALYSIS_PERIOD_EVENT,
+  getAnalysisPeriodLabel,
+} from "@/lib/analysisPeriod";
 
 export default function Navigation() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
-  const [patientsPeriodLabel, setPatientsPeriodLabel] = useState<string | null>(null);
+  const [analysisPeriodLabel, setAnalysisPeriodLabelState] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
 
-    const stored = window.localStorage.getItem("marumie/patients/periodLabel");
-    if (stored) {
-      setPatientsPeriodLabel(stored);
-    }
+    setAnalysisPeriodLabelState(getAnalysisPeriodLabel());
 
     const handlePeriodChange = (event: Event) => {
-      const detail = (event as CustomEvent<{ label?: string }>).detail;
-      setPatientsPeriodLabel(detail?.label ?? null);
+      const detail = (event as CustomEvent<{ label?: string | null }>).detail;
+      setAnalysisPeriodLabelState(detail?.label ?? null);
     };
 
     window.addEventListener(
-      "patients:period-change",
+      ANALYSIS_PERIOD_EVENT,
       handlePeriodChange as EventListener,
     );
 
     return () => {
       window.removeEventListener(
-        "patients:period-change",
+        ANALYSIS_PERIOD_EVENT,
         handlePeriodChange as EventListener,
       );
     };
@@ -51,7 +53,14 @@ export default function Navigation() {
   const toggleMenu = () => setIsOpen((value) => !value);
   const closeMenu = () => setIsOpen(false);
 
-  const isPatientPage = pathname.startsWith("/patients");
+  const isFilterablePage = useMemo(
+    () =>
+      ["/patients", "/reservations", "/survey", "/listing", "/correlation"].some(
+        (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+      ),
+    [pathname],
+  );
+  const showPeriodBadge = isFilterablePage && analysisPeriodLabel;
 
   return (
     <nav className="sticky top-0 z-50 border-b border-brand-100/70 bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/70">
@@ -61,9 +70,9 @@ export default function Navigation() {
             <h1 className="text-lg sm:text-xl font-bold tracking-wide text-brand-600">
               マルミエ
             </h1>
-            {isPatientPage && patientsPeriodLabel && (
+            {showPeriodBadge && (
               <span className="hidden sm:inline-flex items-center rounded-full border border-brand-200 bg-white px-3 py-1 text-xs font-semibold text-brand-600 shadow-sm">
-                {patientsPeriodLabel}
+                {analysisPeriodLabel}
               </span>
             )}
           </div>
@@ -106,10 +115,10 @@ export default function Navigation() {
           </button>
         </div>
 
-        {isPatientPage && (
+        {isFilterablePage && (
           <div className="pb-3">
             <div
-              id="patients-filter-slot"
+              id={ANALYSIS_FILTER_SLOT_ID}
               className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-sm"
             />
           </div>
