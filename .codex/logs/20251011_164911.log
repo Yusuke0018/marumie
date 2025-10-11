@@ -1,0 +1,11 @@
+timestamp: 2025-10-11 16:49:11 JST
+branch: main
+commit: 521b2e5b1ef1f468363f4c3564eb5c48bc79220d
+summary: enforce six-month lifestyle range and update status highlighting
+changes:
+  - src/app/patients/page.tsx (apply minimum six-month window logic, update 150日 threshold, reuse computed range for patient/diagnosis data)
+  - src/components/Navigation.tsx (prominent gradient badge for current period on all breakpoints)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (success)
