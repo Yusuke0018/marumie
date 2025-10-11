@@ -1,0 +1,8 @@
+timestamp: 2025-10-11 18:59:22 JST
+branch: main
+commit: d374d4bacb2f7502e03429ba77aaf5d75306c69c
+summary: route reservation share links through worker host when local
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (success)
