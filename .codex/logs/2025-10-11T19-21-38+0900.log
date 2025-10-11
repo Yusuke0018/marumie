@@ -1,0 +1,10 @@
+timestamp: 2025-10-11 19:21:38 JST
+branch: main
+commit: b891e4914905f33d8f7a41a2687966fc0234e447
+summary: keep duplicate main-disease rows when merging
+changes:
+  - src/lib/diagnosisData.ts
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (pending)
