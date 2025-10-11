@@ -1,0 +1,8 @@
+timestamp: 2025-10-11 18:18:47 JST
+branch: main
+commit: 113ed61dcd341570a1201f3734aefe6f7f0ee4d2
+summary: keep all 主病 rows with stable ids and broader dept mapping
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (pending)
