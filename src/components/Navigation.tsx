@@ -73,7 +73,10 @@ export default function Navigation() {
               const isActive =
                 link.href === "/"
                   ? pathname === "/"
-                  : pathname === link.href || pathname.startsWith(`${link.href}/`);
+                  : link.href === "/patients"
+                    ? pathname === "/patients" ||
+                      (pathname.startsWith("/patients/") && !pathname.startsWith("/patients/lifestyle"))
+                    : pathname === link.href || pathname.startsWith(`${link.href}/`);
               return (
                 <Link
                   key={link.href}
@@ -139,7 +142,10 @@ export default function Navigation() {
                 const isActive =
                   link.href === "/"
                     ? pathname === "/"
-                    : pathname === link.href || pathname.startsWith(`${link.href}/`);
+                    : link.href === "/patients"
+                      ? pathname === "/patients" ||
+                        (pathname.startsWith("/patients/") && !pathname.startsWith("/patients/lifestyle"))
+                      : pathname === link.href || pathname.startsWith(`${link.href}/`);
                 return (
                   <Link
                     key={link.href}

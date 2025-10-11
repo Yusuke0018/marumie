@@ -1342,6 +1342,14 @@ function PatientAnalysisPageContent() {
     return { value: diff, percentage };
   };
 
+  const visitDayCount = useMemo(() => {
+    if (periodFilteredRecords.length === 0) {
+      return 0;
+    }
+    const unique = new Set(periodFilteredRecords.map((record) => record.dateIso));
+    return unique.size;
+  }, [periodFilteredRecords]);
+
   const latestPureRate =
     latestStat && latestStat.totalPatients > 0
       ? roundTo1Decimal((latestStat.pureFirstVisits / latestStat.totalPatients) * 100)
@@ -1475,6 +1483,17 @@ function PatientAnalysisPageContent() {
         return a.department.localeCompare(b.department, "ja");
       });
   }, [filteredClassified]);
+
+  const feverDepartmentStats = useMemo(() => {
+    return departmentStats.find((stat) => stat.department.includes("発熱"));
+  }, [departmentStats]);
+
+  const feverAveragePatients = useMemo(() => {
+    if (!feverDepartmentStats || visitDayCount === 0) {
+      return null;
+    }
+    return roundTo1Decimal(feverDepartmentStats.total / visitDayCount);
+  }, [feverDepartmentStats, visitDayCount]);
 
   const previousDepartmentStats = useMemo<Map<string, DepartmentStat>>(() => {
     if (previousPeriodRecords.length === 0) {
@@ -3637,7 +3656,7 @@ function PatientAnalysisPageContent() {
             {(
               [
                 { id: "department", label: "診療科" },
-                { id: "time", label: "時間帯" },
+                { id: "time", label: "曜日別" },
                 { id: "channel", label: "チャネル" },
               ] as Array<{ id: typeof insightTab; label: string }>
             ).map((tab) => (
@@ -3920,6 +3939,21 @@ function PatientAnalysisPageContent() {
               <div>
                 {filteredClassified.length > 0 ? (
                   <>
+                    {feverAveragePatients !== null && (
+                      <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-xs text-rose-700 shadow-soft">
+                        <p className="text-sm font-semibold text-rose-800">発熱外来 平均患者数</p>
+                        <p className="mt-1 text-lg font-bold text-rose-700">
+                          {feverAveragePatients.toLocaleString("ja-JP", {
+                            minimumFractionDigits: 1,
+                            maximumFractionDigits: 1,
+                          })}
+                          名 / 日
+                        </p>
+                        <p className="text-[11px] text-rose-600">
+                          ※ 選択期間中の診療日数で割った概算値です。
+                        </p>
+                      </div>
+                    )}
                     <button
                       onClick={() => setShowWeekdayChart((value) => !value)}
                       className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
@@ -3960,6 +3994,9 @@ function PatientAnalysisPageContent() {
             )}
             {insightTab === "channel" && (
               <div className="space-y-4">
+                <div className="rounded-2xl border border-dashed border-brand-200 bg-brand-50/70 px-4 py-3 text-xs text-brand-700">
+                  多変量解析ダッシュボードは準備中です。現在はデータ取込状況のみを表示しています。
+                </div>
                 <div className="grid gap-4 md:grid-cols-3">
                   {channelSummaryCards.map((card) => (
                     <div
@@ -3991,6 +4028,7 @@ function PatientAnalysisPageContent() {
         </SectionCard>
         )}
 
+        {!lifestyleOnly && (
         <SectionCard
           title="新規主病トレンド分析"
           description="傷病名一覧CSV（主病フラグ）から新規登録された主病件数の推移と増減を確認します。"
@@ -4247,6 +4285,7 @@ function PatientAnalysisPageContent() {
             </>
           )}
         </SectionCard>
+        )}
 
           </div>
           {isManagementOpen && (
