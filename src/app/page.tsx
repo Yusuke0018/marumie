@@ -241,6 +241,14 @@ export default function HomePage() {
       icon: Users,
     },
     {
+      href: "/patients/lifestyle" as const,
+      title: "生活習慣病 継続分析",
+      description:
+        "生活習慣病患者の受診継続性をステータス別に分類し、優先フォロー対象を把握します。",
+      highlights: ["継続受診率", "年齢×疾患分析", "フォロー対象抽出"],
+      icon: Users,
+    },
+    {
       href: "/reservations" as const,
       title: "予約分析",
       description:
@@ -272,35 +280,27 @@ export default function HomePage() {
       highlights: ["時間帯相関", "月次マッチング", "散布図分析"],
       icon: Activity,
     },
-    {
-      href: "/patients/lifestyle" as const,
-      title: "生活習慣病 継続分析",
-      description:
-        "生活習慣病患者の受診継続性をステータス別に分類し、優先フォロー対象を把握します。",
-      highlights: ["継続受診率", "年齢×疾患分析", "フォロー対象抽出"],
-      icon: Users,
-    },
   ];
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-white via-brand-50/30 to-slate-50">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-12">
-        <section className="overflow-hidden rounded-3xl border border-brand-100 bg-white/90 shadow-xl">
-          <div className="relative isolate px-6 py-12 sm:px-10 lg:px-16">
-            <div className="absolute -left-16 top-6 h-44 w-44 rounded-full bg-brand-200/40 blur-3xl" />
-            <div className="absolute bottom-0 right-0 h-40 w-40 rounded-full bg-emerald-200/30 blur-3xl" />
-            <div className="relative z-10 flex flex-col gap-6">
-              <span className="inline-flex w-fit items-center rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
-                総合ダッシュボード
-              </span>
-              <h1 className="text-3xl font-bold leading-tight text-slate-900 sm:text-4xl">
-                クリニックの主要指標をひと目で俯瞰し、
-                <br className="hidden sm:block" />
-                次のアクションにつながるページへ素早くアクセス
+        <section className="overflow-hidden rounded-3xl border border-brand-100 bg-white/95 shadow-xl">
+          <div className="relative isolate px-6 py-14 sm:px-10 lg:px-16">
+            <div className="absolute -left-20 top-10 h-48 w-48 rounded-full bg-brand-200/50 blur-3xl" />
+            <div className="absolute -bottom-16 right-4 h-56 w-56 rounded-full bg-emerald-200/40 blur-3xl" />
+            <div className="relative z-10 flex flex-col gap-5">
+              <h1 className="text-4xl font-black tracking-tight text-slate-900 sm:text-5xl">
+                <span className="inline-block bg-gradient-to-r from-brand-500 via-emerald-500 to-sky-500 bg-clip-text text-transparent">
+                  マルミエ
+                </span>
               </h1>
+              <p className="text-lg font-semibold text-slate-700 sm:text-xl">
+                リベ大総合クリニック大阪院をマルミエにするアプリです。
+              </p>
               <p className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">
-                直近のカルテ記録・予約ログ・アンケート・リスティング・主病登録を集計し、最新状況をまとめています。
-                下のカードから詳しい分析ページに移動し、それぞれの視点で深掘りしてください。
+                最新のカルテ記録・予約ログ・アンケート・リスティング・主病登録をまとめたダッシュボードから、
+                詳細分析ページへスムーズにアクセスできます。今日の状況を把握し、次のアクションへつなげてください。
               </p>
             </div>
           </div>
@@ -336,7 +336,7 @@ export default function HomePage() {
         <section className="space-y-6">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-bold text-slate-900">ページへのショートカット</h2>
+              <h2 className="text-xl font-bold text-slate-900">分析ページガイド</h2>
               <p className="text-sm text-slate-500">
                 主に確認できる指標や利用シーンのヒントを添えてあります。必要な分析ページへそのまま移動できます。
               </p>
