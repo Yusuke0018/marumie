@@ -926,13 +926,29 @@ const selectLifestyleStatus = (daysSinceLast: number | null): LifestyleStatus | 
   return "atRisk";
 };
 
+const normalizePatientNumberKey = (value: string | null | undefined) => {
+  if (!value) {
+    return null;
+  }
+  const digits = value.replace(/[^\d]/g, "");
+  if (digits.length === 0) {
+    return null;
+  }
+  const parsed = Number.parseInt(digits, 10);
+  if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
+    return String(parsed);
+  }
+  return digits;
+};
+
 const createLifestylePatientKey = (
   patientNumber: string | null | undefined,
   patientName: string | null | undefined,
   birthDateIso: string | null | undefined,
 ) => {
-  if (patientNumber && patientNumber.trim().length > 0) {
-    return `pn:${patientNumber.trim()}`;
+  const normalizedNumber = normalizePatientNumberKey(patientNumber);
+  if (normalizedNumber) {
+    return `pn:${normalizedNumber}`;
   }
   const normalizedName = normalizePatientName(patientName);
   if (normalizedName && birthDateIso) {

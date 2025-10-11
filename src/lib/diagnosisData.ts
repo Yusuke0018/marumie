@@ -151,7 +151,11 @@ const normalizePatientNumber = (value: string | undefined): string | null => {
     return null;
   }
   const digits = value.replace(/[^\d]/g, "");
-  return digits.length > 0 ? digits : null;
+  if (digits.length === 0) {
+    return null;
+  }
+  const parsed = Number.parseInt(digits, 10);
+  return Number.isSafeInteger(parsed) ? String(parsed) : digits;
 };
 
 const LIFESTYLE_KEYWORDS = [
