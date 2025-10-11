@@ -1185,7 +1185,9 @@ function PatientAnalysisPageContent() {
     setStartMonth,
     setEndMonth,
     resetPeriod,
-  } = useAnalysisPeriodRange(allAvailableMonths);
+  } = useAnalysisPeriodRange(allAvailableMonths, {
+    autoSelectLatest: !lifestyleOnly,
+  });
 
   const periodFilteredRecords = useMemo(() => {
     if (classifiedRecords.length === 0) {
@@ -2164,10 +2166,13 @@ function PatientAnalysisPageContent() {
     if (diagnosisRecords.length === 0) {
       return [];
     }
+    if (lifestyleOnly) {
+      return diagnosisRecords;
+    }
     const start = startMonth || undefined;
     const end = endMonth || undefined;
     return filterDiagnosisByMonthRange(diagnosisRecords, start, end);
-  }, [diagnosisRecords, startMonth, endMonth]);
+  }, [diagnosisRecords, lifestyleOnly, startMonth, endMonth]);
 
   const diagnosisMonthlyInRange = useMemo(
     () => aggregateDiagnosisMonthly(filteredDiagnosisRecords),
