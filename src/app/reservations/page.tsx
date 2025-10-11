@@ -8,6 +8,7 @@ import {
   memo,
   lazy,
   Suspense,
+  useRef,
 } from "react";
 import { RefreshCw, Share2, Link as LinkIcon } from "lucide-react";
 import { uploadDataToR2, fetchDataFromR2 } from "@/lib/dataShare";
@@ -552,6 +553,7 @@ export default function HomePage() {
   const [showMonthlyChart, setShowMonthlyChart] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState<string>("全体");
   const [showAllDepartments, setShowAllDepartments] = useState(false);
+  const fallbackAppliedRef = useRef(false);
 
   const applySharedPayload = useCallback(
     (payload: unknown, uploadedAt?: string): boolean => {
@@ -661,64 +663,106 @@ export default function HomePage() {
     const dataId = params.get("data");
     setIsReadOnly(Boolean(dataId));
 
+    if (!fallbackAppliedRef.current) {
+      const initialFallback = loadFallbackFromParams();
+      if (initialFallback) {
+        fallbackAppliedRef.current = true;
+      }
+    }
+
     if (dataId) {
       setIsLoadingShared(true);
+      const ensureFallback = () => {
+        if (fallbackAppliedRef.current) {
+          return true;
+        }
+        const fallbackResult = loadFallbackFromParams();
+        if (fallbackResult) {
+          fallbackAppliedRef.current = true;
+        }
+        return fallbackResult;
+      };
+
+      const applyRawPayload = (rawData: string, uploadedAt?: string) => {
+        const tryParse = (text: string): unknown | null => {
+          try {
+            return JSON.parse(text);
+          } catch {
+            return null;
+          }
+        };
+
+        let parsed: unknown = tryParse(rawData);
+        if (!parsed) {
+          const decoded = decodeFromShare(rawData);
+          if (decoded) {
+            parsed = tryParse(decoded);
+          }
+        }
+        if (!parsed) {
+          return false;
+        }
+
+        if (Array.isArray(parsed)) {
+          const timestamp = uploadedAt ?? new Date().toISOString();
+          const reservationsArray = parsed as Reservation[];
+          saveReservationsToStorage(reservationsArray, timestamp);
+          clearReservationDiff();
+          setReservations(reservationsArray);
+          setDiffMonthly(null);
+          setLastUpdated(timestamp);
+          setUploadError(null);
+          fallbackAppliedRef.current = true;
+          return true;
+        }
+
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          Array.isArray((parsed as SharedDataBundle).reservations)
+        ) {
+          const applied = applySharedPayload(parsed, uploadedAt);
+          if (applied) {
+            fallbackAppliedRef.current = true;
+          }
+          return applied;
+        }
+
+        return false;
+      };
+
       fetchDataFromR2(dataId)
         .then((response) => {
           if (response.type === "reservation") {
-            try {
-              const parsed = JSON.parse(response.data);
-              if (Array.isArray(parsed)) {
-                const timestamp =
-                  response.uploadedAt ?? new Date().toISOString();
-                const reservationsArray = parsed as Reservation[];
-                saveReservationsToStorage(reservationsArray, timestamp);
-                clearReservationDiff();
-                setReservations(reservationsArray);
-                setDiffMonthly(null);
-                setLastUpdated(timestamp);
-                setUploadError(null);
-              } else if (
-                parsed &&
-                typeof parsed === "object" &&
-                Array.isArray((parsed as SharedDataBundle).reservations)
-              ) {
-                const applied = applySharedPayload(parsed, response.uploadedAt);
-                if (!applied && !loadFallbackFromParams()) {
-                  setUploadError("共有データの読み込みに失敗しました。");
-                }
-              } else if (!loadFallbackFromParams()) {
-                setUploadError("共有データの形式が不正です。");
-              }
-            } catch (error) {
-              console.error(error);
-              if (!loadFallbackFromParams()) {
-                setUploadError("共有データの読み込みに失敗しました。");
-              }
+            const applied =
+              applyRawPayload(response.data, response.uploadedAt) ||
+              ensureFallback();
+            if (!applied) {
+              setUploadError("共有データの読み込みに失敗しました。");
             }
           } else if (response.type === "karte") {
             try {
               const parsed = JSON.parse(response.data);
               if (
                 !applySharedPayload(parsed, response.uploadedAt) &&
-                !loadFallbackFromParams()
+                !ensureFallback()
               ) {
                 setUploadError("共有データの読み込みに失敗しました。");
               }
             } catch (error) {
               console.error(error);
-              if (!loadFallbackFromParams()) {
+              if (!ensureFallback()) {
                 setUploadError("共有データの読み込みに失敗しました。");
               }
             }
-          } else if (!loadFallbackFromParams()) {
+          } else if (!ensureFallback()) {
             setUploadError("未対応の共有データ形式です。");
           }
         })
         .catch((error) => {
           console.error(error);
           const message = `共有データの読み込みに失敗しました: ${(error as Error).message}`;
-          if (!loadFallbackFromParams()) {
+          if (!ensureFallback()) {
             setUploadError(message);
           }
         })
