@@ -1,10 +1,15 @@
+import { deflate, inflate } from "pako";
+
 /**
  * LocalStorage容量制限対策用の圧縮ユーティリティ
- * LZ-string互換の軽量圧縮を実装
+ * LZ-string互換アルゴリズムとpakoによるDEFLATE圧縮の両方を利用
  */
 
 const RAW_PREFIX = "__raw__:";
-const COMPRESSED_PREFIX = "__lz__:";
+const LZ_PREFIX = "__lz__:";
+const PAKO_PREFIX = "__pako__:";
+const textEncoder = typeof TextEncoder !== "undefined" ? new TextEncoder() : null;
+const textDecoder = typeof TextDecoder !== "undefined" ? new TextDecoder() : null;
 
 /**
  * 文字列をUTF-16でエンコード
@@ -393,6 +398,25 @@ function decompress(compressed: string): string {
   }
 }
 
+const encodeBase64 = (bytes: Uint8Array): string => {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+};
+
+const decodeBase64 = (base64: string): Uint8Array => {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+};
+
 /**
  * LocalStorageに圧縮して保存
  */
@@ -402,26 +426,58 @@ export function setCompressedItem(key: string, value: string): void {
   }
 
   try {
-    const compressed = compress(value);
-    let useRaw = compressed.length === 0 && value.length > 0;
+    const candidates: Array<{ payload: string; validate: () => boolean }> = [
+      { payload: `${RAW_PREFIX}${value}`, validate: () => true },
+    ];
 
-    if (!useRaw) {
+    if (textEncoder && textDecoder) {
       try {
-        const restored = decompress(compressed);
-        if (restored !== value) {
-          useRaw = true;
-        }
+        const encoded = textEncoder.encode(value);
+        const compressedBytes = deflate(encoded, { level: 9 });
+        const base64 = encodeBase64(compressedBytes);
+        const payload = `${PAKO_PREFIX}${base64}`;
+        candidates.push({
+          payload,
+          validate: () => {
+            try {
+              const restoredBytes = inflate(decodeBase64(base64));
+              const restored = textDecoder.decode(restoredBytes);
+              return restored === value;
+            } catch {
+              return false;
+            }
+          },
+        });
       } catch (error) {
-        console.error("圧縮データ検証エラー:", error);
-        useRaw = true;
+        console.error("pako圧縮エラー:", error);
       }
     }
 
-    if (useRaw) {
-      window.localStorage.setItem(key, `${RAW_PREFIX}${value}`);
-    } else {
-      window.localStorage.setItem(key, `${COMPRESSED_PREFIX}${compressed}`);
+    try {
+      const lzCompressed = compress(value);
+      candidates.push({
+        payload: `${LZ_PREFIX}${lzCompressed}`,
+        validate: () => {
+          try {
+            return decompress(lzCompressed) === value;
+          } catch {
+            return false;
+          }
+        },
+      });
+    } catch (error) {
+      console.error("LZ圧縮エラー:", error);
     }
+
+    const validCandidates = candidates.filter((candidate) => candidate.validate());
+    const chosen =
+      validCandidates.length > 0
+        ? validCandidates.reduce((smallest, current) =>
+            current.payload.length < smallest.payload.length ? current : smallest,
+          )
+        : candidates[0];
+
+    window.localStorage.setItem(key, chosen.payload);
   } catch (error) {
     console.error("圧縮保存エラー:", error);
     throw new Error(`LocalStorageへの保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`);
@@ -446,8 +502,17 @@ export function getCompressedItem(key: string): string | null {
       return compressed.slice(RAW_PREFIX.length);
     }
 
-    const payload = compressed.startsWith(COMPRESSED_PREFIX)
-      ? compressed.slice(COMPRESSED_PREFIX.length)
+    if (compressed.startsWith(PAKO_PREFIX)) {
+      if (!textDecoder) {
+        throw new Error("TextDecoderが利用できないため展開できません");
+      }
+      const base64 = compressed.slice(PAKO_PREFIX.length);
+      const restoredBytes = inflate(decodeBase64(base64));
+      return textDecoder.decode(restoredBytes);
+    }
+
+    const payload = compressed.startsWith(LZ_PREFIX)
+      ? compressed.slice(LZ_PREFIX.length)
       : compressed;
 
     return decompress(payload);
