@@ -792,6 +792,18 @@ export default function HomePage() {
     overallDaily,
   } = aggregatedInsights;
 
+  const dayTypeSummary = useMemo(() => {
+    if (dayTypeData.length === 0) {
+      return { overall: 0, maxAvg: 0 };
+    }
+    const overall = dayTypeData.reduce((sum, item) => sum + item.total, 0);
+    const maxAvg = dayTypeData.reduce(
+      (max, item) => (item.avgPerDay > max ? item.avgPerDay : max),
+      0,
+    );
+    return { overall, maxAvg };
+  }, [dayTypeData]);
+
   const sortedDepartmentHourly = useMemo(() => {
     const base = [...departmentHourlyList];
     base.sort((a, b) => {
@@ -1062,31 +1074,82 @@ export default function HomePage() {
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2">日付タイプ</th>
-                  <th className="px-3 py-2">総数</th>
-                  <th className="px-3 py-2">初診</th>
-                  <th className="px-3 py-2">再診</th>
-                  <th className="px-3 py-2">1日平均</th>
+                  <th className="px-4 py-2">日付タイプ</th>
+                  <th className="px-4 py-2">総数</th>
+                  <th className="px-4 py-2">初診</th>
+                  <th className="px-4 py-2">再診</th>
+                  <th className="px-4 py-2">1日平均</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {dayTypeData.map((row) => (
-                  <tr key={row.dayType} className="hover:bg-slate-50">
-                    <td className="px-3 py-2 font-medium text-slate-900">
-                      {row.dayType}
-                    </td>
-                    <td className="px-3 py-2">
-                      {row.total.toLocaleString("ja-JP")}
-                    </td>
-                    <td className="px-3 py-2">
-                      {row["初診"].toLocaleString("ja-JP")}
-                    </td>
-                    <td className="px-3 py-2">
-                      {row["再診"].toLocaleString("ja-JP")}
-                    </td>
-                    <td className="px-3 py-2">{row.avgPerDay.toFixed(1)}</td>
-                  </tr>
-                ))}
+              <tbody className="divide-y divide-slate-100">
+                {dayTypeData.map((row) => {
+                  const share =
+                    dayTypeSummary.overall > 0
+                      ? Math.round((row.total / dayTypeSummary.overall) * 1000) / 10
+                      : 0;
+                  const initialRate =
+                    row.total > 0
+                      ? Math.round((row["初診"] / row.total) * 1000) / 10
+                      : 0;
+                  const revisitRate =
+                    row.total > 0
+                      ? Math.round((row["再診"] / row.total) * 1000) / 10
+                      : 0;
+                  const isTop =
+                    dayTypeSummary.maxAvg > 0 && row.avgPerDay === dayTypeSummary.maxAvg;
+                  return (
+                    <tr
+                      key={row.dayType}
+                      className={`transition-colors duration-150 hover:bg-indigo-50/40 ${
+                        isTop ? "bg-indigo-50/60" : ""
+                      }`}
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2 font-semibold text-slate-900">
+                          {isTop && (
+                            <span className="inline-flex items-center rounded-full bg-indigo-500 px-2 py-[2px] text-[10px] font-semibold text-white">
+                              TOP
+                            </span>
+                          )}
+                          <span>{row.dayType}</span>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-400">全体比 {share.toFixed(1)}%</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center rounded-full bg-indigo-500/10 px-3 py-1 text-sm font-semibold text-indigo-700">
+                          {row.total.toLocaleString("ja-JP")}件
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-3 py-1 text-sm font-semibold text-emerald-700">
+                            {row["初診"].toLocaleString("ja-JP")}件
+                          </span>
+                          <span className="text-[11px] text-emerald-600">{initialRate.toFixed(1)}%</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="inline-flex items-center rounded-full bg-rose-500/10 px-3 py-1 text-sm font-semibold text-rose-700">
+                            {row["再診"].toLocaleString("ja-JP")}件
+                          </span>
+                          <span className="text-[11px] text-rose-600">{revisitRate.toFixed(1)}%</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${
+                            isTop
+                              ? "bg-indigo-500 text-white"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {row.avgPerDay.toFixed(1)}件/日
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {dayTypeData.length === 0 && (
                   <tr>
                     <td
