@@ -74,9 +74,11 @@ export default function Navigation() {
             </div>
             {showPeriodBadge && (
               <div className="flex justify-start sm:justify-end">
-                <span className="inline-flex items-center gap-2 rounded-3xl bg-gradient-to-r from-brand-600 via-accent-500 to-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-xl shadow-brand-600/40 sm:text-base">
-                  <CalendarRange className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span>表示期間 {analysisPeriodLabel}</span>
+                <span className="inline-flex items-center gap-3 rounded-full border-2 border-brand-500 bg-white px-5 py-2 text-sm font-semibold text-brand-600 shadow-lg shadow-brand-500/30 sm:text-base">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-white shadow-inner">
+                    <CalendarRange className="h-4 w-4 sm:h-5 sm:w-5" />
+                  </span>
+                  <span className="tracking-wide">表示期間 {analysisPeriodLabel}</span>
                 </span>
               </div>
             )}
@@ -174,6 +176,17 @@ export default function Navigation() {
 
         <div className="h-1 bg-gradient-to-r from-brand-500/80 via-accent-400/80 to-brand-500/80" />
       </nav>
+
+      {showPeriodBadge && (
+        <div className="sm:hidden px-4 pb-2">
+          <span className="inline-flex w-full items-center justify-center gap-3 rounded-full border-2 border-brand-500 bg-white px-4 py-2 text-xs font-semibold text-brand-600 shadow-lg shadow-brand-500/30">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-500 text-white shadow-inner">
+              <CalendarRange className="h-3.5 w-3.5" />
+            </span>
+            <span className="tracking-wide">表示期間 {analysisPeriodLabel}</span>
+          </span>
+        </div>
+      )}
 
       {isFilterablePage && (
         <div className="mx-auto w-full max-w-6xl px-4 pb-3 sm:px-6 md:px-6 lg:px-8">
