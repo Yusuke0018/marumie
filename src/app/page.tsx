@@ -233,7 +233,7 @@ export default function HomePage() {
 
   const navigationCards = [
     {
-      href: "/patients",
+      href: "/patients" as const,
       title: "患者分析",
       description:
         "カルテ集計CSVを読み込み、月次推移・診療科別内訳・生活習慣病の継続状況まで一括で把握できます。",
@@ -241,7 +241,7 @@ export default function HomePage() {
       icon: Users,
     },
     {
-      href: "/reservations",
+      href: "/reservations" as const,
       title: "予約分析",
       description:
         "予約ログの時間帯・曜日・診療科ごとの傾向を可視化し、初診・再診バランスや当日予約の動きを確認できます。",
@@ -249,7 +249,7 @@ export default function HomePage() {
       icon: CalendarClock,
     },
     {
-      href: "/survey",
+      href: "/survey" as const,
       title: "アンケート分析",
       description:
         "来院経路アンケートを集計し、媒体別の集患効果や来院種別ごとの傾向を把握します。",
@@ -257,7 +257,7 @@ export default function HomePage() {
       icon: ClipboardList,
     },
     {
-      href: "/listing",
+      href: "/listing" as const,
       title: "リスティング分析",
       description:
         "広告の費用・CV・時間帯パフォーマンスを突合し、キャンペーンごとの費用対効果を把握します。",
@@ -265,7 +265,7 @@ export default function HomePage() {
       icon: BarChart3,
     },
     {
-      href: "/correlation",
+      href: "/correlation" as const,
       title: "相関分析",
       description:
         "予約実績と広告指標の関係性を多変量で比較し、広告施策が来院に与える影響を探ります。",
@@ -273,7 +273,7 @@ export default function HomePage() {
       icon: Activity,
     },
     {
-      href: "/patients/lifestyle",
+      href: "/patients/lifestyle" as const,
       title: "生活習慣病 継続分析",
       description:
         "生活習慣病患者の受診継続性をステータス別に分類し、優先フォロー対象を把握します。",
