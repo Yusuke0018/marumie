@@ -17,6 +17,7 @@ export type KarteMonthlyStat = {
   pureFirstVisits: number;
   returningFirstVisits: number;
   revisitCount: number;
+  endoscopyCount: number;
   averageAge: number | null;
 };
 
@@ -47,6 +48,31 @@ const toDateFromIso = (iso: string) => {
   return Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)
     ? new Date(year, month - 1, day)
     : null;
+};
+
+export const ENDOSCOPY_DEPARTMENT_KEYWORDS = [
+  "内視鏡（保険）",
+  "内視鏡（自費）",
+  "内視鏡(保険)",
+  "内視鏡(自費)",
+  "人間ドックA",
+  "人間ドックB",
+];
+
+const normalizeDepartmentLabel = (value: string | null | undefined) =>
+  typeof value === "string" ? value.replace(/\s+/g, "") : "";
+
+export const isEndoscopyDepartment = (department: string | null | undefined): boolean => {
+  if (!department) {
+    return false;
+  }
+  const normalized = normalizeDepartmentLabel(department);
+  if (!normalized) {
+    return false;
+  }
+  return ENDOSCOPY_DEPARTMENT_KEYWORDS.some((keyword) =>
+    normalized.includes(keyword.replace(/\s+/g, "")),
+  );
 };
 
 export type KarteVisitCategory = "pureFirst" | "returningFirst" | "revisit" | "unknown";
@@ -150,6 +176,7 @@ export function aggregateKarteMonthly(records: KarteRecord[]): KarteMonthlyStat[
       pureFirstVisits: number;
       returningFirstVisits: number;
       revisitCount: number;
+      endoscopyCount: number;
       ageSum: number;
       ageCount: number;
     }
@@ -163,6 +190,7 @@ export function aggregateKarteMonthly(records: KarteRecord[]): KarteMonthlyStat[
         pureFirstVisits: 0,
         returningFirstVisits: 0,
         revisitCount: 0,
+        endoscopyCount: 0,
         ageSum: 0,
         ageCount: 0,
       });
@@ -170,6 +198,9 @@ export function aggregateKarteMonthly(records: KarteRecord[]): KarteMonthlyStat[
 
     const bucket = monthStats.get(monthKey)!;
     bucket.totalPatients += 1;
+    if (isEndoscopyDepartment(record.department)) {
+      bucket.endoscopyCount += 1;
+    }
 
     if (record.category === "pureFirst") {
       bucket.pureFirstVisits += 1;
@@ -200,6 +231,7 @@ export function aggregateKarteMonthly(records: KarteRecord[]): KarteMonthlyStat[
       pureFirstVisits: bucket.pureFirstVisits,
       returningFirstVisits: bucket.returningFirstVisits,
       revisitCount: bucket.revisitCount,
+      endoscopyCount: bucket.endoscopyCount,
       averageAge:
         bucket.ageCount > 0 ? clampToOneDecimal(bucket.ageSum / bucket.ageCount) : null,
     }));

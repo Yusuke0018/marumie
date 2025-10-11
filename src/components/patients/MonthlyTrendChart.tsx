@@ -64,6 +64,13 @@ export const MonthlyTrendChart = ({ stats }: MonthlyTrendChartProps) => {
           backgroundColor: "#8b5cf6",
           tension: 0.3,
         },
+        {
+          label: "内視鏡",
+          data: sortedStats.map((stat) => stat.endoscopyCount),
+          borderColor: "#ec4899",
+          backgroundColor: "#ec4899",
+          tension: 0.3,
+        },
       ],
     };
   }, [stats]);

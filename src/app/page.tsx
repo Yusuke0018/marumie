@@ -22,32 +22,7 @@ import {
   DIAGNOSIS_STORAGE_KEY,
   type DiagnosisRecord,
 } from "@/lib/diagnosisData";
-import { classifyKarteRecords, type KarteRecord } from "@/lib/karteAnalytics";
-
-const ENDOSCOPY_DEPARTMENT_KEYWORDS = [
-  "内視鏡（保険）",
-  "内視鏡（自費）",
-  "内視鏡(保険)",
-  "内視鏡(自費)",
-  "人間ドックA",
-  "人間ドックB",
-];
-
-const normalizeDepartment = (value: string | null | undefined) =>
-  typeof value === "string" ? value.replace(/\s+/g, "") : "";
-
-const isEndoscopyDepartment = (department: string | null | undefined) => {
-  if (!department) {
-    return false;
-  }
-  const normalized = normalizeDepartment(department);
-  if (!normalized) {
-    return false;
-  }
-  return ENDOSCOPY_DEPARTMENT_KEYWORDS.some((keyword) =>
-    normalized.includes(keyword.replace(/\s+/g, "")),
-  );
-};
+import { classifyKarteRecords, isEndoscopyDepartment, type KarteRecord } from "@/lib/karteAnalytics";
 
 type DashboardStats = {
   totalPatients: number | null;

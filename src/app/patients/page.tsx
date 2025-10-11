@@ -103,11 +103,6 @@ import { KARTE_STORAGE_KEY, KARTE_TIMESTAMP_KEY } from "@/lib/storageKeys";
 import type { SharedDataBundle } from "@/lib/sharedBundle";
 import { LifestyleViewContext } from "./LifestyleViewContext";
 
-const MonthlySummaryChart = lazy(() =>
-  import("@/components/patients/MonthlySummaryChart").then((m) => ({
-    default: m.MonthlySummaryChart,
-  })),
-);
 const MonthlyTrendChart = lazy(() =>
   import("@/components/patients/MonthlyTrendChart").then((m) => ({
     default: m.MonthlyTrendChart,
@@ -926,7 +921,6 @@ function PatientAnalysisPageContent() {
   const [isSharing, setIsSharing] = useState(false);
   const [isLoadingShared, setIsLoadingShared] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
-  const [showSummaryChart, setShowSummaryChart] = useState(false);
   const [showTrendChart, setShowTrendChart] = useState(false);
   const [showDepartmentChart, setShowDepartmentChart] = useState(false);
   const [showWeekdayChart, setShowWeekdayChart] = useState(false);
@@ -3062,7 +3056,7 @@ function PatientAnalysisPageContent() {
                         : undefined
                     }
                   >
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
                       <StatCard
                         label={`${formatMonthLabel(latestStat.month)} 総患者`}
                         value={`${latestStat.totalPatients.toLocaleString("ja-JP")}名`}
@@ -3146,6 +3140,25 @@ function PatientAnalysisPageContent() {
                         isSingleMonth={isSingleMonthPeriod}
                       />
                       <StatCard
+                        label={`${formatMonthLabel(latestStat.month)} 内視鏡`}
+                        value={`${latestStat.endoscopyCount.toLocaleString("ja-JP")}名`}
+                        tone="accent"
+                        monthOverMonth={
+                          isSingleMonthPeriod && previousMonthStat
+                            ? calculateMonthOverMonth(
+                                latestStat.endoscopyCount,
+                                previousMonthStat.endoscopyCount,
+                              )
+                            : !isSingleMonthPeriod && firstStat
+                              ? calculateMonthOverMonth(
+                                  latestStat.endoscopyCount,
+                                  firstStat.endoscopyCount,
+                                )
+                              : null
+                        }
+                        isSingleMonth={isSingleMonthPeriod}
+                      />
+                      <StatCard
                         label={`${formatMonthLabel(latestStat.month)} 平均年齢`}
                         value={
                           latestStat.averageAge !== null
@@ -3187,20 +3200,6 @@ function PatientAnalysisPageContent() {
                         isSingleMonth={isSingleMonthPeriod}
                       />
                     </div>
-                    <button
-                      onClick={() => setShowSummaryChart(!showSummaryChart)}
-                      className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                    >
-                      {showSummaryChart ? "グラフを非表示" : "グラフを表示"}
-                    </button>
-                    {showSummaryChart && (
-                      <div className="mt-4 space-y-2">
-                        <p className="text-[11px] text-slate-500">
-                          ※ 凡例をクリックすると系列を切り替え、ホバーで月次値の詳細を確認できます。
-                        </p>
-                        <MonthlySummaryChart stats={stats} />
-                      </div>
-                    )}
                   </SectionCard>
                 )}
 
@@ -3222,6 +3221,7 @@ function PatientAnalysisPageContent() {
                             <th className="px-3 py-2">純初診</th>
                             <th className="px-3 py-2">再初診</th>
                             <th className="px-3 py-2">再診</th>
+                            <th className="px-3 py-2">内視鏡</th>
                             <th className="px-3 py-2">平均年齢</th>
                           </tr>
                         </thead>
@@ -3248,6 +3248,12 @@ function PatientAnalysisPageContent() {
                                 : null;
                               const revisitMoM = prevStat
                                 ? calculateMonthOverMonth(stat.revisitCount, prevStat.revisitCount)
+                                : null;
+                              const endoscopyMoM = prevStat
+                                ? calculateMonthOverMonth(
+                                    stat.endoscopyCount,
+                                    prevStat.endoscopyCount,
+                                  )
                                 : null;
                               const ageMoM =
                                 prevStat && stat.averageAge !== null && prevStat.averageAge !== null
@@ -3317,6 +3323,21 @@ function PatientAnalysisPageContent() {
                                       >
                                         ({revisitMoM.value >= 0 ? "+" : ""}
                                         {revisitMoM.percentage}%)
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {stat.endoscopyCount.toLocaleString("ja-JP")}
+                                    {endoscopyMoM && (
+                                      <span
+                                        className={`ml-2 text-xs ${
+                                          endoscopyMoM.value >= 0
+                                            ? "text-emerald-600"
+                                            : "text-rose-600"
+                                        }`}
+                                      >
+                                        ({endoscopyMoM.value >= 0 ? "+" : ""}
+                                        {endoscopyMoM.percentage}%)
                                       </span>
                                     )}
                                   </td>
