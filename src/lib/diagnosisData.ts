@@ -101,26 +101,28 @@ const normalizeDepartment = (value: string | undefined): DiagnosisDepartment | n
     return null;
   }
 
-  const base = trimmed
-    .replace(/\s+/g, "")
+  const normalized = trimmed
+    .replace(/[\s()（）・･/\\-]+/g, "")
     .replace(/科$/, "")
-    .replace(/[()（）]/g, (match) => {
-      if (match === "(" || match === "（") {
-        return "（";
-      }
-      if (match === ")" || match === "）") {
-        return "）";
-      }
-      return match;
-    });
+    .replace(/外来$/, "外来");
 
-  if (base.includes("総合診療")) {
+  if (
+    normalized.includes("総合診療") ||
+    normalized.includes("内科") ||
+    normalized.includes("外科") ||
+    normalized.includes("生活習慣病") ||
+    normalized.includes("内視鏡")
+  ) {
     return "総合診療";
   }
-  if (base.includes("発熱外来")) {
+  if (
+    normalized.includes("発熱") ||
+    normalized.includes("風邪") ||
+    normalized.includes("発熱外来")
+  ) {
     return "発熱外来";
   }
-  if (base.includes("オンライン診療") && base.includes("保険")) {
+  if (normalized.includes("オンライン診療") && normalized.includes("保険")) {
     return "オンライン診療（保険）";
   }
 
@@ -276,12 +278,17 @@ export const parseDiagnosisCsv = (content: string): DiagnosisRecord[] => {
     throw new Error(parsed.errors[0]?.message ?? "CSV parsing error");
   }
 
-  const map = new Map<string, DiagnosisRecord>();
+  const results: DiagnosisRecord[] = [];
+  const occurrenceCounter = new Map<string, number>();
 
-  const sanitizeKeyPart = (value: string | null) =>
-    value ? value.replace(/\|/g, "").trim() : null;
+  const sanitizeKeyPart = (value: string | null | undefined): string => {
+    if (!value) {
+      return "";
+    }
+    return value.replace(/\|/g, "").trim();
+  };
 
-  parsed.data.forEach((row, index) => {
+  parsed.data.forEach((row) => {
     const mainFlag = (row["主病"] ?? "").trim();
     if (mainFlag !== "主病") {
       return;
@@ -310,25 +317,22 @@ export const parseDiagnosisCsv = (content: string): DiagnosisRecord[] => {
     const patientNameKeyPart = sanitizeKeyPart(patientNameNormalizedRaw);
     const birthDateIso = parseDate(row["患者生年月日"]);
     const monthKey = toMonthKey(startDate);
-    const patientKeyBase = patientNumber
-      ? `num:${patientNumber}`
-      : [
-          patientNameKeyPart ? `name:${patientNameKeyPart}` : null,
-          birthDateIso ? `birth:${birthDateIso}` : null,
-        ]
-          .filter(Boolean)
-          .join("|") || "anon";
-    const patientKey =
-      patientKeyBase === "anon" ? `anon:${index}` : patientKeyBase;
-    const recordId = [
+    const signatureParts = [
       department,
       monthKey,
       diseaseName,
       startDate,
-      patientKey,
-    ].join("|");
+      patientNumber ?? "",
+      patientNameKeyPart,
+      birthDateIso ?? "",
+    ]
+      .map((part) => sanitizeKeyPart(part))
+      .join("|");
+    const occurrence = occurrenceCounter.get(signatureParts) ?? 0;
+    occurrenceCounter.set(signatureParts, occurrence + 1);
+    const recordId = `${signatureParts}|occ:${occurrence}`;
 
-    map.set(recordId, {
+    results.push({
       id: recordId,
       patientNumber,
       patientNameNormalized: patientNameNormalizedRaw,
@@ -341,7 +345,7 @@ export const parseDiagnosisCsv = (content: string): DiagnosisRecord[] => {
     });
   });
 
-  return Array.from(map.values()).sort((a, b) => a.startDate.localeCompare(b.startDate));
+  return results.sort((a, b) => a.startDate.localeCompare(b.startDate));
 };
 
 export const mergeDiagnosisRecords = (
