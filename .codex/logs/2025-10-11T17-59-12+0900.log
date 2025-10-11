@@ -1,0 +1,8 @@
+timestamp: 2025-10-11 17:59:12 JST
+branch: main
+commit: 19e63d5a031d7b66b0d196ffd618a5da49d4f8a6
+summary: adjust main diagnosis counting to avoid dropping patients
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (success)
