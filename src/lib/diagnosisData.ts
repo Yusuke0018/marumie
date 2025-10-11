@@ -1,4 +1,9 @@
 import Papa from "papaparse";
+import {
+  setCompressedItem,
+  getCompressedItem,
+  clearCompressedItem,
+} from "./storageCompression";
 
 export type DiagnosisDepartment = "総合診療" | "発熱外来" | "オンライン診療（保険）";
 
@@ -386,6 +391,8 @@ export const mergeDiagnosisRecords = (
   existing: DiagnosisRecord[],
   incoming: DiagnosisRecord[],
 ): DiagnosisRecord[] => {
+  // 既存レコードのbaseKeyをSetで管理（重複排除用）
+  const existingKeys = new Set<string>();
   const baseCounter = new Map<string, number>();
   const combined: DiagnosisRecord[] = [];
 
@@ -397,10 +404,23 @@ export const mergeDiagnosisRecords = (
       ...record,
       id: `${baseKey}|occ:${occurrence}`,
     });
+    // 最初の出現（occurrence=0）のbaseKeyを記録
+    if (occurrence === 0) {
+      existingKeys.add(baseKey);
+    }
   };
 
+  // 既存レコードを全て追加
   existing.forEach(pushWithAssignedId);
-  incoming.forEach(pushWithAssignedId);
+
+  // 新規レコードは重複チェック後に追加
+  incoming.forEach((record) => {
+    const baseKey = createDiagnosisBaseKeyFromRecord(record);
+    // baseKeyが既存にない場合のみ追加（完全重複を排除）
+    if (!existingKeys.has(baseKey)) {
+      pushWithAssignedId(record);
+    }
+  });
 
   return combined.sort((a, b) => a.startDate.localeCompare(b.startDate));
 };
@@ -410,7 +430,7 @@ export const loadDiagnosisFromStorage = (): DiagnosisRecord[] => {
     return [];
   }
   try {
-    const stored = window.localStorage.getItem(DIAGNOSIS_STORAGE_KEY);
+    const stored = getCompressedItem(DIAGNOSIS_STORAGE_KEY);
     if (!stored) {
       return [];
     }
@@ -441,10 +461,13 @@ export const saveDiagnosisToStorage = (
   const timestamp = timestampOverride ?? new Date().toISOString();
   if (typeof window !== "undefined") {
     try {
-      window.localStorage.setItem(DIAGNOSIS_STORAGE_KEY, JSON.stringify(data));
+      setCompressedItem(DIAGNOSIS_STORAGE_KEY, JSON.stringify(data));
       window.localStorage.setItem(DIAGNOSIS_TIMESTAMP_KEY, timestamp);
     } catch (error) {
-      console.error(error);
+      console.error("主病データの保存エラー:", error);
+      throw new Error(
+        "主病データの保存に失敗しました。データ量が多すぎる可能性があります。",
+      );
     }
   }
   return timestamp;
@@ -455,7 +478,7 @@ export const clearDiagnosisStorage = () => {
     return;
   }
   try {
-    window.localStorage.removeItem(DIAGNOSIS_STORAGE_KEY);
+    clearCompressedItem(DIAGNOSIS_STORAGE_KEY);
     window.localStorage.removeItem(DIAGNOSIS_TIMESTAMP_KEY);
   } catch (error) {
     console.error(error);
