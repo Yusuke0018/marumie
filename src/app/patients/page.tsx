@@ -944,6 +944,7 @@ const formatPercentage = (value: number | null | undefined) => {
 type LifestylePatientSummary = {
   patientNumber: string;
   patientName: string | null;
+  anonymizedId: string;
   diseaseType: LifestyleDiseaseType;
   diseaseLabels: string[];
   diseaseNames: string[];
@@ -2153,6 +2154,7 @@ export default function PatientAnalysisPage() {
       patients.push({
         patientNumber,
         patientName: slot.patientName,
+        anonymizedId: "",
         diseaseType,
         diseaseLabels,
         diseaseNames: Array.from(diseaseNames),
@@ -2170,6 +2172,12 @@ export default function PatientAnalysisPage() {
     if (patients.length === 0) {
       return null;
     }
+
+    patients
+      .sort((a, b) => a.patientNumber.localeCompare(b.patientNumber, "en"))
+      .forEach((patient, index) => {
+        patient.anonymizedId = `LS-${String(index + 1).padStart(3, "0")}`;
+      });
 
     const totalPatients = patients.length;
     const statusCounts: Record<LifestyleStatus, number> = {
@@ -3746,14 +3754,13 @@ export default function PatientAnalysisPage() {
                 {lifestyleAnalysis.initialStats.singleVisit.list.length > 0 && (
                   <div className="mt-4">
                     <h4 className="text-xs font-semibold uppercase tracking-wide text-rose-600">
-                      初診後1回のみで離脱した患者（最新10名）
+                      初診後1回のみで離脱したケース（最新10件）
                     </h4>
                     <div className="mt-2 overflow-x-auto">
-                      <table className="w-full min-w-[600px] border-collapse text-sm">
+                      <table className="w-full min-w-[520px] border-collapse text-sm">
                         <thead className="bg-rose-50 text-xs uppercase tracking-wide text-rose-600">
                           <tr>
-                            <th className="px-3 py-2 text-left font-semibold">患者番号</th>
-                            <th className="px-3 py-2 text-left font-semibold">氏名</th>
+                            <th className="px-3 py-2 text-left font-semibold">ケースID</th>
                             <th className="px-3 py-2 text-left font-semibold">初診日</th>
                             <th className="px-3 py-2 text-left font-semibold">疾患カテゴリ</th>
                             <th className="px-3 py-2 text-left font-semibold">最終来院</th>
@@ -3762,10 +3769,7 @@ export default function PatientAnalysisPage() {
                         <tbody className="divide-y divide-rose-100">
                           {lifestyleAnalysis.initialStats.singleVisit.list.map((patient) => (
                             <tr key={`single-${patient.patientNumber}`} className="bg-white">
-                              <td className="px-3 py-2 text-slate-600">{patient.patientNumber}</td>
-                              <td className="px-3 py-2 text-slate-700">
-                                {patient.patientName ?? "氏名未登録"}
-                              </td>
+                              <td className="px-3 py-2 text-slate-700">{patient.anonymizedId}</td>
                               <td className="px-3 py-2 text-slate-600">
                                 {formatDateLabel(patient.firstVisitDate)}
                               </td>
@@ -3850,11 +3854,10 @@ export default function PatientAnalysisPage() {
                   </div>
                   {lifestyleAnalysis.delayedPatients.list.length > 0 ? (
                     <div className="mt-3 overflow-x-auto">
-                      <table className="w-full min-w-[560px] border-collapse text-sm">
+                      <table className="w-full min-w-[480px] border-collapse text-sm">
                         <thead className="bg-amber-50 text-xs uppercase tracking-wide text-amber-600">
                           <tr>
-                            <th className="px-3 py-2 text-left font-semibold">患者番号</th>
-                            <th className="px-3 py-2 text-left font-semibold">氏名</th>
+                            <th className="px-3 py-2 text-left font-semibold">ケースID</th>
                             <th className="px-3 py-2 text-left font-semibold">最終来院</th>
                             <th className="px-3 py-2 text-right font-semibold">経過日数</th>
                             <th className="px-3 py-2 text-right font-semibold">来院回数</th>
@@ -3864,10 +3867,7 @@ export default function PatientAnalysisPage() {
                         <tbody className="divide-y divide-amber-100">
                           {lifestyleAnalysis.delayedPatients.list.map((patient) => (
                             <tr key={`delayed-${patient.patientNumber}`} className="bg-white">
-                              <td className="px-3 py-2 text-slate-600">{patient.patientNumber}</td>
-                              <td className="px-3 py-2 text-slate-700">
-                                {patient.patientName ?? "氏名未登録"}
-                              </td>
+                              <td className="px-3 py-2 text-slate-700">{patient.anonymizedId}</td>
                               <td className="px-3 py-2 text-slate-600">
                                 {formatDateLabel(patient.lastVisitDate)}
                               </td>
@@ -3903,11 +3903,10 @@ export default function PatientAnalysisPage() {
                   </div>
                   {lifestyleAnalysis.atRiskPatients.list.length > 0 ? (
                     <div className="mt-3 overflow-x-auto">
-                      <table className="w-full min-w-[560px] border-collapse text-sm">
+                      <table className="w-full min-w-[520px] border-collapse text-sm">
                         <thead className="bg-rose-50 text-xs uppercase tracking-wide text-rose-600">
                           <tr>
-                            <th className="px-3 py-2 text-left font-semibold">患者番号</th>
-                            <th className="px-3 py-2 text-left font-semibold">氏名</th>
+                            <th className="px-3 py-2 text-left font-semibold">ケースID</th>
                             <th className="px-3 py-2 text-left font-semibold">最終来院</th>
                             <th className="px-3 py-2 text-right font-semibold">経過日数</th>
                             <th className="px-3 py-2 text-right font-semibold">来院回数</th>
@@ -3917,10 +3916,7 @@ export default function PatientAnalysisPage() {
                         <tbody className="divide-y divide-rose-100">
                           {lifestyleAnalysis.atRiskPatients.list.map((patient) => (
                             <tr key={`risk-${patient.patientNumber}`} className="bg-white">
-                              <td className="px-3 py-2 text-slate-600">{patient.patientNumber}</td>
-                              <td className="px-3 py-2 text-slate-700">
-                                {patient.patientName ?? "氏名未登録"}
-                              </td>
+                              <td className="px-3 py-2 text-slate-700">{patient.anonymizedId}</td>
                               <td className="px-3 py-2 text-slate-600">
                                 {formatDateLabel(patient.lastVisitDate)}
                               </td>
