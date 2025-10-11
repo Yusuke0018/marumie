@@ -489,10 +489,21 @@ const STAT_TONE_TEXT: Record<"brand" | "accent" | "muted" | "emerald", string> =
 };
 
 const STAT_TONE_BADGE: Record<"brand" | "accent" | "muted" | "emerald", string> = {
-  brand: "bg-brand-50 text-brand-600",
-  accent: "bg-accent-50 text-accent-600",
-  emerald: "bg-emerald-50 text-emerald-600",
-  muted: "bg-slate-100 text-slate-600",
+  brand: "bg-brand-500/10 text-brand-600",
+  accent: "bg-accent-500/10 text-accent-600",
+  emerald: "bg-emerald-500/10 text-emerald-600",
+  muted: "bg-slate-500/10 text-slate-600",
+};
+
+const STAT_TONE_CARD: Record<"brand" | "accent" | "muted" | "emerald", string> = {
+  brand:
+    "border-brand-200 bg-gradient-to-br from-brand-50/90 via-white to-white shadow-[0_18px_32px_-16px_rgba(59,130,246,0.45)]",
+  accent:
+    "border-accent-200 bg-gradient-to-br from-accent-50/90 via-white to-white shadow-[0_18px_32px_-16px_rgba(244,114,182,0.45)]",
+  emerald:
+    "border-emerald-200 bg-gradient-to-br from-emerald-50/90 via-white to-white shadow-[0_18px_32px_-16px_rgba(16,185,129,0.45)]",
+  muted:
+    "border-slate-200 bg-gradient-to-br from-slate-50/90 via-white to-white shadow-[0_18px_32px_-16px_rgba(100,116,139,0.35)]",
 };
 
 const StatCard = ({
@@ -514,13 +525,16 @@ const StatCard = ({
 }) => {
   const toneText = STAT_TONE_TEXT[tone];
   const badgeClass = STAT_TONE_BADGE[tone];
+  const cardClass = STAT_TONE_CARD[tone];
 
   return (
-    <div className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow duration-200 hover:shadow-lg sm:p-5">
-      <dt className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 sm:text-xs">
+    <div
+      className={`group relative overflow-hidden rounded-3xl border ${cardClass} p-5 transition-transform duration-200 hover:-translate-y-0.5`}
+    >
+      <dt className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400 sm:text-xs">
         {label}
       </dt>
-      <dd className={`mt-2 text-2xl font-bold leading-tight sm:text-3xl ${toneText}`}>
+      <dd className={`mt-3 text-3xl font-extrabold leading-tight sm:text-[32px] ${toneText}`}>
         {value}
       </dd>
       {secondaryLabel && secondaryValue && (

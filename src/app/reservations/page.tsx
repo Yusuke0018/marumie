@@ -455,6 +455,24 @@ const SectionCard = memo(
 
 SectionCard.displayName = "SectionCard";
 
+const RES_STAT_TONE_TEXT: Record<"brand" | "accent" | "muted" | "emerald", string> = {
+  brand: "text-brand-600",
+  accent: "text-accent-600",
+  emerald: "text-emerald-600",
+  muted: "text-slate-600",
+};
+
+const RES_STAT_TONE_CARD: Record<"brand" | "accent" | "muted" | "emerald", string> = {
+  brand:
+    "border-brand-200 bg-gradient-to-br from-brand-50/90 via-white to-white shadow-[0_16px_30px_-18px_rgba(59,130,246,0.45)]",
+  accent:
+    "border-accent-200 bg-gradient-to-br from-accent-50/90 via-white to-white shadow-[0_16px_30px_-18px_rgba(244,114,182,0.45)]",
+  emerald:
+    "border-emerald-200 bg-gradient-to-br from-emerald-50/90 via-white to-white shadow-[0_16px_30px_-18px_rgba(16,185,129,0.45)]",
+  muted:
+    "border-slate-200 bg-gradient-to-br from-slate-50/90 via-white to-white shadow-[0_16px_30px_-18px_rgba(100,116,139,0.35)]",
+};
+
 const StatCard = memo(
   ({
     label,
@@ -465,22 +483,18 @@ const StatCard = memo(
     value: string;
     tone: "brand" | "accent" | "muted" | "emerald";
   }) => {
-    const toneClass =
-      tone === "brand"
-        ? "text-brand-600"
-        : tone === "accent"
-          ? "text-accent-600"
-          : tone === "emerald"
-            ? "text-emerald-600"
-            : "text-slate-900";
+    const toneClass = RES_STAT_TONE_TEXT[tone];
+    const cardClass = RES_STAT_TONE_CARD[tone];
 
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-card sm:p-4">
-        <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:text-xs">
+      <div
+        className={`rounded-3xl border ${cardClass} p-5 text-left transition-transform duration-200 hover:-translate-y-0.5 sm:p-6`}
+      >
+        <dt className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400 sm:text-xs">
           {label}
         </dt>
         <dd
-          className={`mt-1 text-xl font-bold sm:mt-2 sm:text-2xl ${toneClass}`}
+          className={`mt-3 text-3xl font-extrabold leading-tight sm:text-[32px] ${toneClass}`}
         >
           {value}
         </dd>

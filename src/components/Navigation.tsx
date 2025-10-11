@@ -43,7 +43,7 @@ export default function Navigation() {
   const links = [
     { href: "/" as const, label: "ホーム" },
     { href: "/patients" as const, label: "患者分析" },
-    { href: "/patients/lifestyle" as const, label: "生活習慣病" },
+    { href: "/patients/lifestyle" as const, label: "生活習慣病分析" },
     { href: "/reservations" as const, label: "予約分析" },
     { href: "/survey" as const, label: "アンケート分析" },
     { href: "/listing" as const, label: "リスティング分析" },
