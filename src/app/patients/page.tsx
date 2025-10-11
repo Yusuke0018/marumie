@@ -96,6 +96,7 @@ import {
   DIAGNOSIS_STORAGE_KEY,
   DIAGNOSIS_TIMESTAMP_KEY,
 } from "@/lib/diagnosisData";
+import { KARTE_STORAGE_KEY, KARTE_TIMESTAMP_KEY } from "@/lib/storageKeys";
 import type { SharedDataBundle } from "@/lib/sharedBundle";
 import { LifestyleViewContext } from "./LifestyleViewContext";
 
@@ -135,8 +136,6 @@ const DiagnosisCategoryChart = lazy(() =>
   })),
 );
 
-const KARTE_STORAGE_KEY = "clinic-analytics/karte-records/v1";
-const KARTE_TIMESTAMP_KEY = "clinic-analytics/karte-last-updated/v1";
 const KARTE_MIN_MONTH = "2000-01";
 
 const LISTING_CATEGORIES: ListingCategory[] = ["内科", "胃カメラ", "大腸カメラ"];

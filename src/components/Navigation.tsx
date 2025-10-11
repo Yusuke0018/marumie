@@ -39,7 +39,9 @@ export default function Navigation() {
   }, []);
 
   const links = [
-    { href: "/" as const, label: "患者分析" },
+    { href: "/" as const, label: "ホーム" },
+    { href: "/patients" as const, label: "患者分析" },
+    { href: "/patients/lifestyle" as const, label: "生活習慣病" },
     { href: "/reservations" as const, label: "予約分析" },
     { href: "/survey" as const, label: "アンケート分析" },
     { href: "/listing" as const, label: "リスティング分析" },
@@ -49,7 +51,7 @@ export default function Navigation() {
   const toggleMenu = () => setIsOpen((value) => !value);
   const closeMenu = () => setIsOpen(false);
 
-  const isPatientPage = pathname === "/" || pathname.startsWith("/patients");
+  const isPatientPage = pathname.startsWith("/patients");
 
   return (
     <nav className="sticky top-0 z-50 border-b border-brand-100/70 bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/70">
@@ -70,7 +72,7 @@ export default function Navigation() {
             {links.map((link) => {
               const isActive =
                 link.href === "/"
-                  ? pathname === "/" || pathname.startsWith("/patients")
+                  ? pathname === "/"
                   : pathname === link.href || pathname.startsWith(`${link.href}/`);
               return (
                 <Link
@@ -136,7 +138,7 @@ export default function Navigation() {
               {links.map((link) => {
                 const isActive =
                   link.href === "/"
-                    ? pathname === "/" || pathname.startsWith("/patients")
+                    ? pathname === "/"
                     : pathname === link.href || pathname.startsWith(`${link.href}/`);
                 return (
                   <Link
