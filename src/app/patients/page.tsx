@@ -134,6 +134,12 @@ const DiagnosisCategoryChart = lazy(() =>
 );
 
 const KARTE_MIN_MONTH = "2000-01";
+const PATIENTS_PERIOD_STORAGE_KEY = "marumie/patients/periodRange";
+
+type StoredPeriodRange = {
+  startMonth: string | null;
+  endMonth: string | null;
+};
 
 const LISTING_CATEGORIES: ListingCategory[] = ["内科", "胃カメラ", "大腸カメラ"];
 const SURVEY_FILE_TYPES: SurveyFileType[] = ["外来", "内視鏡"];
@@ -973,6 +979,7 @@ function PatientAnalysisPageContent() {
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [startMonth, setStartMonth] = useState<string>("");
   const [endMonth, setEndMonth] = useState<string>("");
+  const [isPeriodInitialized, setIsPeriodInitialized] = useState(false);
   const [showSummaryChart, setShowSummaryChart] = useState(false);
   const [showTrendChart, setShowTrendChart] = useState(false);
   const [showDepartmentChart, setShowDepartmentChart] = useState(false);
@@ -1278,21 +1285,104 @@ function PatientAnalysisPageContent() {
     return Array.from(months).sort();
   }, [classifiedRecords, diagnosisMonths]);
 
-
-
   useEffect(() => {
+    if (typeof window === "undefined" || isPeriodInitialized) {
+      return;
+    }
+
     if (allAvailableMonths.length === 0) {
       return;
     }
 
+    try {
+      const stored = window.localStorage.getItem(PATIENTS_PERIOD_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as StoredPeriodRange | null;
+        if (parsed) {
+          const availableSet = new Set(allAvailableMonths);
+          const storedStart =
+            parsed.startMonth && availableSet.has(parsed.startMonth)
+              ? parsed.startMonth
+              : "";
+          const storedEnd =
+            parsed.endMonth && availableSet.has(parsed.endMonth)
+              ? parsed.endMonth
+              : "";
+
+          if (storedStart) {
+            setStartMonth(storedStart);
+          }
+          if (storedEnd) {
+            const normalizedEnd =
+              storedStart && storedEnd < storedStart ? storedStart : storedEnd;
+            setEndMonth(normalizedEnd);
+          } else if (!parsed.endMonth) {
+            setEndMonth("");
+          }
+        }
+      }
+    } catch (error) {
+      console.error("期間選択の復元に失敗しました:", error);
+    } finally {
+      setIsPeriodInitialized(true);
+    }
+  }, [allAvailableMonths, isPeriodInitialized]);
+
+
+
+  useEffect(() => {
+    if (!isPeriodInitialized || allAvailableMonths.length === 0) {
+      return;
+    }
+
+    if (startMonth || endMonth) {
+      return;
+    }
+
     const latestMonth = allAvailableMonths[allAvailableMonths.length - 1];
-    
-    // 開始月・終了月が未設定の場合、最新月を設定
-    if (!startMonth && !endMonth) {
+    if (latestMonth) {
       setStartMonth(latestMonth);
       setEndMonth(latestMonth);
     }
-  }, [allAvailableMonths, startMonth, endMonth]);
+  }, [allAvailableMonths, startMonth, endMonth, isPeriodInitialized]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isPeriodInitialized) {
+      return;
+    }
+
+    if (!startMonth && !endMonth) {
+      window.localStorage.removeItem(PATIENTS_PERIOD_STORAGE_KEY);
+      return;
+    }
+
+    const payload: StoredPeriodRange = {
+      startMonth: startMonth || null,
+      endMonth: endMonth || null,
+    };
+    window.localStorage.setItem(PATIENTS_PERIOD_STORAGE_KEY, JSON.stringify(payload));
+  }, [startMonth, endMonth, isPeriodInitialized]);
+
+  useEffect(() => {
+    if (!isPeriodInitialized || allAvailableMonths.length === 0) {
+      return;
+    }
+
+    const availableSet = new Set(allAvailableMonths);
+    const normalizedStart = startMonth && availableSet.has(startMonth) ? startMonth : "";
+    const normalizedEnd = endMonth && availableSet.has(endMonth) ? endMonth : "";
+    const adjustedEnd =
+      normalizedStart && normalizedEnd && normalizedEnd < normalizedStart
+        ? normalizedStart
+        : normalizedEnd;
+
+    if (normalizedStart !== startMonth) {
+      setStartMonth(normalizedStart);
+    }
+    if (adjustedEnd !== endMonth) {
+      setEndMonth(adjustedEnd);
+    }
+  }, [allAvailableMonths, startMonth, endMonth, isPeriodInitialized]);
 
   const filteredClassified = useMemo(() => {
     return periodFilteredRecords;
