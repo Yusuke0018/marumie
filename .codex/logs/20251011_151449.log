@@ -1,0 +1,18 @@
+timestamp: 2025-10-11 15:14:49 JST
+branch: main
+commit: 803f2968332eb3b4c706884eb592f844169c2119
+summary: unify analytics date filters via shared navigation portal and persistent hook
+changes:
+  - src/components/Navigation.tsx (listen for analysis-wide period events and expose shared slot)
+  - src/components/AnalysisFilterPortal.tsx (new portal component for month range selectors)
+  - src/hooks/useAnalysisPeriodRange.ts (new hook for persistent period storage)
+  - src/lib/analysisPeriod.ts (event constants and helpers)
+  - src/app/patients/page.tsx (use shared hook/portal and emit label updates)
+  - src/app/reservations/page.tsx (same as above plus nav label syncing)
+  - src/app/survey/page.tsx (migrate to shared filter)
+  - src/app/listing/page.tsx (migrate to shared filter)
+  - src/app/correlation/page.tsx (migrate to shared filter)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (success)
