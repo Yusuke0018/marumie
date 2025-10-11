@@ -1,0 +1,12 @@
+timestamp: 2025-10-11T10-41-35+0900
+branch: main
+commit: 3d924cbb9fb9b1cf0f6cb0b763515d6ad169437a
+diffstat:
+  src/app/patients/lifestyle/page.tsx | 4 ++--
+  src/app/patients/page.tsx          | 4 ++--
+commands:
+  - npm run lint (success)
+push: origin/main にプッシュ完了
+notes:
+  - ページファイルのnamed exportを解消し、Next.jsの型チェックに準拠
+  - lifestyle専用ページはデフォルトページをコンテキスト付きで再利用する構成に変更
