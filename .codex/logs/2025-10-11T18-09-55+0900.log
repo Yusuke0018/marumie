@@ -1,0 +1,8 @@
+timestamp: 2025-10-11 18:09:55 JST
+branch: main
+commit: 83f641cdaf6f73c42a9bdfdea86fc2b77d8083d5
+summary: ensure reservation share links restore bundled data
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (pending)
