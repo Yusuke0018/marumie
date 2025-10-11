@@ -57,6 +57,31 @@ const formatMonthLabel = (month: string): string => {
   return `${year}年${monthNum}月`;
 };
 
+type SurveyMetricKey =
+  | "googleSearch"
+  | "yahooSearch"
+  | "googleMap"
+  | "signboard"
+  | "medicalReferral"
+  | "friendReferral"
+  | "flyer"
+  | "youtube"
+  | "libertyCity"
+  | "aiSearch";
+
+const SURVEY_METRIC_KEYS: SurveyMetricKey[] = [
+  "googleSearch",
+  "yahooSearch",
+  "googleMap",
+  "signboard",
+  "medicalReferral",
+  "friendReferral",
+  "flyer",
+  "youtube",
+  "libertyCity",
+  "aiSearch",
+];
+
 export default function SurveyPage() {
   const [surveyData, setSurveyData] = useState<SurveyData[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -97,10 +122,41 @@ export default function SurveyPage() {
     };
   }, []);
 
-  const availableMonths = useMemo(() => {
-    const months = new Set(surveyData.map(d => d.month));
-    return Array.from(months).sort();
+  const trimmedSurveyData = useMemo(() => {
+    if (surveyData.length === 0) {
+      return [];
+    }
+
+    const monthTotals = new Map<string, number>();
+    for (const item of surveyData) {
+      const total = SURVEY_METRIC_KEYS.reduce(
+        (sum, key) => sum + (item[key] ?? 0),
+        0,
+      );
+      monthTotals.set(item.month, (monthTotals.get(item.month) ?? 0) + total);
+    }
+
+    const sortedMonths = Array.from(monthTotals.keys()).sort();
+    let latestActiveMonth: string | null = null;
+    for (let index = sortedMonths.length - 1; index >= 0; index -= 1) {
+      const month = sortedMonths[index];
+      if ((monthTotals.get(month) ?? 0) > 0) {
+        latestActiveMonth = month;
+        break;
+      }
+    }
+
+    if (!latestActiveMonth) {
+      return [];
+    }
+
+    return surveyData.filter((item) => item.month <= latestActiveMonth);
   }, [surveyData]);
+
+  const availableMonths = useMemo(() => {
+    const months = new Set(trimmedSurveyData.map((d) => d.month));
+    return Array.from(months).sort();
+  }, [trimmedSurveyData]);
 
   const {
     startMonth,
@@ -111,7 +167,7 @@ export default function SurveyPage() {
   } = useAnalysisPeriodRange(availableMonths);
 
   const gairaiData = useMemo(() => {
-    let data = surveyData.filter(d => d.fileType === "外来");
+    let data = trimmedSurveyData.filter((d) => d.fileType === "外来");
     
     if (startMonth && endMonth) {
       data = data.filter(d => d.month >= startMonth && d.month <= endMonth);
@@ -122,10 +178,10 @@ export default function SurveyPage() {
     }
     
     return data;
-  }, [surveyData, startMonth, endMonth]);
+  }, [trimmedSurveyData, startMonth, endMonth]);
 
   const naishikyoData = useMemo(() => {
-    let data = surveyData.filter(d => d.fileType === "内視鏡");
+    let data = trimmedSurveyData.filter((d) => d.fileType === "内視鏡");
     
     if (startMonth && endMonth) {
       data = data.filter(d => d.month >= startMonth && d.month <= endMonth);
@@ -136,7 +192,7 @@ export default function SurveyPage() {
     }
     
     return data;
-  }, [surveyData, startMonth, endMonth]);
+  }, [trimmedSurveyData, startMonth, endMonth]);
 
   const surveyRangeLabel = useMemo(() => {
     if (startMonth && endMonth) {
@@ -291,7 +347,7 @@ export default function SurveyPage() {
         renderMonthLabel={formatMonthLabel}
       />
 
-      {surveyData.length > 0 && (
+      {trimmedSurveyData.length > 0 && (
         <>
             {gairaiChartData.length > 0 && (
               <section className="rounded-3xl border-2 border-blue-300 bg-gradient-to-br from-blue-50 to-white p-8 shadow-lg">
@@ -653,7 +709,7 @@ export default function SurveyPage() {
           </>
         )}
 
-        {surveyData.length === 0 && (
+        {trimmedSurveyData.length === 0 && (
           <div className="rounded-3xl border border-slate-200 bg-slate-50 px-8 py-12 text-center">
             <p className="text-slate-500">
               アンケートCSVをアップロードしてください
