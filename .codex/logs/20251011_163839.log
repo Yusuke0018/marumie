@@ -1,0 +1,10 @@
+timestamp: 2025-10-11 16:38:39 JST
+branch: main
+commit: 6bbb992c475cc1b310ee36310c4d5cf97af7d44b
+summary: align lifestyle analytics with a rolling six-month view
+changes:
+  - src/app/patients/page.tsx (compute six-month range for lifestyle mode, sync filter state, and apply it to visit/diagnosis aggregations)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (success)
