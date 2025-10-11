@@ -5,4 +5,4 @@ summary: ensure reservation share links restore bundled data
 tests:
   - npm run lint (pass)
   - npm run build (pass)
-push: origin/main (pending)
+push: origin/main (success)
