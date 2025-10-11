@@ -598,22 +598,38 @@ const LIFESTYLE_STATUS_ORDER: LifestyleStatus[] = ["regular", "delayed", "atRisk
 
 const LIFESTYLE_STATUS_CONFIG: Record<
   LifestyleStatus,
-  { label: string; description: string; badge: string }
+  {
+    label: string;
+    description: string;
+    badge: string;
+    card: string;
+    percentText: string;
+    percentChip: string;
+  }
 > = {
   regular: {
     label: "定期受診中",
     description: "最終来院から90日以内",
     badge: "bg-emerald-50 text-emerald-600",
+    card: "border-emerald-200 bg-gradient-to-br from-emerald-50/80 via-white to-white",
+    percentText: "text-emerald-700",
+    percentChip: "bg-emerald-500/10 text-emerald-700 ring-1 ring-emerald-200/70",
   },
   delayed: {
     label: "受診遅延",
     description: "最終来院から91〜180日",
     badge: "bg-amber-50 text-amber-600",
+    card: "border-amber-200 bg-gradient-to-br from-amber-50/80 via-white to-white",
+    percentText: "text-amber-700",
+    percentChip: "bg-amber-500/10 text-amber-700 ring-1 ring-amber-200/70",
   },
   atRisk: {
     label: "離脱リスク",
     description: "最終来院から181日以上",
     badge: "bg-rose-50 text-rose-600",
+    card: "border-rose-200 bg-gradient-to-br from-rose-50/80 via-white to-white",
+    percentText: "text-rose-700",
+    percentChip: "bg-rose-500/10 text-rose-700 ring-1 ring-rose-200/70",
   },
 };
 
@@ -1557,21 +1573,41 @@ function PatientAnalysisPageContent() {
         };
       });
 
-      const maxAverageAmountCandidates = UNIT_PRICE_GROUPS.map(
-        (group) => stats[group.id]?.averageAmount ?? null,
-      ).filter((value): value is number => value !== null);
-
       return {
         key,
         label,
         stats,
-        maxAverageAmount:
-          maxAverageAmountCandidates.length > 0
-            ? Math.max(...maxAverageAmountCandidates)
-            : null,
       };
     });
   }, [unitPriceWeekdaySummaries]);
+
+  const unitPriceRankingByGroup = useMemo(() => {
+    const ranking = new Map<UnitPriceGroupId, Map<string, number>>();
+    UNIT_PRICE_GROUPS.forEach((group) => {
+      const entries = unitPriceWeekdayRows
+        .reduce<Array<{ key: string; amount: number }>>((accumulator, row) => {
+          const amount = row.stats[group.id]?.averageAmount;
+          if (typeof amount === "number" && Number.isFinite(amount)) {
+            accumulator.push({ key: row.key, amount });
+          }
+          return accumulator;
+        }, [])
+        .sort((a, b) => b.amount - a.amount);
+
+      const groupRanking = new Map<string, number>();
+      let previousAmount: number | null = null;
+      let currentRank = 0;
+      entries.forEach((entry, index) => {
+        if (previousAmount === null || entry.amount < previousAmount) {
+          currentRank = index + 1;
+        }
+        previousAmount = entry.amount;
+        groupRanking.set(entry.key, currentRank);
+      });
+      ranking.set(group.id, groupRanking);
+    });
+    return ranking;
+  }, [unitPriceWeekdayRows]);
 
   const hasUnitPriceData = useMemo(
     () =>
@@ -2297,6 +2333,45 @@ function PatientAnalysisPageContent() {
 
     return result;
   }, [diagnosisDiseaseSummaries, previousDiagnosisCategoryDiseaseMap]);
+
+  const lifestyleStatusEntries = useMemo(() => {
+    if (!lifestyleAnalysis) {
+      return [];
+    }
+    const total = lifestyleAnalysis.totalPatients || 0;
+    return LIFESTYLE_STATUS_ORDER.map((status) => {
+      const config = LIFESTYLE_STATUS_CONFIG[status];
+      const count = lifestyleAnalysis.statusCounts[status] ?? 0;
+      const percentage =
+        total > 0 ? roundTo1Decimal((count / total) * 100) : 0;
+      return {
+        status,
+        label: config.label,
+        description: config.description,
+        count,
+        percentage,
+        formattedPercentage: formatPercentage(percentage),
+        config,
+      };
+    }).sort((a, b) => {
+      if (b.percentage !== a.percentage) {
+        return b.percentage - a.percentage;
+      }
+      return (
+        LIFESTYLE_STATUS_ORDER.indexOf(a.status) -
+        LIFESTYLE_STATUS_ORDER.indexOf(b.status)
+      );
+    });
+  }, [lifestyleAnalysis]);
+
+  const lifestyleDiseaseStatsSorted = useMemo(() => {
+    if (!lifestyleAnalysis) {
+      return [];
+    }
+    return [...lifestyleAnalysis.diseaseStats].sort(
+      (a, b) => (b.rates.regular ?? 0) - (a.rates.regular ?? 0),
+    );
+  }, [lifestyleAnalysis]);
 
   const diagnosisRangeLabel = useMemo(() => {
     if (startMonth && endMonth) {
@@ -3229,16 +3304,36 @@ function PatientAnalysisPageContent() {
                                   </td>
                                   <td className="px-4 py-3 text-center">
                                     {stat.averageAmount !== null ? (
-                                      <span
-                                        className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-sm font-bold shadow-sm ${
-                                          row.maxAverageAmount !== null &&
-                                          stat.averageAmount === row.maxAverageAmount
+                                      (() => {
+                                        const rank =
+                                          unitPriceRankingByGroup.get(group.id)?.get(row.key);
+                                        const highlightClass =
+                                          rank === 1
                                             ? "bg-gradient-to-r from-accent-500 via-rose-400 to-accent-600 text-white shadow-md shadow-rose-400/50"
-                                            : "bg-blue-50 text-blue-700"
-                                        }`}
-                                      >
-                                        ¥{stat.averageAmount.toLocaleString("ja-JP")}
-                                      </span>
+                                            : rank === 2
+                                              ? "bg-gradient-to-r from-brand-500/90 to-brand-400/90 text-white shadow-md shadow-brand-400/40"
+                                              : rank === 3
+                                                ? "bg-gradient-to-r from-amber-400/90 to-amber-300/90 text-amber-900 shadow-md shadow-amber-200/50"
+                                                : "bg-blue-50 text-blue-700";
+                                        return (
+                                          <span
+                                            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-bold ${highlightClass}`}
+                                          >
+                                            {rank && rank <= 3 && (
+                                              <span
+                                                className={`rounded-full px-2 py-[1px] text-[10px] font-semibold ${
+                                                  rank === 3
+                                                    ? "bg-white/70 text-amber-900"
+                                                    : "bg-white/20 text-white"
+                                                }`}
+                                              >
+                                                No.{rank}
+                                              </span>
+                                            )}
+                                            <span>¥{stat.averageAmount.toLocaleString("ja-JP")}</span>
+                                          </span>
+                                        );
+                                      })()
                                     ) : (
                                       <span className="text-slate-400">—</span>
                                     )}
@@ -3272,41 +3367,50 @@ function PatientAnalysisPageContent() {
             {lifestyleAnalysis ? (
               <div className="space-y-6">
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50/90 via-white to-white p-4 shadow-soft">
                     <p className="text-xs font-semibold text-emerald-700">生活習慣病患者数</p>
-                    <p className="mt-2 text-2xl font-bold text-emerald-900">
+                    <p className="mt-2 text-3xl font-bold text-emerald-900">
                       {lifestyleAnalysis.totalPatients.toLocaleString("ja-JP")}名
                     </p>
-                    <p className="mt-2 text-xs text-emerald-700">
-                      継続受診率 {formatPercentage(lifestyleAnalysis.continuationRate)}
+                    <div className="mt-4 flex items-end justify-between gap-3">
+                      <span className="text-xs font-semibold text-emerald-700">継続受診率</span>
+                      <span className="inline-flex items-baseline gap-1 rounded-full bg-emerald-500/10 px-3 py-1 text-lg font-bold text-emerald-700 ring-1 ring-emerald-200/60">
+                        {formatPercentage(lifestyleAnalysis.continuationRate)}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-[11px] text-emerald-600">
+                      継続率は患者全体に対するフォロー状況を示す最重要指標です。
                     </p>
                   </div>
-                  {LIFESTYLE_STATUS_ORDER.map((status) => {
-                    const config = LIFESTYLE_STATUS_CONFIG[status];
-                    const count = lifestyleAnalysis.statusCounts[status];
-                    const percentage =
-                      lifestyleAnalysis.totalPatients > 0
-                        ? roundTo1Decimal((count / lifestyleAnalysis.totalPatients) * 100)
-                        : 0;
-                    return (
-                      <div
-                        key={status}
-                        className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft"
-                      >
+                  {lifestyleStatusEntries.map((entry, index) => (
+                    <div
+                      key={entry.status}
+                      className={`rounded-2xl border ${entry.config.card} p-4 shadow-soft`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
                         <span
-                          className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${config.badge}`}
+                          className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${entry.config.badge}`}
                         >
-                          {config.label}
+                          {entry.label}
                         </span>
-                        <p className="mt-3 text-2xl font-bold text-slate-900">
-                          {count.toLocaleString("ja-JP")}名
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {config.description}（{formatPercentage(percentage)}）
-                        </p>
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-[2px] text-[10px] font-semibold text-slate-500">
+                          No.{index + 1}
+                        </span>
                       </div>
-                    );
-                  })}
+                      <p className={`mt-4 text-[32px] font-extrabold tracking-tight ${entry.config.percentText}`}>
+                        {entry.formattedPercentage}
+                      </p>
+                      <p className="text-xs text-slate-500">患者全体に占める割合</p>
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${entry.config.percentChip}`}
+                        >
+                          {entry.count.toLocaleString("ja-JP")}名
+                        </span>
+                        <span className="text-[11px] text-slate-400">{entry.description}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
@@ -3382,23 +3486,47 @@ function PatientAnalysisPageContent() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {lifestyleAnalysis.diseaseStats.map((item) => (
+                      {lifestyleDiseaseStatsSorted.map((item) => (
                         <tr key={item.id} className="bg-white">
                           <td className="px-3 py-2 text-slate-700">{item.label}</td>
                           <td className="px-3 py-2 text-right text-slate-600">
                             {item.total.toLocaleString("ja-JP")}名
                           </td>
-                          <td className="px-3 py-2 text-right text-emerald-600">
-                            {item.statusCounts.regular.toLocaleString("ja-JP")}名（
-                            {formatPercentage(item.rates.regular)}）
+                          <td className="px-3 py-2 text-right">
+                            <div className="flex flex-col items-end gap-1">
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${LIFESTYLE_STATUS_CONFIG.regular.percentChip}`}
+                              >
+                                {formatPercentage(item.rates.regular)}
+                              </span>
+                              <span className="text-[11px] text-slate-400">
+                                {item.statusCounts.regular.toLocaleString("ja-JP")}名
+                              </span>
+                            </div>
                           </td>
-                          <td className="px-3 py-2 text-right text-amber-600">
-                            {item.statusCounts.delayed.toLocaleString("ja-JP")}名（
-                            {formatPercentage(item.rates.delayed)}）
+                          <td className="px-3 py-2 text-right">
+                            <div className="flex flex-col items-end gap-1">
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${LIFESTYLE_STATUS_CONFIG.delayed.percentChip}`}
+                              >
+                                {formatPercentage(item.rates.delayed)}
+                              </span>
+                              <span className="text-[11px] text-slate-400">
+                                {item.statusCounts.delayed.toLocaleString("ja-JP")}名
+                              </span>
+                            </div>
                           </td>
-                          <td className="px-3 py-2 text-right text-rose-600">
-                            {item.statusCounts.atRisk.toLocaleString("ja-JP")}名（
-                            {formatPercentage(item.rates.atRisk)}）
+                          <td className="px-3 py-2 text-right">
+                            <div className="flex flex-col items-end gap-1">
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${LIFESTYLE_STATUS_CONFIG.atRisk.percentChip}`}
+                              >
+                                {formatPercentage(item.rates.atRisk)}
+                              </span>
+                              <span className="text-[11px] text-slate-400">
+                                {item.statusCounts.atRisk.toLocaleString("ja-JP")}名
+                              </span>
+                            </div>
                           </td>
                           <td className="px-3 py-2 text-right text-slate-600">
                             {item.averageVisits !== null
