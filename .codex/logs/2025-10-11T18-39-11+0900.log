@@ -5,4 +5,4 @@ summary: force share links to reuse the active host
 tests:
   - npm run lint (pass)
   - npm run build (pass)
-push: origin/main (pending)
+push: origin/main (success)
