@@ -58,7 +58,11 @@ import {
   SURVEY_STORAGE_KEY,
   SURVEY_TIMESTAMP_KEY,
 } from "@/lib/surveyData";
-import { setCompressedItem, getCompressedItem } from "@/lib/storageCompression";
+import {
+  setCompressedItem,
+  getCompressedItem,
+  clearCompressedItem,
+} from "@/lib/storageCompression";
 import {
   type ListingCategory,
   type ListingData,
@@ -2859,7 +2863,7 @@ function PatientAnalysisPageContent() {
     if (typeof window === "undefined") {
       return;
     }
-    window.localStorage.removeItem(KARTE_STORAGE_KEY);
+    clearCompressedItem(KARTE_STORAGE_KEY);
     window.localStorage.removeItem(KARTE_TIMESTAMP_KEY);
     window.localStorage.removeItem(RESERVATION_STORAGE_KEY);
     window.localStorage.removeItem(RESERVATION_TIMESTAMP_KEY);

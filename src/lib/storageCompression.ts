@@ -8,6 +8,9 @@ import { deflate, inflate } from "pako";
 const RAW_PREFIX = "__raw__:";
 const LZ_PREFIX = "__lz__:";
 const PAKO_PREFIX = "__pako__:";
+const CHUNK_META_PREFIX = "__chunks__:";
+const CHUNK_KEY_SEPARATOR = "::chunk::";
+const CHUNK_SIZE = 4_000_000; // 4MB相当（ローカルストレージ制限の緩衝）
 const textEncoder = typeof TextEncoder !== "undefined" ? new TextEncoder() : null;
 const textDecoder = typeof TextDecoder !== "undefined" ? new TextDecoder() : null;
 
@@ -417,6 +420,74 @@ const decodeBase64 = (base64: string): Uint8Array => {
   return bytes;
 };
 
+const buildChunkKey = (key: string, index: number) => `${key}${CHUNK_KEY_SEPARATOR}${index}`;
+
+const clearChunkEntries = (key: string) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    const meta = window.localStorage.getItem(key);
+    if (meta && meta.startsWith(CHUNK_META_PREFIX)) {
+      const count = Number.parseInt(meta.slice(CHUNK_META_PREFIX.length), 10);
+      if (Number.isFinite(count) && count > 0) {
+        for (let index = 0; index < count; index += 1) {
+          window.localStorage.removeItem(buildChunkKey(key, index));
+        }
+      }
+    }
+  } catch (error) {
+    console.error("チャンク削除エラー:", error);
+  }
+};
+
+const isQuotaExceeded = (error: unknown): boolean => {
+  if (typeof DOMException !== "undefined" && error instanceof DOMException) {
+    return (
+      error.name === "QuotaExceededError" ||
+      error.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+      error.code === 22 ||
+      error.code === 1014
+    );
+  }
+  return false;
+};
+
+const storePayload = (key: string, payload: string) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  clearChunkEntries(key);
+
+  if (payload.length <= CHUNK_SIZE) {
+    try {
+      window.localStorage.setItem(key, payload);
+      return;
+    } catch (error) {
+      if (!isQuotaExceeded(error)) {
+        throw error;
+      }
+      // quotaに達した場合はチャンク保存へフォールバック
+    }
+  }
+
+  const chunkCount = Math.ceil(payload.length / CHUNK_SIZE);
+  try {
+    for (let index = 0; index < chunkCount; index += 1) {
+      const start = index * CHUNK_SIZE;
+      const chunk = payload.slice(start, start + CHUNK_SIZE);
+      window.localStorage.setItem(buildChunkKey(key, index), chunk);
+    }
+    window.localStorage.setItem(key, `${CHUNK_META_PREFIX}${chunkCount}`);
+  } catch (error) {
+    for (let index = 0; index < chunkCount; index += 1) {
+      window.localStorage.removeItem(buildChunkKey(key, index));
+    }
+    throw error;
+  }
+};
+
 /**
  * LocalStorageに圧縮して保存
  */
@@ -477,7 +548,7 @@ export function setCompressedItem(key: string, value: string): void {
           )
         : candidates[0];
 
-    window.localStorage.setItem(key, chosen.payload);
+    storePayload(key, chosen.payload);
   } catch (error) {
     console.error("圧縮保存エラー:", error);
     throw new Error(`LocalStorageへの保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`);
@@ -487,39 +558,77 @@ export function setCompressedItem(key: string, value: string): void {
 /**
  * LocalStorageから解凍して取得
  */
+const decodeStoredPayload = (payload: string): string => {
+  if (payload.startsWith(RAW_PREFIX)) {
+    return payload.slice(RAW_PREFIX.length);
+  }
+
+  if (payload.startsWith(PAKO_PREFIX)) {
+    if (!textDecoder) {
+      throw new Error("TextDecoderが利用できないため展開できません");
+    }
+    const base64 = payload.slice(PAKO_PREFIX.length);
+    const restoredBytes = inflate(decodeBase64(base64));
+    return textDecoder.decode(restoredBytes);
+  }
+
+  const body = payload.startsWith(LZ_PREFIX)
+    ? payload.slice(LZ_PREFIX.length)
+    : payload;
+  return decompress(body);
+};
+
+const assembleChunkPayload = (key: string, meta: string): string | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const count = Number.parseInt(meta.slice(CHUNK_META_PREFIX.length), 10);
+  if (!Number.isFinite(count) || count <= 0) {
+    return null;
+  }
+  let combined = "";
+  for (let index = 0; index < count; index += 1) {
+    const chunk = window.localStorage.getItem(buildChunkKey(key, index));
+    if (chunk === null) {
+      return null;
+    }
+    combined += chunk;
+  }
+  return combined;
+};
+
 export function getCompressedItem(key: string): string | null {
   if (typeof window === "undefined") {
     return null;
   }
 
   try {
-    const compressed = window.localStorage.getItem(key);
-    if (!compressed) {
+    const stored = window.localStorage.getItem(key);
+    if (!stored) {
       return null;
     }
 
-    if (compressed.startsWith(RAW_PREFIX)) {
-      return compressed.slice(RAW_PREFIX.length);
+    const payload = stored.startsWith(CHUNK_META_PREFIX)
+      ? assembleChunkPayload(key, stored)
+      : stored;
+
+    if (!payload) {
+      return null;
     }
 
-    if (compressed.startsWith(PAKO_PREFIX)) {
-      if (!textDecoder) {
-        throw new Error("TextDecoderが利用できないため展開できません");
-      }
-      const base64 = compressed.slice(PAKO_PREFIX.length);
-      const restoredBytes = inflate(decodeBase64(base64));
-      return textDecoder.decode(restoredBytes);
-    }
-
-    const payload = compressed.startsWith(LZ_PREFIX)
-      ? compressed.slice(LZ_PREFIX.length)
-      : compressed;
-
-    return decompress(payload);
+    return decodeStoredPayload(payload);
   } catch (error) {
     console.error("解凍取得エラー:", error);
     return null;
   }
+}
+
+export function clearCompressedItem(key: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  clearChunkEntries(key);
+  window.localStorage.removeItem(key);
 }
 
 /**
