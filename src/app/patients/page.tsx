@@ -21,6 +21,13 @@ import {
   RotateCcw,
   Undo2,
   Clock,
+  Megaphone,
+  TrendingUp,
+  TrendingDown,
+  Globe,
+  Building,
+  Sparkles,
+  PieChart,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Papa from "papaparse";
@@ -138,6 +145,87 @@ const KARTE_MIN_MONTH = "2000-01";
 
 const LISTING_CATEGORIES: ListingCategory[] = ["内科", "胃カメラ", "大腸カメラ"];
 const SURVEY_FILE_TYPES: SurveyFileType[] = ["外来", "内視鏡"];
+
+const SURVEY_CHANNEL_DEFINITIONS = [
+  { key: "googleSearch", label: "Google検索", group: "digital", description: "検索結果・広告からの流入" },
+  { key: "yahooSearch", label: "Yahoo検索", group: "digital", description: "Yahoo!検索経由の来院" },
+  { key: "googleMap", label: "Googleマップ", group: "digital", description: "Googleマップ経由の来院" },
+  { key: "aiSearch", label: "AI検索", group: "digital", description: "生成系AI・チャット検索からの流入" },
+  { key: "youtube", label: "YouTube", group: "digital", description: "動画コンテンツからの流入" },
+  { key: "libertyCity", label: "リベシティ", group: "community", description: "リベシティコミュニティ経由の来院" },
+  { key: "medicalReferral", label: "医療機関からの紹介", group: "referral", description: "病院・クリニックからの紹介" },
+  { key: "friendReferral", label: "家族・友人紹介", group: "referral", description: "患者さまからの紹介" },
+  { key: "signboard", label: "看板・通りがかり", group: "offline", description: "看板や通行中の認知" },
+  { key: "flyer", label: "チラシ・紙媒体", group: "offline", description: "紙媒体・ポスティングによる認知" },
+] as const;
+
+type SurveyChannelDefinition = (typeof SURVEY_CHANNEL_DEFINITIONS)[number];
+type SurveyChannelKey = SurveyChannelDefinition["key"];
+type SurveyChannelGroup = SurveyChannelDefinition["group"];
+
+const SURVEY_CHANNEL_GROUP_LABELS: Record<SurveyChannelGroup, string> = {
+  digital: "デジタル",
+  offline: "オフライン",
+  referral: "紹介",
+  community: "コミュニティ",
+};
+
+const SURVEY_CHANNEL_GROUP_ICONS: Record<SurveyChannelGroup, LucideIcon> = {
+  digital: Globe,
+  offline: Building,
+  referral: Users,
+  community: Sparkles,
+};
+
+const SURVEY_CHANNEL_GROUP_BADGES: Record<SurveyChannelGroup, string> = {
+  digital: "bg-sky-100 text-sky-700",
+  offline: "bg-amber-100 text-amber-700",
+  referral: "bg-emerald-100 text-emerald-700",
+  community: "bg-violet-100 text-violet-700",
+};
+
+type ChannelInsight = {
+  key: SurveyChannelKey;
+  label: string;
+  group: SurveyChannelGroup;
+  description: string;
+  total: number;
+  share: number;
+  gairai: number;
+  naishikyo: number;
+  gairaiShare: number;
+  naishikyoShare: number;
+  lastActiveMonth: string | null;
+  lastActiveMonthLabel: string | null;
+  lastMonthTotal: number;
+  previousMonthTotal: number;
+  trendDiff: number | null;
+  trendRate: number | null;
+  months: Array<{
+    month: string;
+    label: string;
+    total: number;
+    gairai: number;
+    naishikyo: number;
+  }>;
+  dominantType: "外来" | "内視鏡" | null;
+  dominantShare: number;
+};
+
+const CHANNEL_CATEGORY_MAPPING: Record<ListingCategory, string[]> = {
+  内科: ["内科・外科外来（大岩医師）", "発熱・風邪症状外来", "内科外来（担当医師）"],
+  胃カメラ: ["胃カメラ"],
+  大腸カメラ: ["大腸カメラ", "人間ドックB", "内視鏡ドック"],
+};
+
+const normalizeChannelDepartment = (value: string) =>
+  value.replace(/\s+/g, "").replace(/[()（）・･●◎○]/g, "");
+
+const NORMALIZED_CHANNEL_CATEGORY_MAPPING: Record<ListingCategory, string[]> = {
+  内科: CHANNEL_CATEGORY_MAPPING["内科"].map(normalizeChannelDepartment),
+  胃カメラ: CHANNEL_CATEGORY_MAPPING["胃カメラ"].map(normalizeChannelDepartment),
+  大腸カメラ: CHANNEL_CATEGORY_MAPPING["大腸カメラ"].map(normalizeChannelDepartment),
+};
 
 const createEmptyListingTotals = (): Record<ListingCategory, number> =>
   LISTING_CATEGORIES.reduce(
@@ -928,6 +1016,8 @@ function PatientAnalysisPageContent() {
   const [insightTab, setInsightTab] = useState<"channel" | "department" | "time">("department");
   const [isManagementOpen, setIsManagementOpen] = useState(false);
   const [reservationsRecords, setReservationsRecords] = useState<Reservation[]>([]);
+  const [surveyRecords, setSurveyRecords] = useState<SurveyData[]>([]);
+  const [listingRecords, setListingRecords] = useState<ListingCategoryData[]>([]);
   const [selectedShiftDepartment, setSelectedShiftDepartment] = useState<string>("");
   const [reservationStatus, setReservationStatus] = useState<{
     lastUpdated: string | null;
@@ -1025,6 +1115,7 @@ function PatientAnalysisPageContent() {
           total: surveyDataset.length,
           byType: summarizeSurveyByType(surveyDataset),
         });
+        setSurveyRecords(surveyDataset);
       }
 
       if (Array.isArray(bundle.listingData)) {
@@ -1041,6 +1132,7 @@ function PatientAnalysisPageContent() {
           lastUpdated: listingTimestamp,
           totals,
         });
+        setListingRecords(listingDataset);
       }
 
       if (Array.isArray(bundle.diagnosisData)) {
@@ -1156,6 +1248,7 @@ function PatientAnalysisPageContent() {
         total: existingSurvey.length,
         byType: summarizeSurveyByType(existingSurvey),
       });
+      setSurveyRecords(existingSurvey);
 
       const existingDiagnosis = loadDiagnosisFromStorage();
       const diagnosisTimestamp = loadDiagnosisTimestamp();
@@ -1177,6 +1270,7 @@ function PatientAnalysisPageContent() {
         lastUpdated: listingTimestamp,
         totals,
       });
+      setListingRecords(existingListing);
     } catch (error) {
       console.error(error);
     }
@@ -2583,6 +2677,394 @@ function PatientAnalysisPageContent() {
     ];
   }, [listingStatus, reservationStatus, surveyStatus]);
 
+  const listingSummary = useMemo(() => {
+    let totalCv = 0;
+    let totalAmount = 0;
+    const breakdownMap = new Map<
+      ListingCategory,
+      { cv: number; amount: number; lastDate: string | null }
+    >();
+
+    for (const categoryData of listingRecords) {
+      let categoryCv = 0;
+      let categoryAmount = 0;
+      let lastDate: string | null = null;
+
+      for (const entry of categoryData.data) {
+        categoryCv += entry.cv;
+        categoryAmount += entry.amount;
+        if (!lastDate || entry.date > lastDate) {
+          lastDate = entry.date;
+        }
+      }
+
+      breakdownMap.set(categoryData.category, {
+        cv: categoryCv,
+        amount: categoryAmount,
+        lastDate,
+      });
+
+      totalCv += categoryCv;
+      totalAmount += categoryAmount;
+    }
+
+    const breakdown = LISTING_CATEGORIES.map((category) => {
+      const entry =
+        breakdownMap.get(category) ?? { cv: 0, amount: 0, lastDate: null };
+      const share =
+        totalCv > 0 ? roundTo1Decimal((entry.cv / totalCv) * 100) : 0;
+      const avgCpa =
+        entry.cv > 0 ? Math.round((entry.amount / entry.cv) * 10) / 10 : null;
+      const lastDateLabel =
+        entry.lastDate && entry.lastDate.length >= 7
+          ? formatMonthLabel(entry.lastDate.slice(0, 7))
+          : null;
+      return {
+        category,
+        cv: entry.cv,
+        amount: entry.amount,
+        share,
+        avgCpa,
+        lastDate: entry.lastDate,
+        lastDateLabel,
+      };
+    });
+
+    const topCategory =
+      breakdown
+        .filter((item) => item.cv > 0)
+        .sort((a, b) => b.cv - a.cv)[0] ?? null;
+
+    const avgCpa =
+      totalCv > 0 ? Math.round((totalAmount / totalCv) * 10) / 10 : null;
+
+    return {
+      hasData: totalCv > 0,
+      totalCv,
+      totalAmount,
+      avgCpa,
+      breakdown,
+      topCategory,
+    };
+  }, [listingRecords]);
+
+  const reservationCategorySummary = useMemo(() => {
+    const totals: Record<ListingCategory, number> = {
+      内科: 0,
+      胃カメラ: 0,
+      大腸カメラ: 0,
+    };
+    let total = 0;
+
+    for (const reservation of reservationsRecords) {
+      if (!reservation || reservation.visitType !== "初診") {
+        continue;
+      }
+      const normalized = normalizeChannelDepartment(reservation.department);
+      for (const category of LISTING_CATEGORIES) {
+        if (NORMALIZED_CHANNEL_CATEGORY_MAPPING[category].includes(normalized)) {
+          totals[category] += 1;
+          total += 1;
+          break;
+        }
+      }
+    }
+
+    const breakdown = LISTING_CATEGORIES.map((category) => ({
+      category,
+      total: totals[category],
+      share: total > 0 ? roundTo1Decimal((totals[category] / total) * 100) : 0,
+    }));
+
+    const dominant =
+      breakdown
+        .filter((item) => item.total > 0)
+        .sort((a, b) => b.total - a.total)[0] ?? null;
+
+    return {
+      hasData: total > 0,
+      total,
+      breakdown,
+      dominant,
+    };
+  }, [reservationsRecords]);
+
+  const channelInsights = useMemo(() => {
+    const emptyChannels: ChannelInsight[] = SURVEY_CHANNEL_DEFINITIONS.map(
+      (definition) => ({
+        key: definition.key,
+        label: definition.label,
+        group: definition.group,
+        description: definition.description,
+        total: 0,
+        share: 0,
+        gairai: 0,
+        naishikyo: 0,
+        gairaiShare: 0,
+        naishikyoShare: 0,
+        lastActiveMonth: null,
+        lastActiveMonthLabel: null,
+        lastMonthTotal: 0,
+        previousMonthTotal: 0,
+        trendDiff: null,
+        trendRate: null,
+        months: [],
+        dominantType: null,
+        dominantShare: 0,
+      }),
+    );
+
+    if (surveyRecords.length === 0) {
+      return {
+        hasData: false,
+        totalResponses: 0,
+        totalGairai: 0,
+        totalNaishikyo: 0,
+        gairaiShare: 0,
+        naishikyoShare: 0,
+        channels: emptyChannels,
+        topChannels: [] as ChannelInsight[],
+        leadingChannel: null as ChannelInsight | null,
+        growthChannel: null as ChannelInsight | null,
+        declineChannel: null as ChannelInsight | null,
+        groupBreakdown: [] as Array<{
+          group: SurveyChannelGroup;
+          label: string;
+          total: number;
+          share: number;
+        }>;
+      };
+    }
+
+    const channelMap = new Map<
+      SurveyChannelKey,
+      {
+        total: number;
+        gairai: number;
+        naishikyo: number;
+        months: Map<string, { total: number; gairai: number; naishikyo: number }>;
+      }
+    >();
+    const groupTotals = new Map<SurveyChannelGroup, number>();
+    let totalResponses = 0;
+    let totalGairai = 0;
+    let totalNaishikyo = 0;
+
+    for (const record of surveyRecords) {
+      const month = record.month;
+      const fileType = record.fileType;
+
+      for (const definition of SURVEY_CHANNEL_DEFINITIONS) {
+        const value = record[definition.key];
+        if (!value || value <= 0) {
+          continue;
+        }
+
+        totalResponses += value;
+        if (fileType === "外来") {
+          totalGairai += value;
+        } else {
+          totalNaishikyo += value;
+        }
+
+        if (!channelMap.has(definition.key)) {
+          channelMap.set(definition.key, {
+            total: 0,
+            gairai: 0,
+            naishikyo: 0,
+            months: new Map(),
+          });
+        }
+        const entry = channelMap.get(definition.key)!;
+        entry.total += value;
+        if (fileType === "外来") {
+          entry.gairai += value;
+        } else {
+          entry.naishikyo += value;
+        }
+        const monthEntry =
+          entry.months.get(month) ?? { total: 0, gairai: 0, naishikyo: 0 };
+        monthEntry.total += value;
+        if (fileType === "外来") {
+          monthEntry.gairai += value;
+        } else {
+          monthEntry.naishikyo += value;
+        }
+        entry.months.set(month, monthEntry);
+        groupTotals.set(
+          definition.group,
+          (groupTotals.get(definition.group) ?? 0) + value,
+        );
+      }
+    }
+
+    const channels: ChannelInsight[] = SURVEY_CHANNEL_DEFINITIONS.map(
+      (definition) => {
+        const entry =
+          channelMap.get(definition.key) ?? {
+            total: 0,
+            gairai: 0,
+            naishikyo: 0,
+            months: new Map<
+              string,
+              { total: number; gairai: number; naishikyo: number }
+            >(),
+          };
+
+        const months = Array.from(entry.months.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([monthKey, data]) => ({
+            month: monthKey,
+            label: formatMonthLabel(monthKey),
+            total: data.total,
+            gairai: data.gairai,
+            naishikyo: data.naishikyo,
+          }));
+
+        const lastMonth = months.length > 0 ? months[months.length - 1] : null;
+        const previousMonth =
+          months.length > 1 ? months[months.length - 2] : null;
+        const trendDiff =
+          lastMonth && previousMonth ? lastMonth.total - previousMonth.total : null;
+        const trendRate =
+          trendDiff !== null && previousMonth && previousMonth.total > 0
+            ? roundTo1Decimal((trendDiff / previousMonth.total) * 100)
+            : null;
+
+        const share =
+          totalResponses > 0 ? roundTo1Decimal((entry.total / totalResponses) * 100) : 0;
+        const gairaiShare =
+          entry.total > 0 ? roundTo1Decimal((entry.gairai / entry.total) * 100) : 0;
+        const naishikyoShare =
+          entry.total > 0 ? roundTo1Decimal((entry.naishikyo / entry.total) * 100) : 0;
+
+        let dominantType: "外来" | "内視鏡" | null = null;
+        if (entry.gairai > entry.naishikyo) {
+          dominantType = "外来";
+        } else if (entry.naishikyo > entry.gairai) {
+          dominantType = "内視鏡";
+        }
+        const dominantShare =
+          dominantType === "外来"
+            ? gairaiShare
+            : dominantType === "内視鏡"
+              ? naishikyoShare
+              : 0;
+
+        return {
+          key: definition.key,
+          label: definition.label,
+          group: definition.group,
+          description: definition.description,
+          total: entry.total,
+          share,
+          gairai: entry.gairai,
+          naishikyo: entry.naishikyo,
+          gairaiShare,
+          naishikyoShare,
+          lastActiveMonth: lastMonth?.month ?? null,
+          lastActiveMonthLabel: lastMonth?.label ?? null,
+          lastMonthTotal: lastMonth?.total ?? 0,
+          previousMonthTotal: previousMonth?.total ?? 0,
+          trendDiff,
+          trendRate,
+          months,
+          dominantType,
+          dominantShare,
+        } as ChannelInsight;
+      },
+    );
+
+    const channelsSorted = [...channels].sort((a, b) => b.total - a.total);
+    const nonZeroChannels = channelsSorted.filter((channel) => channel.total > 0);
+    const topChannels = nonZeroChannels.slice(0, 4);
+    const leadingChannel = nonZeroChannels[0] ?? null;
+
+    const growthChannel =
+      nonZeroChannels
+        .filter((channel) => (channel.trendDiff ?? 0) > 0)
+        .sort((a, b) => (b.trendDiff ?? 0) - (a.trendDiff ?? 0))[0] ?? null;
+
+    const declineChannel =
+      nonZeroChannels
+        .filter((channel) => (channel.trendDiff ?? 0) < 0)
+        .sort((a, b) => (a.trendDiff ?? 0) - (b.trendDiff ?? 0))[0] ?? null;
+
+    const groupBreakdown = Array.from(groupTotals.entries())
+      .map(([group, value]) => ({
+        group,
+        label: SURVEY_CHANNEL_GROUP_LABELS[group],
+        total: value,
+        share:
+          totalResponses > 0 ? roundTo1Decimal((value / totalResponses) * 100) : 0,
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    const gairaiShare =
+      totalResponses > 0 ? roundTo1Decimal((totalGairai / totalResponses) * 100) : 0;
+    const naishikyoShare =
+      totalResponses > 0 ? roundTo1Decimal((totalNaishikyo / totalResponses) * 100) : 0;
+
+    return {
+      hasData: true,
+      totalResponses,
+      totalGairai,
+      totalNaishikyo,
+      gairaiShare,
+      naishikyoShare,
+      channels: channelsSorted,
+      topChannels,
+      leadingChannel,
+      growthChannel,
+      declineChannel,
+      groupBreakdown,
+    };
+  }, [surveyRecords]);
+
+  const channelInsightHighlights = useMemo(() => {
+    const items: string[] = [];
+    if (!channelInsights.hasData) {
+      return items;
+    }
+
+    if (channelInsights.leadingChannel) {
+      items.push(
+        `最多は${channelInsights.leadingChannel.label}（${channelInsights.leadingChannel.total.toLocaleString("ja-JP")}件・シェア${formatPercentage(channelInsights.leadingChannel.share)}）です。`,
+      );
+    }
+    if (channelInsights.growthChannel && channelInsights.growthChannel.trendDiff !== null) {
+      const diff = channelInsights.growthChannel.trendDiff;
+      const rate = channelInsights.growthChannel.trendRate;
+      items.push(
+        `直近で伸びているのは${channelInsights.growthChannel.label}（${diff >= 0 ? "+" : ""}${diff.toLocaleString("ja-JP")}件${rate !== null ? `, ${formatPercentage(rate)}` : ""}）。`,
+      );
+    }
+    if (channelInsights.declineChannel && channelInsights.declineChannel.trendDiff !== null) {
+      const diff = channelInsights.declineChannel.trendDiff;
+      items.push(
+        `減少傾向は${channelInsights.declineChannel.label}（${diff.toLocaleString("ja-JP")}件）です。`,
+      );
+    }
+    const topGroup = channelInsights.groupBreakdown[0];
+    if (topGroup) {
+      items.push(
+        `${topGroup.label}チャネルが全体の${formatPercentage(topGroup.share)}を占めています。`,
+      );
+    }
+    if (listingSummary.hasData && listingSummary.topCategory) {
+      items.push(
+        `リスティングでは${listingSummary.topCategory.category}カテゴリのCVが最多（${listingSummary.topCategory.cv.toLocaleString("ja-JP")}件）です。`,
+      );
+    }
+    if (reservationCategorySummary.hasData && reservationCategorySummary.dominant) {
+      items.push(
+        `初診予約は${reservationCategorySummary.dominant.category}向けが中心（${reservationCategorySummary.dominant.total.toLocaleString("ja-JP")}件・シェア${formatPercentage(reservationCategorySummary.dominant.share)}）。`,
+      );
+    }
+
+    return items;
+  }, [channelInsights, listingSummary, reservationCategorySummary]);
+
   const hasAnyRecords = records.length > 0;
   const hasPeriodRecords = periodFilteredRecords.length > 0;
   const hasDiagnosisRecords = filteredDiagnosisRecords.length > 0;
@@ -2719,6 +3201,7 @@ function PatientAnalysisPageContent() {
         total: merged.length,
         byType: summarizeSurveyByType(merged),
       });
+      setSurveyRecords(merged);
     } catch (error) {
       console.error(error);
       setSurveyUploadError("アンケートCSVの解析に失敗しました。");
@@ -2764,6 +3247,7 @@ function PatientAnalysisPageContent() {
           lastUpdated: timestamp,
           totals,
         });
+        setListingRecords(merged);
       } catch (error) {
         console.error(error);
         setListingUploadError("リスティング広告CSVの解析に失敗しました。");
@@ -2893,10 +3377,12 @@ function PatientAnalysisPageContent() {
       total: 0,
       byType: createEmptySurveyCounts(),
     });
+    setSurveyRecords([]);
     setListingStatus({
       lastUpdated: null,
       totals: createEmptyListingTotals(),
     });
+    setListingRecords([]);
     setDiagnosisRecords([]);
     setDiagnosisStatus({
       lastUpdated: null,
@@ -4142,35 +4628,314 @@ function PatientAnalysisPageContent() {
               </div>
             )}
             {insightTab === "channel" && (
-              <div className="space-y-4">
-                <div className="rounded-2xl border border-dashed border-brand-200 bg-brand-50/70 px-4 py-3 text-xs text-brand-700">
-                  多変量解析ダッシュボードは準備中です。現在はデータ取込状況のみを表示しています。
-                </div>
-                <div className="grid gap-4 md:grid-cols-3">
-                  {channelSummaryCards.map((card) => (
-                    <div
-                      key={card.id}
-                      className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{card.title}</p>
-                          <p className="text-[11px] text-slate-500">最終更新: {card.updated}</p>
+              <div className="space-y-6">
+                {channelInsights.hasData ? (
+                  <div className="space-y-6">
+                    <div className="grid gap-4 lg:grid-cols-3">
+                      <div className="rounded-2xl border border-brand-200 bg-white/90 p-5 shadow-soft">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-500">
+                              Survey Reach
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">アンケート回答総数</p>
+                          </div>
+                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-100 text-brand-600">
+                            <Megaphone className="h-4 w-4" />
+                          </span>
                         </div>
-                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                          {card.total}件
-                        </span>
+                        <p className="mt-4 text-3xl font-bold text-slate-900">
+                          {channelInsights.totalResponses.toLocaleString("ja-JP")}件
+                        </p>
+                        <div className="mt-3 grid gap-1 text-xs text-slate-600">
+                          <span>
+                            外来 {channelInsights.totalGairai.toLocaleString("ja-JP")}件（
+                            {formatPercentage(channelInsights.gairaiShare)}）
+                          </span>
+                          <span>
+                            内視鏡 {channelInsights.totalNaishikyo.toLocaleString("ja-JP")}件（
+                            {formatPercentage(channelInsights.naishikyoShare)}）
+                          </span>
+                        </div>
+                        {channelInsights.groupBreakdown.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {channelInsights.groupBreakdown.slice(0, 3).map((group) => (
+                              <span
+                                key={group.group}
+                                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold ${SURVEY_CHANNEL_GROUP_BADGES[group.group]}`}
+                              >
+                                {SURVEY_CHANNEL_GROUP_LABELS[group.group]}
+                                <span className="font-normal text-slate-600">
+                                  {formatPercentage(group.share)}
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <p className="mt-3 text-xs text-slate-500">{card.detail}</p>
-                      <p className="mt-2 text-[11px] text-slate-400">{card.helper}</p>
+
+                      <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                              Listing Ads
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">広告接点</p>
+                          </div>
+                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                            <PieChart className="h-4 w-4" />
+                          </span>
+                        </div>
+                        {listingSummary.hasData ? (
+                          <div className="mt-4 space-y-2 text-xs text-slate-600">
+                            <p>
+                              合計CV {listingSummary.totalCv.toLocaleString("ja-JP")}件 / 投資額 ¥
+                              {listingSummary.totalAmount.toLocaleString("ja-JP")}
+                            </p>
+                            {listingSummary.avgCpa !== null && (
+                              <p>
+                                平均CPA ¥{listingSummary.avgCpa.toLocaleString("ja-JP", {
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 0,
+                                })}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap gap-2">
+                              {listingSummary.breakdown.map((item) => (
+                                <span
+                                  key={item.category}
+                                  className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600"
+                                >
+                                  {item.category} {item.cv.toLocaleString("ja-JP")}件（
+                                  {formatPercentage(item.share)}）
+                                </span>
+                              ))}
+                            </div>
+                            {listingSummary.topCategory && listingSummary.topCategory.lastDateLabel && (
+                              <p className="text-[11px] text-slate-500">
+                                最新データ: {listingSummary.topCategory.lastDateLabel}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="mt-4 text-xs text-slate-500">
+                            リスティング広告CSVを取り込むと、CVやCPAの状況が表示されます。
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                              Reservation
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">初診予約との接続</p>
+                          </div>
+                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                            <TrendingUp className="h-4 w-4" />
+                          </span>
+                        </div>
+                        {reservationCategorySummary.hasData ? (
+                          <div className="mt-4 space-y-2 text-xs text-slate-600">
+                            <p>
+                              初診予約 {reservationCategorySummary.total.toLocaleString("ja-JP")}件
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {reservationCategorySummary.breakdown.map((item) => (
+                                <span
+                                  key={item.category}
+                                  className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700"
+                                >
+                                  {item.category} {item.total.toLocaleString("ja-JP")}件（
+                                  {formatPercentage(item.share)}）
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="mt-4 text-xs text-slate-500">
+                            予約CSVを取り込むと、カテゴリ別の初診件数が表示されます。
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  ))}
-                </div>
-                {channelSummaryCards.every((card) => card.rawTotal === 0) && (
-                  <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                    CSVを取り込むとチャネル別の実績サマリーが表示されます。
-                  </p>
+
+                    {channelInsights.topChannels.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold text-slate-800">主要チャネル</h3>
+                          <span className="text-xs text-slate-500">最新月ベースの上位チャネル</span>
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                          {channelInsights.topChannels.map((channel) => {
+                            const GroupIcon = SURVEY_CHANNEL_GROUP_ICONS[channel.group];
+                            return (
+                              <div
+                                key={channel.key}
+                                className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft transition hover:-translate-y-1 hover:shadow-card"
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="text-sm font-semibold text-slate-900">{channel.label}</p>
+                                    <p className="text-[11px] text-slate-500">
+                                      {SURVEY_CHANNEL_GROUP_LABELS[channel.group]}
+                                    </p>
+                                  </div>
+                                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                                    <GroupIcon className="h-4 w-4" />
+                                  </span>
+                                </div>
+                                <p className="mt-3 text-2xl font-bold text-slate-900">
+                                  {channel.total.toLocaleString("ja-JP")}件
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  シェア {formatPercentage(channel.share)}
+                                </p>
+                                {channel.lastActiveMonthLabel && (
+                                  <p className="mt-1 text-[11px] text-slate-500">
+                                    最新月 {channel.lastActiveMonthLabel}（
+                                    {channel.lastMonthTotal.toLocaleString("ja-JP")}件）
+                                  </p>
+                                )}
+                                {channel.trendDiff !== null && (
+                                  <p
+                                    className={`mt-2 text-xs font-semibold ${
+                                      channel.trendDiff >= 0
+                                        ? "text-emerald-600"
+                                        : "text-rose-600"
+                                    }`}
+                                  >
+                                    {channel.trendDiff >= 0 ? "+" : ""}
+                                    {channel.trendDiff.toLocaleString("ja-JP")}件
+                                    {channel.trendRate !== null
+                                      ? ` (${channel.trendRate >= 0 ? "+" : ""}${channel.trendRate.toLocaleString("ja-JP")}%)`
+                                      : ""}
+                                  </p>
+                                )}
+                                {channel.dominantType && (
+                                  <p className="mt-1 text-[11px] text-slate-500">
+                                    主軸: {channel.dominantType} {formatPercentage(channel.dominantShare)}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold text-slate-800">チャネル別詳細</h3>
+                      <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                        <table className="w-full min-w-[760px] border-collapse text-sm">
+                          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                            <tr>
+                              <th className="px-4 py-3 text-left font-semibold">チャネル</th>
+                              <th className="px-4 py-3 text-right font-semibold">総計</th>
+                              <th className="px-4 py-3 text-right font-semibold">シェア</th>
+                              <th className="px-4 py-3 text-right font-semibold">外来</th>
+                              <th className="px-4 py-3 text-right font-semibold">内視鏡</th>
+                              <th className="px-4 py-3 text-right font-semibold">最新月</th>
+                              <th className="px-4 py-3 text-right font-semibold">前月比</th>
+                              <th className="px-4 py-3 text-right font-semibold">主軸</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 bg-white">
+                            {channelInsights.channels.map((channel) => (
+                              <tr key={channel.key} className="hover:bg-slate-50">
+                                <td className="px-4 py-3 font-semibold text-slate-800">
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${SURVEY_CHANNEL_GROUP_BADGES[channel.group]}`}
+                                    >
+                                      {SURVEY_CHANNEL_GROUP_LABELS[channel.group]}
+                                    </span>
+                                    {channel.label}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-right text-slate-700">
+                                  {channel.total.toLocaleString("ja-JP")}件
+                                </td>
+                                <td className="px-4 py-3 text-right text-slate-600">
+                                  {formatPercentage(channel.share)}
+                                </td>
+                                <td className="px-4 py-3 text-right text-slate-600">
+                                  {channel.gairai.toLocaleString("ja-JP")}件 / {formatPercentage(channel.gairaiShare)}
+                                </td>
+                                <td className="px-4 py-3 text-right text-slate-600">
+                                  {channel.naishikyo.toLocaleString("ja-JP")}件 / {formatPercentage(channel.naishikyoShare)}
+                                </td>
+                                <td className="px-4 py-3 text-right text-slate-600">
+                                  {channel.lastActiveMonthLabel ?? "—"}
+                                </td>
+                                <td className="px-4 py-3 text-right text-slate-600">
+                                  {channel.trendDiff !== null
+                                    ? `${channel.trendDiff >= 0 ? "+" : ""}${channel.trendDiff.toLocaleString("ja-JP")}件${
+                                        channel.trendRate !== null
+                                          ? ` (${channel.trendRate >= 0 ? "+" : ""}${channel.trendRate.toLocaleString("ja-JP")}%)`
+                                          : ""
+                                      }`
+                                    : "—"}
+                                </td>
+                                <td className="px-4 py-3 text-right text-slate-600">
+                                  {channel.dominantType
+                                    ? `${channel.dominantType} ${formatPercentage(channel.dominantShare)}`
+                                    : "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {channelInsightHighlights.length > 0 && (
+                      <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
+                        <h3 className="text-sm font-semibold text-slate-800">注目ポイント</h3>
+                        <ul className="mt-2 space-y-1 text-xs text-slate-600">
+                          {channelInsightHighlights.map((text, index) => (
+                            <li key={`channel-highlight-${index}`}>・{text}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-brand-200 bg-brand-50/70 px-4 py-3 text-xs text-brand-700">
+                    来院経路アンケートCSVを取り込むと、チャネル別のインサイトが表示されます。
+                    まずはアンケートデータを読み込んでください。
+                  </div>
                 )}
+
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-slate-800">データ取込状況</h3>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    {channelSummaryCards.map((card) => (
+                      <div
+                        key={card.id}
+                        className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">{card.title}</p>
+                            <p className="text-[11px] text-slate-500">最終更新: {card.updated}</p>
+                          </div>
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                            {card.total}件
+                          </span>
+                        </div>
+                        <p className="mt-3 text-xs text-slate-500">{card.detail}</p>
+                        <p className="mt-2 text-[11px] text-slate-400">{card.helper}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {channelSummaryCards.every((card) => card.rawTotal === 0) && (
+                    <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                      CSVを取り込むとチャネル別の実績サマリーが表示されます。
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>
