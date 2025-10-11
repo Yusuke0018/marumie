@@ -1,0 +1,10 @@
+timestamp: 2025-10-11 15:28:42 JST
+branch: main
+commit: 54db20b595d926ff5eb239ec421b9aa05fdbb08d
+summary: allow mobile analysis filters to scroll below the sticky navigation
+changes:
+  - src/components/Navigation.tsx (move filter slot outside sticky nav to improve smartphone viewport usability)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (success)
