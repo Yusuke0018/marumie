@@ -1,0 +1,12 @@
+timestamp: 2025-10-11 17:07:29 JST
+branch: main
+commit: eae91ad506d480d2f4a3cf7e63aba482742bf871
+summary: refresh analysis cards and navigation labels
+changes:
+  - src/app/patients/page.tsx (gradient stat cards, six-month guard, 150日 threshold)
+  - src/app/reservations/page.tsx (match stat card styling to lifestyle aesthetics)
+  - src/components/Navigation.tsx (rename lifestyle label and simplify period badge)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (success)
