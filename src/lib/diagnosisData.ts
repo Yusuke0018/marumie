@@ -278,46 +278,60 @@ export const parseDiagnosisCsv = (content: string): DiagnosisRecord[] => {
 
   const map = new Map<string, DiagnosisRecord>();
 
-  for (const row of parsed.data) {
+  const sanitizeKeyPart = (value: string | null) =>
+    value ? value.replace(/\|/g, "").trim() : null;
+
+  parsed.data.forEach((row, index) => {
     const mainFlag = (row["主病"] ?? "").trim();
     if (mainFlag !== "主病") {
-      continue;
+      return;
     }
 
     const department = normalizeDepartment(row["診療科"]);
     if (!department) {
-      continue;
+      return;
     }
 
     const startDate = parseDate(row["開始日"]);
     if (!startDate) {
-      continue;
+      return;
     }
 
     const diseaseName = normalizeDiseaseName(row["傷病名"]);
     if (!diseaseName) {
-      continue;
+      return;
     }
     const category = categorizeDiseaseName(diseaseName);
 
     const patientNumber = normalizePatientNumber(row["患者番号"]);
-    const patientNameNormalized = normalizePatientName(
+    const patientNameNormalizedRaw = normalizePatientName(
       row["患者氏名"] ?? row["患者名"] ?? row["患者"] ?? row["氏名"],
     );
+    const patientNameKeyPart = sanitizeKeyPart(patientNameNormalizedRaw);
     const birthDateIso = parseDate(row["患者生年月日"]);
     const monthKey = toMonthKey(startDate);
-    const id = [
+    const patientKeyBase = patientNumber
+      ? `num:${patientNumber}`
+      : [
+          patientNameKeyPart ? `name:${patientNameKeyPart}` : null,
+          birthDateIso ? `birth:${birthDateIso}` : null,
+        ]
+          .filter(Boolean)
+          .join("|") || "anon";
+    const patientKey =
+      patientKeyBase === "anon" ? `anon:${index}` : patientKeyBase;
+    const recordId = [
       department,
       monthKey,
       diseaseName,
       startDate,
-      patientNumber ?? "",
+      patientKey,
     ].join("|");
 
-    map.set(id, {
-      id,
+    map.set(recordId, {
+      id: recordId,
       patientNumber,
-      patientNameNormalized,
+      patientNameNormalized: patientNameNormalizedRaw,
       birthDateIso,
       diseaseName,
       startDate,
@@ -325,7 +339,7 @@ export const parseDiagnosisCsv = (content: string): DiagnosisRecord[] => {
       department,
       category,
     });
-  }
+  });
 
   return Array.from(map.values()).sort((a, b) => a.startDate.localeCompare(b.startDate));
 };
