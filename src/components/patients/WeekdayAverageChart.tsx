@@ -9,6 +9,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  type LegendProps,
 } from "recharts";
 import type { KarteRecordWithCategory } from "@/lib/karteAnalytics";
 
@@ -135,6 +136,20 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
 
   const seriesOrder = DEPARTMENT_ORDER;
 
+  const renderLegend: LegendProps["content"] = () => (
+    <div className="mt-2 flex flex-wrap justify-center gap-4 text-xs font-medium text-slate-600">
+      {seriesOrder.map((group) => (
+        <span key={group} className="inline-flex items-center gap-2">
+          <span
+            className="h-2.5 w-2.5 rounded-full"
+            style={{ backgroundColor: COLORS[group] }}
+          />
+          {group}
+        </span>
+      ))}
+    </div>
+  );
+
   return (
     <div className="h-96">
       <ResponsiveContainer width="100%" height="100%">
@@ -155,11 +170,7 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
             itemSorter={(item) =>
               seriesOrder.indexOf((item?.name as DepartmentGroup) ?? seriesOrder[0])}
           />
-          <Legend
-            verticalAlign="bottom"
-            wrapperStyle={{ fontSize: 12 }}
-            formatter={(value: DepartmentGroup) => value}
-          />
+          <Legend verticalAlign="bottom" content={renderLegend} />
           {DEPARTMENT_ORDER.map((group) => (
             <Bar key={group} dataKey={group} fill={COLORS[group]} name={group} />
           ))}
