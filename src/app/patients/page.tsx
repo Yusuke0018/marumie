@@ -2105,12 +2105,15 @@ export default function PatientAnalysisPage() {
 
       const diseaseNames = diseaseMeta.diseaseNames;
       const baseTypes = determineLifestyleDiseaseTypes(diseaseNames);
-      const diseaseType: LifestyleDiseaseType =
-        baseTypes.size === 0
-          ? "multiple"
-          : baseTypes.size >= 2
-            ? "multiple"
-            : baseTypes.values().next().value;
+      let diseaseType: LifestyleDiseaseType;
+      if (baseTypes.size === 0) {
+        diseaseType = "multiple";
+      } else if (baseTypes.size >= 2) {
+        diseaseType = "multiple";
+      } else {
+        const [onlyType] = Array.from(baseTypes);
+        diseaseType = onlyType;
+      }
 
       const labelCandidates =
         diseaseType === "multiple"
