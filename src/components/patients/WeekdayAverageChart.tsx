@@ -9,6 +9,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  type TooltipPayload,
 } from "recharts";
 import type { KarteRecordWithCategory } from "@/lib/karteAnalytics";
 
@@ -134,11 +135,6 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
   };
 
   const seriesOrder = DEPARTMENT_ORDER;
-  const legendPayload = seriesOrder.map((group) => ({
-    value: group,
-    type: "square" as const,
-    color: COLORS[group],
-  }));
 
   return (
     <div className="h-96">
@@ -157,12 +153,12 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
           />
           <Tooltip
             formatter={(value: number, name: string) => [`${value}人`, name]}
-            itemSorter={(item) => seriesOrder.indexOf(item.name as DepartmentGroup)}
+            itemSorter={(item: TooltipPayload) =>
+              seriesOrder.indexOf((item.name as DepartmentGroup) ?? seriesOrder[0])}
           />
           <Legend
             verticalAlign="bottom"
             wrapperStyle={{ fontSize: 12 }}
-            payload={legendPayload}
             formatter={(value: DepartmentGroup) => value}
           />
           {DEPARTMENT_ORDER.map((group) => (
