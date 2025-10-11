@@ -1,0 +1,12 @@
+timestamp: 2025-10-11T09-48-18+0900
+branch: main
+commit: 49c39199f472690b21f5c297bc1abf884b14728e
+diffstat:
+  src/app/patients/page.tsx | 56 ++++++++++++++++++++++++++++++----------
+  src/lib/diagnosisData.ts | 36 +++++++++++++++++++++++---
+commands:
+  - npm run lint (success)
+push: origin/main にプッシュ完了
+notes:
+  - 患者番号が欠損している生活習慣病レコードでも氏名＋生年月日で突合できるようキーを拡張
+  - 生活習慣病分析では匿名化ケースIDのみ表示し、個人名や患者番号はUIに出力しません
