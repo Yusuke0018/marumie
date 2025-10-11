@@ -133,6 +133,13 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
     発熱外来: "#f97316",
   };
 
+  const seriesOrder = DEPARTMENT_ORDER;
+  const legendPayload = seriesOrder.map((group) => ({
+    value: group,
+    type: "square" as const,
+    color: COLORS[group],
+  }));
+
   return (
     <div className="h-96">
       <ResponsiveContainer width="100%" height="100%">
@@ -148,10 +155,14 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
             }}
             tick={{ fontSize: 12 }}
           />
-          <Tooltip formatter={(value: number, name: string) => [`${value}人`, name]} />
+          <Tooltip
+            formatter={(value: number, name: string) => [`${value}人`, name]}
+            itemSorter={(item) => seriesOrder.indexOf(item.name as DepartmentGroup)}
+          />
           <Legend
             verticalAlign="bottom"
             wrapperStyle={{ fontSize: 12 }}
+            payload={legendPayload}
             formatter={(value: DepartmentGroup) => value}
           />
           {DEPARTMENT_ORDER.map((group) => (
