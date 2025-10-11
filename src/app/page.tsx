@@ -31,6 +31,9 @@ type DashboardStats = {
   lifestyleDiseasePatients: number | null;
   internalReferrals: number | null;
   patientUpdated: string | null;
+  kartePeriodLabel: string | null;
+  surveyPeriodLabel: string | null;
+  lifestylePeriodLabel: string | null;
 };
 
 const INITIAL_STATS: DashboardStats = {
@@ -40,6 +43,9 @@ const INITIAL_STATS: DashboardStats = {
   lifestyleDiseasePatients: null,
   internalReferrals: null,
   patientUpdated: null,
+  kartePeriodLabel: null,
+  surveyPeriodLabel: null,
+  lifestylePeriodLabel: null,
 };
 
 const formatCount = (value: number | null) =>
@@ -60,6 +66,49 @@ const safeParse = <T,>(raw: string | null): T | null => {
   }
 };
 
+const extractUniqueMonths = (values: Array<string | null | undefined>): string[] => {
+  const bucket = new Set<string>();
+  for (const value of values) {
+    if (typeof value === "string" && value.length >= 7) {
+      bucket.add(value);
+    }
+  }
+  return Array.from(bucket).sort((a, b) => a.localeCompare(b));
+};
+
+const formatMonthDisplay = (month: string): string | null => {
+  const [yearStr, monthStr] = month.split("-");
+  const year = Number(yearStr);
+  const monthNum = Number(monthStr);
+  if (!Number.isFinite(year) || !Number.isFinite(monthNum)) {
+    return null;
+  }
+  return `${year}年${monthNum}月`;
+};
+
+const formatMonthRangeDisplay = (months: string[]): string | null => {
+  if (months.length === 0) {
+    return null;
+  }
+  const sorted = [...months].sort((a, b) => a.localeCompare(b));
+  const start = formatMonthDisplay(sorted[0]);
+  const end = formatMonthDisplay(sorted[sorted.length - 1]);
+  if (!start || !end) {
+    return null;
+  }
+  return sorted[0] === sorted[sorted.length - 1] ? start : `${start}〜${end}`;
+};
+
+const selectLatestMonths = (months: string[], limit: number): string[] => {
+  if (limit <= 0) {
+    return [];
+  }
+  if (months.length <= limit) {
+    return months;
+  }
+  return months.slice(months.length - limit);
+};
+
 export default function HomePage() {
   const [stats, setStats] = useState<DashboardStats>(INITIAL_STATS);
 
@@ -72,12 +121,34 @@ export default function HomePage() {
         const karteRaw = getCompressedItem(KARTE_STORAGE_KEY);
         const karteRecords = safeParse<KarteRecord[]>(karteRaw);
         if (Array.isArray(karteRecords) && karteRecords.length > 0) {
-          next.totalPatients = karteRecords.length;
+          const karteMonths = extractUniqueMonths(
+            karteRecords.map((record) => record.monthKey),
+          );
+          const latestMonth =
+            karteMonths.length > 0 ? karteMonths[karteMonths.length - 1] : null;
+          if (latestMonth) {
+            const latestRecords = karteRecords.filter(
+              (record) => record.monthKey === latestMonth,
+            );
+            next.totalPatients = latestRecords.length;
 
-          // 純初診数と再診数を計算
-          const classified = classifyKarteRecords(karteRecords);
-          next.pureFirstVisits = classified.filter((r) => r.category === "pureFirst").length;
-          next.revisitCount = classified.filter((r) => r.category === "revisit").length;
+            // 純初診数と再診数を計算
+            const classified = classifyKarteRecords(karteRecords);
+            const latestClassified = classified.filter(
+              (record) => record.monthKey === latestMonth,
+            );
+            next.pureFirstVisits = latestClassified.filter(
+              (r) => r.category === "pureFirst",
+            ).length;
+            next.revisitCount = latestClassified.filter(
+              (r) => r.category === "revisit",
+            ).length;
+
+            const monthLabel = formatMonthDisplay(latestMonth);
+            if (monthLabel) {
+              next.kartePeriodLabel = monthLabel;
+            }
+          }
         }
         next.patientUpdated = window.localStorage.getItem(KARTE_TIMESTAMP_KEY);
       } catch (error) {
@@ -88,11 +159,22 @@ export default function HomePage() {
         // 生活習慣病患者数を計算
         const diagnosisRaw = getCompressedItem(DIAGNOSIS_STORAGE_KEY);
         const diagnosisData = safeParse<DiagnosisRecord[]>(diagnosisRaw);
-        if (Array.isArray(diagnosisData)) {
-          const lifestyleDiseaseRecords = diagnosisData.filter(
-            (record) => record.category === "生活習慣病",
+        if (Array.isArray(diagnosisData) && diagnosisData.length > 0) {
+          const diagnosisMonths = extractUniqueMonths(
+            diagnosisData.map((record) => record.monthKey),
           );
-          // ユニーク患者数を計算（患者番号と患者名で判定）
+          const lifestyleMonths = selectLatestMonths(diagnosisMonths, 6);
+          const lifestyleMonthSet = new Set(lifestyleMonths);
+          const lifestyleDiseaseRecords = diagnosisData.filter((record) => {
+            if (record.category !== "生活習慣病") {
+              return false;
+            }
+            if (lifestyleMonthSet.size === 0) {
+              return true;
+            }
+            return lifestyleMonthSet.has(record.monthKey);
+          });
+
           const uniquePatients = new Set<string>();
           lifestyleDiseaseRecords.forEach((record) => {
             const key = record.patientNumber
@@ -105,6 +187,11 @@ export default function HomePage() {
             }
           });
           next.lifestyleDiseasePatients = uniquePatients.size;
+
+          const periodLabel = formatMonthRangeDisplay(lifestyleMonths);
+          if (periodLabel) {
+            next.lifestylePeriodLabel = periodLabel;
+          }
         }
       } catch (error) {
         console.error("Failed to load diagnosis stats", error);
@@ -116,10 +203,32 @@ export default function HomePage() {
         const surveyData = safeParse<SurveyData[]>(surveyRaw);
         if (Array.isArray(surveyData)) {
           const internalSurveys = surveyData.filter((item) => item.fileType === "外来");
-          next.internalReferrals = internalSurveys.reduce(
-            (sum, item) => sum + item.friendReferral,
-            0,
-          );
+          if (internalSurveys.length > 0) {
+            const surveyMonths = extractUniqueMonths(
+              internalSurveys.map((item) => item.month),
+            );
+            const latestSurveyMonth =
+              surveyMonths.length > 0 ? surveyMonths[surveyMonths.length - 1] : null;
+            let targetSurveys = internalSurveys;
+            if (latestSurveyMonth) {
+              const filtered = internalSurveys.filter(
+                (item) => item.month === latestSurveyMonth,
+              );
+              if (filtered.length > 0) {
+                targetSurveys = filtered;
+              }
+              const surveyLabel = formatMonthDisplay(latestSurveyMonth);
+              if (surveyLabel) {
+                next.surveyPeriodLabel = surveyLabel;
+              }
+            }
+            next.internalReferrals = targetSurveys.reduce(
+              (sum, item) => sum + item.friendReferral,
+              0,
+            );
+          } else {
+            next.internalReferrals = 0;
+          }
         }
       } catch (error) {
         console.error("Failed to load survey stats", error);
@@ -140,7 +249,9 @@ export default function HomePage() {
       label: "総患者数",
       value: formatCount(stats.totalPatients),
       unit: "人",
-      hint: `カルテ記録の総数 (最終更新: ${formatTimestamp(stats.patientUpdated)})`,
+      hint: stats.kartePeriodLabel
+        ? `カルテ集計（${stats.kartePeriodLabel}／最終更新: ${formatTimestamp(stats.patientUpdated)}）`
+        : `カルテ記録の総数 (最終更新: ${formatTimestamp(stats.patientUpdated)})`,
       icon: Users,
       gradient: "from-brand-500 to-brand-400",
     },
@@ -149,7 +260,9 @@ export default function HomePage() {
       label: "純初診数",
       value: formatCount(stats.pureFirstVisits),
       unit: "人",
-      hint: "初めて来院された患者数",
+      hint: stats.kartePeriodLabel
+        ? `初めて来院された患者数（${stats.kartePeriodLabel}の集計）`
+        : "初めて来院された患者数",
       icon: UserPlus,
       gradient: "from-emerald-500 to-emerald-400",
     },
@@ -158,7 +271,9 @@ export default function HomePage() {
       label: "再診数",
       value: formatCount(stats.revisitCount),
       unit: "人",
-      hint: "再来院された患者数",
+      hint: stats.kartePeriodLabel
+        ? `再来院された患者数（${stats.kartePeriodLabel}の集計）`
+        : "再来院された患者数",
       icon: Users,
       gradient: "from-sky-500 to-sky-400",
     },
@@ -167,7 +282,9 @@ export default function HomePage() {
       label: "生活習慣病患者数",
       value: formatCount(stats.lifestyleDiseasePatients),
       unit: "人",
-      hint: "主病登録から集計（ユニーク患者数）",
+      hint: stats.lifestylePeriodLabel
+        ? `主病登録から集計（直近: ${stats.lifestylePeriodLabel}）`
+        : "主病登録から集計（ユニーク患者数）",
       icon: Activity,
       gradient: "from-amber-500 to-amber-400",
     },
@@ -176,7 +293,9 @@ export default function HomePage() {
       label: "内科 家族・友人紹介",
       value: formatCount(stats.internalReferrals),
       unit: "件",
-      hint: "外来アンケートから集計",
+      hint: stats.surveyPeriodLabel
+        ? `外来アンケートから集計（${stats.surveyPeriodLabel}）`
+        : "外来アンケートから集計",
       icon: Heart,
       gradient: "from-rose-500 to-rose-400",
     },
