@@ -204,28 +204,36 @@ export default function HomePage() {
         if (Array.isArray(surveyData)) {
           const internalSurveys = surveyData.filter((item) => item.fileType === "外来");
           if (internalSurveys.length > 0) {
-            const surveyMonths = extractUniqueMonths(
-              internalSurveys.map((item) => item.month),
+            const surveyMonths = extractUniqueMonths(internalSurveys.map((item) => item.month));
+            const monthlyReferralTotals = new Map<string, number>();
+            internalSurveys.forEach((item) => {
+              const current = monthlyReferralTotals.get(item.month) ?? 0;
+              monthlyReferralTotals.set(item.month, current + item.friendReferral);
+            });
+            const positiveMonths = surveyMonths.filter(
+              (month) => (monthlyReferralTotals.get(month) ?? 0) > 0,
             );
-            const latestSurveyMonth =
-              surveyMonths.length > 0 ? surveyMonths[surveyMonths.length - 1] : null;
-            let targetSurveys = internalSurveys;
-            if (latestSurveyMonth) {
-              const filtered = internalSurveys.filter(
-                (item) => item.month === latestSurveyMonth,
-              );
-              if (filtered.length > 0) {
-                targetSurveys = filtered;
-              }
-              const surveyLabel = formatMonthDisplay(latestSurveyMonth);
-              if (surveyLabel) {
-                next.surveyPeriodLabel = surveyLabel;
-              }
-            }
+            const targetMonth =
+              positiveMonths.length > 0
+                ? positiveMonths[positiveMonths.length - 1]
+                : null;
+
+            const targetSurveys =
+              targetMonth
+                ? internalSurveys.filter((item) => item.month === targetMonth)
+                : [];
+
             next.internalReferrals = targetSurveys.reduce(
               (sum, item) => sum + item.friendReferral,
               0,
             );
+
+            if (targetMonth) {
+              const surveyLabel = formatMonthDisplay(targetMonth);
+              if (surveyLabel) {
+                next.surveyPeriodLabel = surveyLabel;
+              }
+            }
           } else {
             next.internalReferrals = 0;
           }
