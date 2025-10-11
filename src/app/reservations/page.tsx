@@ -901,15 +901,15 @@ export default function HomePage() {
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="space-y-3">
               <p className="text-sm font-semibold text-brand-600">
-                Team Mirai Analytics Suite
+                Reservation Insights Dashboard
               </p>
               <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">
-                マルミエ
+                予約分析
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-slate-600">
                 予約ログCSVをアップロードすると、受付時刻を基準に初診・再診や診療科別の傾向を自動集計します。曜日や日付タイプ、期間フィルターを切り替えて複数の視点から比較し、最新アップロードとの差分も追跡できます。
               </p>
-              <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 sm:p-5">
+              <div className="mt-4 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 sm:p-5">
                 <p className="mb-2 text-sm font-semibold text-blue-900">
                   📊 ダッシュボードのみどころ
                 </p>
@@ -931,7 +931,7 @@ export default function HomePage() {
                     ドラッグで順番を変えながら各診療科のピーク時間をチェック。
                   </li>
                 </ul>
-                <p className="mt-3 text-xs text-blue-700 sm:text-[13px]">
+                <p className="mt-3 text-xs text-indigo-700 sm:text-[13px]">
                   スマホでは横スクロールやピンチアウトでグラフを拡大できます。
                 </p>
               </div>
@@ -971,7 +971,7 @@ export default function HomePage() {
           renderMonthLabel={formatMonthLabel}
         />
 
-        <section className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             label={
               startMonth && endMonth
@@ -980,7 +980,7 @@ export default function HomePage() {
                   : `${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)} 総予約数`
                 : "総予約数"
             }
-            value={totalReservations.toLocaleString("ja-JP")}
+            value={`${totalReservations.toLocaleString("ja-JP")}件`}
             tone="brand"
           />
           <StatCard
@@ -991,8 +991,8 @@ export default function HomePage() {
                   : `${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)} 初診`
                 : "初診"
             }
-            value={initialCount.toLocaleString("ja-JP")}
-            tone="brand"
+            value={`${initialCount.toLocaleString("ja-JP")}件`}
+            tone="emerald"
           />
           <StatCard
             label={
@@ -1002,7 +1002,7 @@ export default function HomePage() {
                   : `${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)} 再診`
                 : "再診"
             }
-            value={followupCount.toLocaleString("ja-JP")}
+            value={`${followupCount.toLocaleString("ja-JP")}件`}
             tone="accent"
           />
           <StatCard
@@ -1013,7 +1013,7 @@ export default function HomePage() {
                   : `${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)} 診療科数`
                 : "診療科数"
             }
-            value={departmentCount.toLocaleString("ja-JP")}
+            value={`${departmentCount.toLocaleString("ja-JP")}科`}
             tone="muted"
           />
         </section>
