@@ -1,0 +1,10 @@
+timestamp: 2025-10-11 14:34:54 JST
+branch: main
+commit: d52182c91a543c5bd49a2bb98d7a375fe9c8666e
+summary: fix persistent patient period selection via localStorage initialization and normalization
+changes:
+  - src/app/patients/page.tsx (persist/start-end months restoration and validation)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (success)
