@@ -2838,9 +2838,15 @@ function PatientAnalysisPageContent() {
         data: JSON.stringify(bundle),
       });
 
-      setShareUrl(response.url);
-      await navigator.clipboard.writeText(response.url);
-      alert(`共有URLをクリップボードにコピーしました！\n\n${response.url}`);
+      const shareUrlObject = new URL(
+        `${window.location.origin}${window.location.pathname}`,
+      );
+      shareUrlObject.searchParams.set("data", response.id);
+      const finalUrl = shareUrlObject.toString();
+
+      setShareUrl(finalUrl);
+      await navigator.clipboard.writeText(finalUrl);
+      alert(`共有URLをクリップボードにコピーしました！\n\n${finalUrl}`);
     } catch (error) {
       console.error(error);
       setUploadError(`共有URLの生成に失敗しました: ${(error as Error).message}`);

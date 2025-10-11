@@ -1001,7 +1001,10 @@ export default function HomePage() {
       });
 
       const fallbackPayload = encodeForShare(serializedBundle);
-      const shareUrlObject = new URL(response.url);
+      const shareUrlObject = new URL(
+        `${window.location.origin}${window.location.pathname}`,
+      );
+      shareUrlObject.searchParams.set("data", response.id);
       if (fallbackPayload) {
         shareUrlObject.searchParams.set("fallback", fallbackPayload);
       }
