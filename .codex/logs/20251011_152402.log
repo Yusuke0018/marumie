@@ -1,0 +1,10 @@
+timestamp: 2025-10-11 15:24:02 JST
+branch: main
+commit: bac7bc601146d470acc92529a6d0904149655055
+summary: emphasize specialty-based unit price rankings and lifestyle continuity rates
+changes:
+  - src/app/patients/page.tsx (per-department No.1〜3 highlighting, lifestyle status sorting, percentage-focused UI)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (success)
