@@ -111,6 +111,29 @@ const decodeFromShare = (payload: string): string | null => {
   }
 };
 
+const buildShareUrl = (workerUrl: string, id: string, fallbackPayload?: string) => {
+  if (typeof window === "undefined") {
+    const url = new URL(workerUrl);
+    url.searchParams.set("data", id);
+    if (fallbackPayload) {
+      url.searchParams.set("fallback", fallbackPayload);
+    }
+    return url.toString();
+  }
+
+  const { origin, pathname } = window.location;
+  const isLocalHost = /localhost|127\.0\.0\.1|0\.0\.0\.0|::1/.test(origin);
+  const baseUrl = isLocalHost
+    ? new URL(workerUrl)
+    : new URL(`${origin}${pathname}`);
+
+  baseUrl.searchParams.set("data", id);
+  if (fallbackPayload) {
+    baseUrl.searchParams.set("fallback", fallbackPayload);
+  }
+  return baseUrl.toString();
+};
+
 const RAW_DEPARTMENT_PRIORITIES = [
   "●内科・外科外来（大岩医師）",
   "●内科外来（担当医師）",
@@ -1001,14 +1024,7 @@ export default function HomePage() {
       });
 
       const fallbackPayload = encodeForShare(serializedBundle);
-      const shareUrlObject = new URL(
-        `${window.location.origin}${window.location.pathname}`,
-      );
-      shareUrlObject.searchParams.set("data", response.id);
-      if (fallbackPayload) {
-        shareUrlObject.searchParams.set("fallback", fallbackPayload);
-      }
-      const finalUrl = shareUrlObject.toString();
+      const finalUrl = buildShareUrl(response.url, response.id, fallbackPayload);
 
       setShareUrl(finalUrl);
       await navigator.clipboard.writeText(finalUrl);

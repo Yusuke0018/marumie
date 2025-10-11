@@ -208,6 +208,21 @@ const calculateDiagnosisCategoryTotals = (
   return totals;
 };
 
+const buildShareUrl = (workerUrl: string, id: string) => {
+  if (typeof window === "undefined") {
+    const url = new URL(workerUrl);
+    url.searchParams.set("data", id);
+    return url.toString();
+  }
+  const { origin, pathname } = window.location;
+  const isLocalHost = /localhost|127\.0\.0\.1|0\.0\.0\.0|::1/.test(origin);
+  const baseUrl = isLocalHost
+    ? new URL(workerUrl)
+    : new URL(`${origin}${pathname}`);
+  baseUrl.searchParams.set("data", id);
+  return baseUrl.toString();
+};
+
 const DIAGNOSIS_CATEGORY_BADGE_CLASSES: Record<DiagnosisCategory, string> = {
   生活習慣病: "bg-emerald-50 text-emerald-600",
   外科: "bg-orange-50 text-orange-600",
@@ -2842,11 +2857,7 @@ function PatientAnalysisPageContent() {
         data: JSON.stringify(bundle),
       });
 
-      const shareUrlObject = new URL(
-        `${window.location.origin}${window.location.pathname}`,
-      );
-      shareUrlObject.searchParams.set("data", response.id);
-      const finalUrl = shareUrlObject.toString();
+      const finalUrl = buildShareUrl(response.url, response.id);
 
       setShareUrl(finalUrl);
       await navigator.clipboard.writeText(finalUrl);
