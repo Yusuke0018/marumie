@@ -4289,8 +4289,8 @@ function PatientAnalysisPageContent() {
         </SectionCard>
 
         <SectionCard
-          title="主病トレンド分析"
-          description="傷病名一覧CSV（主病フラグ）から総合診療・発熱外来・オンライン診療（保険）の件数推移と増減を確認します。"
+          title="新規主病トレンド分析"
+          description="傷病名一覧CSV（主病フラグ）から新規登録された主病件数の推移と増減を確認します。"
         >
           {diagnosisStatus.total === 0 ? (
             <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
@@ -4713,7 +4713,7 @@ function PatientAnalysisPageContent() {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-amber-700">傷病名CSV（主病）</p>
-                          <p className="text-xs text-slate-500">主病トレンド分析セクションで利用します。</p>
+                          <p className="text-xs text-slate-500">新規主病トレンド分析セクションで利用します。</p>
                         </div>
                         <div className="text-right text-[11px] text-slate-500">
                           <p>
