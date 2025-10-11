@@ -21,12 +21,7 @@ import {
   RotateCcw,
   Undo2,
   Clock,
-  Megaphone,
   TrendingUp,
-  Globe,
-  Building,
-  Sparkles,
-  PieChart,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Papa from "papaparse";
@@ -145,85 +140,74 @@ const KARTE_MIN_MONTH = "2000-01";
 const LISTING_CATEGORIES: ListingCategory[] = ["内科", "胃カメラ", "大腸カメラ"];
 const SURVEY_FILE_TYPES: SurveyFileType[] = ["外来", "内視鏡"];
 
-const SURVEY_CHANNEL_DEFINITIONS = [
-  { key: "googleSearch", label: "Google検索", group: "digital", description: "検索結果・広告からの流入" },
-  { key: "yahooSearch", label: "Yahoo検索", group: "digital", description: "Yahoo!検索経由の来院" },
-  { key: "googleMap", label: "Googleマップ", group: "digital", description: "Googleマップ経由の来院" },
-  { key: "aiSearch", label: "AI検索", group: "digital", description: "生成系AI・チャット検索からの流入" },
-  { key: "youtube", label: "YouTube", group: "digital", description: "動画コンテンツからの流入" },
-  { key: "libertyCity", label: "リベシティ", group: "community", description: "リベシティコミュニティ経由の来院" },
-  { key: "medicalReferral", label: "医療機関からの紹介", group: "referral", description: "病院・クリニックからの紹介" },
-  { key: "friendReferral", label: "家族・友人紹介", group: "referral", description: "患者さまからの紹介" },
-  { key: "signboard", label: "看板・通りがかり", group: "offline", description: "看板や通行中の認知" },
-  { key: "flyer", label: "チラシ・紙媒体", group: "offline", description: "紙媒体・ポスティングによる認知" },
+const TARGET_DEPARTMENT_KEYWORDS = ["発熱", "総合診療"];
+
+const MULTIVARIATE_AGE_BANDS = [
+  { id: "0-19", label: "0-19歳", min: 0, max: 19 },
+  { id: "20-39", label: "20-39歳", min: 20, max: 39 },
+  { id: "40-59", label: "40-59歳", min: 40, max: 59 },
+  { id: "60-79", label: "60-79歳", min: 60, max: 79 },
+  { id: "80+", label: "80歳以上", min: 80, max: null },
+  { id: "unknown", label: "年齢不明", min: null, max: null },
 ] as const;
 
-type SurveyChannelDefinition = (typeof SURVEY_CHANNEL_DEFINITIONS)[number];
-type SurveyChannelKey = SurveyChannelDefinition["key"];
-type SurveyChannelGroup = SurveyChannelDefinition["group"];
+type MultivariateAgeBand = (typeof MULTIVARIATE_AGE_BANDS)[number];
 
-const SURVEY_CHANNEL_GROUP_LABELS: Record<SurveyChannelGroup, string> = {
-  digital: "デジタル",
-  offline: "オフライン",
-  referral: "紹介",
-  community: "コミュニティ",
-};
+const MULTIVARIATE_AGE_BAND_MAP = new Map<string, MultivariateAgeBand>(
+  MULTIVARIATE_AGE_BANDS.map((band) => [band.id, band]),
+);
 
-const SURVEY_CHANNEL_GROUP_ICONS: Record<SurveyChannelGroup, LucideIcon> = {
-  digital: Globe,
-  offline: Building,
-  referral: Users,
-  community: Sparkles,
-};
-
-const SURVEY_CHANNEL_GROUP_BADGES: Record<SurveyChannelGroup, string> = {
-  digital: "bg-sky-100 text-sky-700",
-  offline: "bg-amber-100 text-amber-700",
-  referral: "bg-emerald-100 text-emerald-700",
-  community: "bg-violet-100 text-violet-700",
-};
-
-type ChannelInsight = {
-  key: SurveyChannelKey;
+type MultivariateAgeBreakdown = {
+  ageBandId: string;
   label: string;
-  group: SurveyChannelGroup;
-  description: string;
   total: number;
   share: number;
-  gairai: number;
-  naishikyo: number;
-  gairaiShare: number;
-  naishikyoShare: number;
-  lastActiveMonth: string | null;
-  lastActiveMonthLabel: string | null;
-  lastMonthTotal: number;
-  previousMonthTotal: number;
-  trendDiff: number | null;
-  trendRate: number | null;
-  months: Array<{
-    month: string;
-    label: string;
-    total: number;
-    gairai: number;
-    naishikyo: number;
-  }>;
-  dominantType: "外来" | "内視鏡" | null;
-  dominantShare: number;
+  avgPoints: number | null;
 };
 
-const CHANNEL_CATEGORY_MAPPING: Record<ListingCategory, string[]> = {
-  内科: ["内科・外科外来（大岩医師）", "発熱・風邪症状外来", "内科外来（担当医師）"],
-  胃カメラ: ["胃カメラ"],
-  大腸カメラ: ["大腸カメラ", "人間ドックB", "内視鏡ドック"],
+type MultivariateSlotStat = {
+  weekday: number;
+  hour: number;
+  totalPatients: number;
+  avgPoints: number | null;
+  ageBreakdown: MultivariateAgeBreakdown[];
 };
 
-const normalizeChannelDepartment = (value: string) =>
-  value.replace(/\s+/g, "").replace(/[()（）・･●◎○]/g, "");
+type MultivariateWeekdayGroup = {
+  weekday: number;
+  label: string;
+  slots: MultivariateSlotStat[];
+};
 
-const NORMALIZED_CHANNEL_CATEGORY_MAPPING: Record<ListingCategory, string[]> = {
-  内科: CHANNEL_CATEGORY_MAPPING["内科"].map(normalizeChannelDepartment),
-  胃カメラ: CHANNEL_CATEGORY_MAPPING["胃カメラ"].map(normalizeChannelDepartment),
-  大腸カメラ: CHANNEL_CATEGORY_MAPPING["大腸カメラ"].map(normalizeChannelDepartment),
+type MultivariateInsights = {
+  hasData: boolean;
+  totalMatches: number;
+  unmatchedRecords: number;
+  unmatchedReservations: number;
+  weekdayGroups: MultivariateWeekdayGroup[];
+  topSlot: MultivariateSlotStat | null;
+  highestAvgSlot: MultivariateSlotStat | null;
+  leadingAgeBand: { id: string; label: string; total: number; avgPoints: number | null } | null;
+  highlights: string[];
+};
+
+const toHiragana = (value: string) =>
+  value.replace(/[\u30a1-\u30f6]/g, (ch) =>
+    String.fromCharCode(ch.charCodeAt(0) - 0x60),
+  );
+
+const normalizeNameForMatching = (value: string | null | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+  const nfkc = value.normalize("NFKC");
+  const withoutRuby = nfkc.replace(/[（(][^）)]*[）)]/g, "");
+  const trimmed = withoutRuby.replace(/\u3000/g, " ").replace(/\s+/g, " ").trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  const hiragana = toHiragana(trimmed).replace(/\s+/g, "");
+  return hiragana.length > 0 ? hiragana : null;
 };
 
 const createEmptyListingTotals = (): Record<ListingCategory, number> =>
@@ -1015,8 +999,6 @@ function PatientAnalysisPageContent() {
   const [insightTab, setInsightTab] = useState<"channel" | "department" | "time">("department");
   const [isManagementOpen, setIsManagementOpen] = useState(false);
   const [reservationsRecords, setReservationsRecords] = useState<Reservation[]>([]);
-  const [surveyRecords, setSurveyRecords] = useState<SurveyData[]>([]);
-  const [listingRecords, setListingRecords] = useState<ListingCategoryData[]>([]);
   const [selectedShiftDepartment, setSelectedShiftDepartment] = useState<string>("");
   const [reservationStatus, setReservationStatus] = useState<{
     lastUpdated: string | null;
@@ -1114,7 +1096,6 @@ function PatientAnalysisPageContent() {
           total: surveyDataset.length,
           byType: summarizeSurveyByType(surveyDataset),
         });
-        setSurveyRecords(surveyDataset);
       }
 
       if (Array.isArray(bundle.listingData)) {
@@ -1131,7 +1112,6 @@ function PatientAnalysisPageContent() {
           lastUpdated: listingTimestamp,
           totals,
         });
-        setListingRecords(listingDataset);
       }
 
       if (Array.isArray(bundle.diagnosisData)) {
@@ -1247,7 +1227,6 @@ function PatientAnalysisPageContent() {
         total: existingSurvey.length,
         byType: summarizeSurveyByType(existingSurvey),
       });
-      setSurveyRecords(existingSurvey);
 
       const existingDiagnosis = loadDiagnosisFromStorage();
       const diagnosisTimestamp = loadDiagnosisTimestamp();
@@ -1269,7 +1248,6 @@ function PatientAnalysisPageContent() {
         lastUpdated: listingTimestamp,
         totals,
       });
-      setListingRecords(existingListing);
     } catch (error) {
       console.error(error);
     }
@@ -2676,393 +2654,317 @@ function PatientAnalysisPageContent() {
     ];
   }, [listingStatus, reservationStatus, surveyStatus]);
 
-  const listingSummary = useMemo(() => {
-    let totalCv = 0;
-    let totalAmount = 0;
-    const breakdownMap = new Map<
-      ListingCategory,
-      { cv: number; amount: number; lastDate: string | null }
-    >();
+  const multivariateInsights = useMemo<MultivariateInsights>(() => {
+    const initial: MultivariateInsights = {
+      hasData: false,
+      totalMatches: 0,
+      unmatchedRecords: 0,
+      unmatchedReservations: 0,
+      weekdayGroups: [],
+      topSlot: null,
+      highestAvgSlot: null,
+      leadingAgeBand: null,
+      highlights: [],
+    };
 
-    for (const categoryData of listingRecords) {
-      let categoryCv = 0;
-      let categoryAmount = 0;
-      let lastDate: string | null = null;
-
-      for (const entry of categoryData.data) {
-        categoryCv += entry.cv;
-        categoryAmount += entry.amount;
-        if (!lastDate || entry.date > lastDate) {
-          lastDate = entry.date;
-        }
-      }
-
-      breakdownMap.set(categoryData.category, {
-        cv: categoryCv,
-        amount: categoryAmount,
-        lastDate,
-      });
-
-      totalCv += categoryCv;
-      totalAmount += categoryAmount;
+    if (filteredClassified.length === 0 || reservationsRecords.length === 0) {
+      return initial;
     }
 
-    const breakdown = LISTING_CATEGORIES.map((category) => {
-      const entry =
-        breakdownMap.get(category) ?? { cv: 0, amount: 0, lastDate: null };
-      const share =
-        totalCv > 0 ? roundTo1Decimal((entry.cv / totalCv) * 100) : 0;
-      const avgCpa =
-        entry.cv > 0 ? Math.round((entry.amount / entry.cv) * 10) / 10 : null;
-      const lastDateLabel =
-        entry.lastDate && entry.lastDate.length >= 7
-          ? formatMonthLabel(entry.lastDate.slice(0, 7))
-          : null;
-      return {
-        category,
-        cv: entry.cv,
-        amount: entry.amount,
-        share,
-        avgCpa,
-        lastDate: entry.lastDate,
-        lastDateLabel,
-      };
-    });
-
-    const topCategory =
-      breakdown
-        .filter((item) => item.cv > 0)
-        .sort((a, b) => b.cv - a.cv)[0] ?? null;
-
-    const avgCpa =
-      totalCv > 0 ? Math.round((totalAmount / totalCv) * 10) / 10 : null;
-
-    return {
-      hasData: totalCv > 0,
-      totalCv,
-      totalAmount,
-      avgCpa,
-      breakdown,
-      topCategory,
+    const isTargetDepartment = (value: string | null | undefined) => {
+      if (!value) {
+        return false;
+      }
+      const normalized = normalizeDepartmentLabel(value);
+      return TARGET_DEPARTMENT_KEYWORDS.some((keyword) => normalized.includes(keyword));
     };
-  }, [listingRecords]);
 
-  const reservationCategorySummary = useMemo(() => {
-    const totals: Record<ListingCategory, number> = {
-      内科: 0,
-      胃カメラ: 0,
-      大腸カメラ: 0,
-    };
-    let total = 0;
+    const reservationBuckets = new Map<
+      string,
+      Array<Reservation & { weekday: number; hour: number }>
+    >();
 
     for (const reservation of reservationsRecords) {
-      if (!reservation || reservation.visitType !== "初診") {
+      if (!isTargetDepartment(reservation.department)) {
         continue;
       }
-      const normalized = normalizeChannelDepartment(reservation.department);
-      for (const category of LISTING_CATEGORIES) {
-        if (NORMALIZED_CHANNEL_CATEGORY_MAPPING[category].includes(normalized)) {
-          totals[category] += 1;
-          total += 1;
-          break;
-        }
+      const nameKey = normalizeNameForMatching(
+        reservation.patientNameNormalized ?? reservation.patientName ?? null,
+      );
+      if (!nameKey) {
+        continue;
       }
+      const dateKey = reservation.reservationDate;
+      if (!dateKey) {
+        continue;
+      }
+      const weekdayDate = new Date(`${dateKey}T00:00:00`);
+      const weekday = weekdayDate.getDay();
+      if (Number.isNaN(weekday)) {
+        continue;
+      }
+      const bucketKey = `${nameKey}|${dateKey}`;
+      const bucket = reservationBuckets.get(bucketKey) ?? [];
+      bucket.push({
+        ...reservation,
+        weekday,
+        hour: reservation.reservationHour,
+      });
+      reservationBuckets.set(bucketKey, bucket);
     }
 
-    const breakdown = LISTING_CATEGORIES.map((category) => ({
-      category,
-      total: totals[category],
-      share: total > 0 ? roundTo1Decimal((totals[category] / total) * 100) : 0,
-    }));
+    if (reservationBuckets.size === 0) {
+      return initial;
+    }
 
-    const dominant =
-      breakdown
-        .filter((item) => item.total > 0)
-        .sort((a, b) => b.total - a.total)[0] ?? null;
+    reservationBuckets.forEach((list) => {
+      list.sort((a, b) => a.hour - b.hour);
+    });
 
-    return {
-      hasData: total > 0,
-      total,
-      breakdown,
-      dominant,
+    const slotMap = new Map<
+      string,
+      {
+        weekday: number;
+        hour: number;
+        total: number;
+        pointsSum: number;
+        pointsCount: number;
+        ageMap: Map<
+          string,
+          { label: string; total: number; pointsSum: number; pointsCount: number }
+        >;
+      }
+    >();
+    const ageTotals = new Map<
+      string,
+      { label: string; total: number; pointsSum: number; pointsCount: number }
+    >();
+
+    let matchedCount = 0;
+    let unmatchedRecords = 0;
+
+    const resolveAgeBand = (age: number | null): MultivariateAgeBand => {
+      if (age === null) {
+        return MULTIVARIATE_AGE_BANDS[MULTIVARIATE_AGE_BANDS.length - 1];
+      }
+      for (const band of MULTIVARIATE_AGE_BANDS) {
+        if (band.min === null || band.max === null) {
+          continue;
+        }
+        if (age >= band.min && age <= band.max) {
+          return band;
+        }
+      }
+      return (
+        MULTIVARIATE_AGE_BANDS.find((band) => band.min !== null && band.max === null) ??
+        MULTIVARIATE_AGE_BANDS[MULTIVARIATE_AGE_BANDS.length - 1]
+      );
     };
-  }, [reservationsRecords]);
 
-  const channelInsights = useMemo(() => {
-    const emptyChannels: ChannelInsight[] = SURVEY_CHANNEL_DEFINITIONS.map(
-      (definition) => ({
-        key: definition.key,
-        label: definition.label,
-        group: definition.group,
-        description: definition.description,
+    for (const record of filteredClassified) {
+      if (!isTargetDepartment(record.department ?? null)) {
+        continue;
+      }
+      const nameKey = normalizeNameForMatching(record.patientNameNormalized ?? null);
+      if (!nameKey) {
+        unmatchedRecords += 1;
+        continue;
+      }
+      const dateKey = record.dateIso;
+      const bucketKey = `${nameKey}|${dateKey}`;
+      const candidates = reservationBuckets.get(bucketKey);
+      if (!candidates || candidates.length === 0) {
+        unmatchedRecords += 1;
+        continue;
+      }
+
+      const reservation = candidates.shift()!;
+      if (candidates.length === 0) {
+        reservationBuckets.delete(bucketKey);
+      }
+
+      const age = calculateAge(record.birthDateIso ?? null, record.dateIso);
+      const ageBand = resolveAgeBand(age);
+
+      const points =
+        typeof record.points === "number" && Number.isFinite(record.points)
+          ? record.points
+          : null;
+
+      const slotKey = `${reservation.weekday}|${reservation.hour}`;
+      if (!slotMap.has(slotKey)) {
+        slotMap.set(slotKey, {
+          weekday: reservation.weekday,
+          hour: reservation.hour,
+          total: 0,
+          pointsSum: 0,
+          pointsCount: 0,
+          ageMap: new Map(),
+        });
+      }
+      const slot = slotMap.get(slotKey)!;
+      slot.total += 1;
+      if (points !== null) {
+        slot.pointsSum += points;
+        slot.pointsCount += 1;
+      }
+      const ageEntry = slot.ageMap.get(ageBand.id) ?? {
+        label: ageBand.label,
         total: 0,
-        share: 0,
-        gairai: 0,
-        naishikyo: 0,
-        gairaiShare: 0,
-        naishikyoShare: 0,
-        lastActiveMonth: null,
-        lastActiveMonthLabel: null,
-        lastMonthTotal: 0,
-        previousMonthTotal: 0,
-        trendDiff: null,
-        trendRate: null,
-        months: [],
-        dominantType: null,
-        dominantShare: 0,
-      }),
+        pointsSum: 0,
+        pointsCount: 0,
+      };
+      ageEntry.total += 1;
+      if (points !== null) {
+        ageEntry.pointsSum += points;
+        ageEntry.pointsCount += 1;
+      }
+      slot.ageMap.set(ageBand.id, ageEntry);
+
+      const globalAge = ageTotals.get(ageBand.id) ?? {
+        label: ageBand.label,
+        total: 0,
+        pointsSum: 0,
+        pointsCount: 0,
+      };
+      globalAge.total += 1;
+      if (points !== null) {
+        globalAge.pointsSum += points;
+        globalAge.pointsCount += 1;
+      }
+      ageTotals.set(ageBand.id, globalAge);
+
+      matchedCount += 1;
+    }
+
+    const remainingReservations = Array.from(reservationBuckets.values()).reduce(
+      (sum, list) => sum + list.length,
+      0,
     );
 
-    if (surveyRecords.length === 0) {
+    if (matchedCount === 0) {
       return {
-        hasData: false,
-        totalResponses: 0,
-        totalGairai: 0,
-        totalNaishikyo: 0,
-        gairaiShare: 0,
-        naishikyoShare: 0,
-        channels: emptyChannels,
-        topChannels: [] as ChannelInsight[],
-        leadingChannel: null as ChannelInsight | null,
-        growthChannel: null as ChannelInsight | null,
-        declineChannel: null as ChannelInsight | null,
-        groupBreakdown: [] as Array<{
-          group: SurveyChannelGroup;
-          label: string;
-          total: number;
-          share: number;
-        }>,
+        ...initial,
+        unmatchedRecords,
+        unmatchedReservations: remainingReservations,
       };
     }
 
-    const channelMap = new Map<
-      SurveyChannelKey,
-      {
-        total: number;
-        gairai: number;
-        naishikyo: number;
-        months: Map<string, { total: number; gairai: number; naishikyo: number }>;
-      }
-    >();
-    const groupTotals = new Map<SurveyChannelGroup, number>();
-    let totalResponses = 0;
-    let totalGairai = 0;
-    let totalNaishikyo = 0;
+    const slots: MultivariateSlotStat[] = Array.from(slotMap.values())
+      .map((slot) => {
+        const ageBreakdown = Array.from(slot.ageMap.entries())
+          .map(([ageBandId, value]) => ({
+            ageBandId,
+            label: value.label,
+            total: value.total,
+            share: slot.total > 0 ? roundTo1Decimal((value.total / slot.total) * 100) : 0,
+            avgPoints:
+              value.pointsCount > 0
+                ? Math.round((value.pointsSum / value.pointsCount) * 10) / 10
+                : null,
+          }))
+          .sort((a, b) => b.total - a.total);
 
-    for (const record of surveyRecords) {
-      const month = record.month;
-      const fileType = record.fileType;
+        return {
+          weekday: slot.weekday,
+          hour: slot.hour,
+          totalPatients: slot.total,
+          avgPoints:
+            slot.pointsCount > 0
+              ? Math.round((slot.pointsSum / slot.pointsCount) * 10) / 10
+              : null,
+          ageBreakdown,
+        };
+      })
+      .sort((a, b) => a.weekday - b.weekday || a.hour - b.hour);
 
-      for (const definition of SURVEY_CHANNEL_DEFINITIONS) {
-        const value = record[definition.key];
-        if (!value || value <= 0) {
-          continue;
-        }
+    const weekdayGroups: MultivariateWeekdayGroup[] = WEEKDAY_LABELS.map((label, index) => ({
+      weekday: index,
+      label,
+      slots: slots.filter((slot) => slot.weekday === index),
+    })).filter((group) => group.slots.length > 0);
 
-        totalResponses += value;
-        if (fileType === "外来") {
-          totalGairai += value;
-        } else {
-          totalNaishikyo += value;
-        }
+    const topSlot =
+      slots
+        .slice()
+        .sort(
+          (a, b) =>
+            b.totalPatients - a.totalPatients || a.weekday - b.weekday || a.hour - b.hour,
+        )[0] ?? null;
 
-        if (!channelMap.has(definition.key)) {
-          channelMap.set(definition.key, {
-            total: 0,
-            gairai: 0,
-            naishikyo: 0,
-            months: new Map(),
-          });
-        }
-        const entry = channelMap.get(definition.key)!;
-        entry.total += value;
-        if (fileType === "外来") {
-          entry.gairai += value;
-        } else {
-          entry.naishikyo += value;
-        }
-        const monthEntry =
-          entry.months.get(month) ?? { total: 0, gairai: 0, naishikyo: 0 };
-        monthEntry.total += value;
-        if (fileType === "外来") {
-          monthEntry.gairai += value;
-        } else {
-          monthEntry.naishikyo += value;
-        }
-        entry.months.set(month, monthEntry);
-        groupTotals.set(
-          definition.group,
-          (groupTotals.get(definition.group) ?? 0) + value,
+    const avgCandidates = slots.filter((slot) => slot.avgPoints !== null && slot.totalPatients >= 3);
+    const highestAvgSlot =
+      avgCandidates
+        .slice()
+        .sort((a, b) => (b.avgPoints ?? 0) - (a.avgPoints ?? 0))[0] ?? null;
+
+    const leadingAgeBandEntry = Array.from(ageTotals.entries())
+      .sort((a, b) => b[1].total - a[1].total)[0];
+    const leadingAgeBand =
+      leadingAgeBandEntry !== undefined
+        ? {
+            id: leadingAgeBandEntry[0],
+            label: leadingAgeBandEntry[1].label,
+            total: leadingAgeBandEntry[1].total,
+            avgPoints:
+              leadingAgeBandEntry[1].pointsCount > 0
+                ? Math.round(
+                    (leadingAgeBandEntry[1].pointsSum / leadingAgeBandEntry[1].pointsCount) * 10,
+                  ) / 10
+                : null,
+          }
+        : null;
+
+    const highlights: string[] = [];
+    if (topSlot) {
+      highlights.push(
+        `最も患者数が多いのは${WEEKDAY_LABELS[topSlot.weekday]}曜${formatHourLabel(topSlot.hour)}帯（${topSlot.totalPatients.toLocaleString(
+          "ja-JP",
+        )}名）です。`,
+      );
+      const primaryAge = topSlot.ageBreakdown[0];
+      if (primaryAge) {
+        highlights.push(
+          `${WEEKDAY_LABELS[topSlot.weekday]}曜${formatHourLabel(topSlot.hour)}は${primaryAge.label}が中心（構成比${formatPercentage(
+            primaryAge.share,
+          )}）です。`,
         );
       }
     }
-
-    const channels: ChannelInsight[] = SURVEY_CHANNEL_DEFINITIONS.map(
-      (definition) => {
-        const entry =
-          channelMap.get(definition.key) ?? {
-            total: 0,
-            gairai: 0,
-            naishikyo: 0,
-            months: new Map<
-              string,
-              { total: number; gairai: number; naishikyo: number }
-            >(),
-          };
-
-        const months = Array.from(entry.months.entries())
-          .sort((a, b) => a[0].localeCompare(b[0]))
-          .map(([monthKey, data]) => ({
-            month: monthKey,
-            label: formatMonthLabel(monthKey),
-            total: data.total,
-            gairai: data.gairai,
-            naishikyo: data.naishikyo,
-          }));
-
-        const lastMonth = months.length > 0 ? months[months.length - 1] : null;
-        const previousMonth =
-          months.length > 1 ? months[months.length - 2] : null;
-        const trendDiff =
-          lastMonth && previousMonth ? lastMonth.total - previousMonth.total : null;
-        const trendRate =
-          trendDiff !== null && previousMonth && previousMonth.total > 0
-            ? roundTo1Decimal((trendDiff / previousMonth.total) * 100)
-            : null;
-
-        const share =
-          totalResponses > 0 ? roundTo1Decimal((entry.total / totalResponses) * 100) : 0;
-        const gairaiShare =
-          entry.total > 0 ? roundTo1Decimal((entry.gairai / entry.total) * 100) : 0;
-        const naishikyoShare =
-          entry.total > 0 ? roundTo1Decimal((entry.naishikyo / entry.total) * 100) : 0;
-
-        let dominantType: "外来" | "内視鏡" | null = null;
-        if (entry.gairai > entry.naishikyo) {
-          dominantType = "外来";
-        } else if (entry.naishikyo > entry.gairai) {
-          dominantType = "内視鏡";
-        }
-        const dominantShare =
-          dominantType === "外来"
-            ? gairaiShare
-            : dominantType === "内視鏡"
-              ? naishikyoShare
-              : 0;
-
-        return {
-          key: definition.key,
-          label: definition.label,
-          group: definition.group,
-          description: definition.description,
-          total: entry.total,
-          share,
-          gairai: entry.gairai,
-          naishikyo: entry.naishikyo,
-          gairaiShare,
-          naishikyoShare,
-          lastActiveMonth: lastMonth?.month ?? null,
-          lastActiveMonthLabel: lastMonth?.label ?? null,
-          lastMonthTotal: lastMonth?.total ?? 0,
-          previousMonthTotal: previousMonth?.total ?? 0,
-          trendDiff,
-          trendRate,
-          months,
-          dominantType,
-          dominantShare,
-        } as ChannelInsight;
-      },
-    );
-
-    const channelsSorted = [...channels].sort((a, b) => b.total - a.total);
-    const nonZeroChannels = channelsSorted.filter((channel) => channel.total > 0);
-    const topChannels = nonZeroChannels.slice(0, 4);
-    const leadingChannel = nonZeroChannels[0] ?? null;
-
-    const growthChannel =
-      nonZeroChannels
-        .filter((channel) => (channel.trendDiff ?? 0) > 0)
-        .sort((a, b) => (b.trendDiff ?? 0) - (a.trendDiff ?? 0))[0] ?? null;
-
-    const declineChannel =
-      nonZeroChannels
-        .filter((channel) => (channel.trendDiff ?? 0) < 0)
-        .sort((a, b) => (a.trendDiff ?? 0) - (b.trendDiff ?? 0))[0] ?? null;
-
-    const groupBreakdown = Array.from(groupTotals.entries())
-      .map(([group, value]) => ({
-        group,
-        label: SURVEY_CHANNEL_GROUP_LABELS[group],
-        total: value,
-        share:
-          totalResponses > 0 ? roundTo1Decimal((value / totalResponses) * 100) : 0,
-      }))
-      .sort((a, b) => b.total - a.total);
-
-    const gairaiShare =
-      totalResponses > 0 ? roundTo1Decimal((totalGairai / totalResponses) * 100) : 0;
-    const naishikyoShare =
-      totalResponses > 0 ? roundTo1Decimal((totalNaishikyo / totalResponses) * 100) : 0;
+    if (highestAvgSlot && highestAvgSlot.avgPoints !== null) {
+      highlights.push(
+        `単価が高いのは${WEEKDAY_LABELS[highestAvgSlot.weekday]}曜${formatHourLabel(highestAvgSlot.hour)}帯（平均${Math.round(
+          highestAvgSlot.avgPoints,
+        ).toLocaleString("ja-JP")}点）です。`,
+      );
+    }
+    if (leadingAgeBand) {
+      highlights.push(
+        `最多年代は${leadingAgeBand.label}（${leadingAgeBand.total.toLocaleString("ja-JP")}名）で、平均${
+          leadingAgeBand.avgPoints !== null
+            ? Math.round(leadingAgeBand.avgPoints).toLocaleString("ja-JP")
+            : "—"
+        }点です。`,
+      );
+    }
+    if (unmatchedRecords > 0 || remainingReservations > 0) {
+      highlights.push(
+        `氏名一致のみで照合しているため、マッチできないレコードがカルテ側${unmatchedRecords}件・予約側${remainingReservations}件あります。`,
+      );
+    }
 
     return {
       hasData: true,
-      totalResponses,
-      totalGairai,
-      totalNaishikyo,
-      gairaiShare,
-      naishikyoShare,
-      channels: channelsSorted,
-      topChannels,
-      leadingChannel,
-      growthChannel,
-      declineChannel,
-      groupBreakdown,
+      totalMatches: matchedCount,
+      unmatchedRecords,
+      unmatchedReservations: remainingReservations,
+      weekdayGroups,
+      topSlot,
+      highestAvgSlot,
+      leadingAgeBand,
+      highlights,
     };
-  }, [surveyRecords]);
-
-  const channelInsightHighlights = useMemo(() => {
-    const items: string[] = [];
-    if (!channelInsights.hasData) {
-      return items;
-    }
-
-    if (channelInsights.leadingChannel) {
-      items.push(
-        `最多は${channelInsights.leadingChannel.label}（${channelInsights.leadingChannel.total.toLocaleString("ja-JP")}件・シェア${formatPercentage(channelInsights.leadingChannel.share)}）です。`,
-      );
-    }
-    if (channelInsights.growthChannel && channelInsights.growthChannel.trendDiff !== null) {
-      const diff = channelInsights.growthChannel.trendDiff;
-      const rate = channelInsights.growthChannel.trendRate;
-      items.push(
-        `直近で伸びているのは${channelInsights.growthChannel.label}（${diff >= 0 ? "+" : ""}${diff.toLocaleString("ja-JP")}件${rate !== null ? `, ${formatPercentage(rate)}` : ""}）。`,
-      );
-    }
-    if (channelInsights.declineChannel && channelInsights.declineChannel.trendDiff !== null) {
-      const diff = channelInsights.declineChannel.trendDiff;
-      items.push(
-        `減少傾向は${channelInsights.declineChannel.label}（${diff.toLocaleString("ja-JP")}件）です。`,
-      );
-    }
-    const topGroup = channelInsights.groupBreakdown[0];
-    if (topGroup) {
-      items.push(
-        `${topGroup.label}チャネルが全体の${formatPercentage(topGroup.share)}を占めています。`,
-      );
-    }
-    if (listingSummary.hasData && listingSummary.topCategory) {
-      items.push(
-        `リスティングでは${listingSummary.topCategory.category}カテゴリのCVが最多（${listingSummary.topCategory.cv.toLocaleString("ja-JP")}件）です。`,
-      );
-    }
-    if (reservationCategorySummary.hasData && reservationCategorySummary.dominant) {
-      items.push(
-        `初診予約は${reservationCategorySummary.dominant.category}向けが中心（${reservationCategorySummary.dominant.total.toLocaleString("ja-JP")}件・シェア${formatPercentage(reservationCategorySummary.dominant.share)}）。`,
-      );
-    }
-
-    return items;
-  }, [channelInsights, listingSummary, reservationCategorySummary]);
+  }, [filteredClassified, reservationsRecords]);
 
   const hasAnyRecords = records.length > 0;
   const hasPeriodRecords = periodFilteredRecords.length > 0;
@@ -3200,7 +3102,6 @@ function PatientAnalysisPageContent() {
         total: merged.length,
         byType: summarizeSurveyByType(merged),
       });
-      setSurveyRecords(merged);
     } catch (error) {
       console.error(error);
       setSurveyUploadError("アンケートCSVの解析に失敗しました。");
@@ -3246,7 +3147,6 @@ function PatientAnalysisPageContent() {
           lastUpdated: timestamp,
           totals,
         });
-        setListingRecords(merged);
       } catch (error) {
         console.error(error);
         setListingUploadError("リスティング広告CSVの解析に失敗しました。");
@@ -3376,12 +3276,10 @@ function PatientAnalysisPageContent() {
       total: 0,
       byType: createEmptySurveyCounts(),
     });
-    setSurveyRecords([]);
     setListingStatus({
       lastUpdated: null,
       totals: createEmptyListingTotals(),
     });
-    setListingRecords([]);
     setDiagnosisRecords([]);
     setDiagnosisStatus({
       lastUpdated: null,
@@ -4299,14 +4197,14 @@ function PatientAnalysisPageContent() {
         {!lifestyleOnly && (
         <SectionCard
           title="視点別インサイト"
-          description="チャネル・診療科・時間帯を切り替えて主要指標とグラフを比較します。"
+          description="多変量解析・診療科別・時間帯別の視点から主要指標とグラフを比較します。"
         >
           <div className="flex flex-wrap gap-2">
             {(
               [
                 { id: "department", label: "診療科" },
                 { id: "time", label: "曜日別" },
-                { id: "channel", label: "チャネル" },
+                { id: "channel", label: "多変量解析" },
               ] as Array<{ id: typeof insightTab; label: string }>
             ).map((tab) => (
               <button
@@ -4628,282 +4526,172 @@ function PatientAnalysisPageContent() {
             )}
             {insightTab === "channel" && (
               <div className="space-y-6">
-                {channelInsights.hasData ? (
-                  <div className="space-y-6">
-                    <div className="grid gap-4 lg:grid-cols-3">
-                      <div className="rounded-2xl border border-brand-200 bg-white/90 p-5 shadow-soft">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-500">
-                              Survey Reach
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-slate-800">アンケート回答総数</p>
-                          </div>
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-100 text-brand-600">
-                            <Megaphone className="h-4 w-4" />
-                          </span>
-                        </div>
-                        <p className="mt-4 text-3xl font-bold text-slate-900">
-                          {channelInsights.totalResponses.toLocaleString("ja-JP")}件
-                        </p>
-                        <div className="mt-3 grid gap-1 text-xs text-slate-600">
-                          <span>
-                            外来 {channelInsights.totalGairai.toLocaleString("ja-JP")}件（
-                            {formatPercentage(channelInsights.gairaiShare)}）
-                          </span>
-                          <span>
-                            内視鏡 {channelInsights.totalNaishikyo.toLocaleString("ja-JP")}件（
-                            {formatPercentage(channelInsights.naishikyoShare)}）
-                          </span>
-                        </div>
-                        {channelInsights.groupBreakdown.length > 0 && (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {channelInsights.groupBreakdown.slice(0, 3).map((group) => (
-                              <span
-                                key={group.group}
-                                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold ${SURVEY_CHANNEL_GROUP_BADGES[group.group]}`}
-                              >
-                                {SURVEY_CHANNEL_GROUP_LABELS[group.group]}
-                                <span className="font-normal text-slate-600">
-                                  {formatPercentage(group.share)}
-                                </span>
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
+                {multivariateInsights.hasData ? (
+                  <>
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                       <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft">
                         <div className="flex items-center justify-between gap-3">
                           <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-                              Listing Ads
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-slate-800">広告接点</p>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">照合できた来院データ</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">総件数</p>
                           </div>
                           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                            <PieChart className="h-4 w-4" />
+                            <Users className="h-4 w-4" />
                           </span>
                         </div>
-                        {listingSummary.hasData ? (
-                          <div className="mt-4 space-y-2 text-xs text-slate-600">
-                            <p>
-                              合計CV {listingSummary.totalCv.toLocaleString("ja-JP")}件 / 投資額 ¥
-                              {listingSummary.totalAmount.toLocaleString("ja-JP")}
-                            </p>
-                            {listingSummary.avgCpa !== null && (
-                              <p>
-                                平均CPA ¥{listingSummary.avgCpa.toLocaleString("ja-JP", {
-                                  minimumFractionDigits: 0,
-                                  maximumFractionDigits: 0,
-                                })}
-                              </p>
-                            )}
-                            <div className="flex flex-wrap gap-2">
-                              {listingSummary.breakdown.map((item) => (
-                                <span
-                                  key={item.category}
-                                  className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600"
-                                >
-                                  {item.category} {item.cv.toLocaleString("ja-JP")}件（
-                                  {formatPercentage(item.share)}）
-                                </span>
-                              ))}
-                            </div>
-                            {listingSummary.topCategory && listingSummary.topCategory.lastDateLabel && (
-                              <p className="text-[11px] text-slate-500">
-                                最新データ: {listingSummary.topCategory.lastDateLabel}
-                              </p>
-                            )}
+                        <p className="mt-4 text-3xl font-bold text-slate-900">{multivariateInsights.totalMatches.toLocaleString("ja-JP")}件</p>
+                        <p className="mt-3 text-[11px] text-slate-500">
+                          カルテ未照合 {multivariateInsights.unmatchedRecords.toLocaleString("ja-JP")}件 / 予約未照合 {multivariateInsights.unmatchedReservations.toLocaleString("ja-JP")}件
+                        </p>
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">最多来院枠</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">ピーク枠の把握</p>
                           </div>
+                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                            <Clock className="h-4 w-4" />
+                          </span>
+                        </div>
+                        {multivariateInsights.topSlot ? (
+                          <>
+                            <p className="mt-4 text-xl font-bold text-slate-900">
+                              {WEEKDAY_LABELS[multivariateInsights.topSlot.weekday]}曜 {formatHourLabel(multivariateInsights.topSlot.hour)}
+                            </p>
+                            <p className="mt-2 text-sm text-slate-600">
+                              {multivariateInsights.topSlot.totalPatients.toLocaleString("ja-JP")}名来院
+                            </p>
+                            {multivariateInsights.topSlot.ageBreakdown[0] && (
+                              <p className="mt-1 text-[11px] text-slate-500">
+                                主要年代: {multivariateInsights.topSlot.ageBreakdown[0].label}
+                                （{formatPercentage(multivariateInsights.topSlot.ageBreakdown[0].share)}）
+                              </p>
+                            )}
+                          </>
                         ) : (
-                          <p className="mt-4 text-xs text-slate-500">
-                            リスティング広告CSVを取り込むと、CVやCPAの状況が表示されます。
-                          </p>
+                          <p className="mt-4 text-xs text-slate-500">有効なデータがありません。</p>
                         )}
                       </div>
 
                       <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft">
                         <div className="flex items-center justify-between gap-3">
                           <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-                              Reservation
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-slate-800">初診予約との接続</p>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">高単価枠</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">平均点数が高い時間</p>
                           </div>
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600">
                             <TrendingUp className="h-4 w-4" />
                           </span>
                         </div>
-                        {reservationCategorySummary.hasData ? (
-                          <div className="mt-4 space-y-2 text-xs text-slate-600">
-                            <p>
-                              初診予約 {reservationCategorySummary.total.toLocaleString("ja-JP")}件
+                        {multivariateInsights.highestAvgSlot ? (
+                          <>
+                            <p className="mt-4 text-xl font-bold text-slate-900">
+                              {WEEKDAY_LABELS[multivariateInsights.highestAvgSlot.weekday]}曜 {formatHourLabel(multivariateInsights.highestAvgSlot.hour)}
                             </p>
-                            <div className="flex flex-wrap gap-2">
-                              {reservationCategorySummary.breakdown.map((item) => (
-                                <span
-                                  key={item.category}
-                                  className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700"
-                                >
-                                  {item.category} {item.total.toLocaleString("ja-JP")}件（
-                                  {formatPercentage(item.share)}）
-                                </span>
-                              ))}
-                            </div>
-                          </div>
+                            <p className="mt-2 text-sm text-slate-600">
+                              平均{Math.round(multivariateInsights.highestAvgSlot.avgPoints ?? 0).toLocaleString("ja-JP")}点
+                            </p>
+                          </>
                         ) : (
-                          <p className="mt-4 text-xs text-slate-500">
-                            予約CSVを取り込むと、カテゴリ別の初診件数が表示されます。
-                          </p>
+                          <p className="mt-4 text-xs text-slate-500">来院数が少なく評価できる枠がありません。</p>
+                        )}
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">主要年代</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-800">来院数の多い年代</p>
+                          </div>
+                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                            <UserPlus className="h-4 w-4" />
+                          </span>
+                        </div>
+                        {multivariateInsights.leadingAgeBand ? (
+                          <>
+                            <p className="mt-4 text-xl font-bold text-slate-900">
+                              {multivariateInsights.leadingAgeBand.label}
+                            </p>
+                            <p className="mt-2 text-sm text-slate-600">
+                              {multivariateInsights.leadingAgeBand.total.toLocaleString("ja-JP")}名 / 平均{multivariateInsights.leadingAgeBand.avgPoints !== null ? Math.round(multivariateInsights.leadingAgeBand.avgPoints).toLocaleString("ja-JP") : "—"}点
+                            </p>
+                          </>
+                        ) : (
+                          <p className="mt-4 text-xs text-slate-500">年齢情報が不足しています。</p>
                         )}
                       </div>
                     </div>
 
-                    {channelInsights.topChannels.length > 0 && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-semibold text-slate-800">主要チャネル</h3>
-                          <span className="text-xs text-slate-500">最新月ベースの上位チャネル</span>
-                        </div>
-                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                          {channelInsights.topChannels.map((channel) => {
-                            const GroupIcon = SURVEY_CHANNEL_GROUP_ICONS[channel.group];
-                            return (
-                              <div
-                                key={channel.key}
-                                className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft transition hover:-translate-y-1 hover:shadow-card"
-                              >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <p className="text-sm font-semibold text-slate-900">{channel.label}</p>
-                                    <p className="text-[11px] text-slate-500">
-                                      {SURVEY_CHANNEL_GROUP_LABELS[channel.group]}
-                                    </p>
-                                  </div>
-                                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                                    <GroupIcon className="h-4 w-4" />
-                                  </span>
-                                </div>
-                                <p className="mt-3 text-2xl font-bold text-slate-900">
-                                  {channel.total.toLocaleString("ja-JP")}件
-                                </p>
-                                <p className="text-xs text-slate-500">
-                                  シェア {formatPercentage(channel.share)}
-                                </p>
-                                {channel.lastActiveMonthLabel && (
-                                  <p className="mt-1 text-[11px] text-slate-500">
-                                    最新月 {channel.lastActiveMonthLabel}（
-                                    {channel.lastMonthTotal.toLocaleString("ja-JP")}件）
-                                  </p>
-                                )}
-                                {channel.trendDiff !== null && (
-                                  <p
-                                    className={`mt-2 text-xs font-semibold ${
-                                      channel.trendDiff >= 0
-                                        ? "text-emerald-600"
-                                        : "text-rose-600"
-                                    }`}
-                                  >
-                                    {channel.trendDiff >= 0 ? "+" : ""}
-                                    {channel.trendDiff.toLocaleString("ja-JP")}件
-                                    {channel.trendRate !== null
-                                      ? ` (${channel.trendRate >= 0 ? "+" : ""}${channel.trendRate.toLocaleString("ja-JP")}%)`
-                                      : ""}
-                                  </p>
-                                )}
-                                {channel.dominantType && (
-                                  <p className="mt-1 text-[11px] text-slate-500">
-                                    主軸: {channel.dominantType} {formatPercentage(channel.dominantShare)}
-                                  </p>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="space-y-3">
-                      <h3 className="text-sm font-semibold text-slate-800">チャネル別詳細</h3>
-                      <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                        <table className="w-full min-w-[760px] border-collapse text-sm">
-                          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                            <tr>
-                              <th className="px-4 py-3 text-left font-semibold">チャネル</th>
-                              <th className="px-4 py-3 text-right font-semibold">総計</th>
-                              <th className="px-4 py-3 text-right font-semibold">シェア</th>
-                              <th className="px-4 py-3 text-right font-semibold">外来</th>
-                              <th className="px-4 py-3 text-right font-semibold">内視鏡</th>
-                              <th className="px-4 py-3 text-right font-semibold">最新月</th>
-                              <th className="px-4 py-3 text-right font-semibold">前月比</th>
-                              <th className="px-4 py-3 text-right font-semibold">主軸</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 bg-white">
-                            {channelInsights.channels.map((channel) => (
-                              <tr key={channel.key} className="hover:bg-slate-50">
-                                <td className="px-4 py-3 font-semibold text-slate-800">
-                                  <div className="flex items-center gap-2">
-                                    <span
-                                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${SURVEY_CHANNEL_GROUP_BADGES[channel.group]}`}
-                                    >
-                                      {SURVEY_CHANNEL_GROUP_LABELS[channel.group]}
-                                    </span>
-                                    {channel.label}
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3 text-right text-slate-700">
-                                  {channel.total.toLocaleString("ja-JP")}件
-                                </td>
-                                <td className="px-4 py-3 text-right text-slate-600">
-                                  {formatPercentage(channel.share)}
-                                </td>
-                                <td className="px-4 py-3 text-right text-slate-600">
-                                  {channel.gairai.toLocaleString("ja-JP")}件 / {formatPercentage(channel.gairaiShare)}
-                                </td>
-                                <td className="px-4 py-3 text-right text-slate-600">
-                                  {channel.naishikyo.toLocaleString("ja-JP")}件 / {formatPercentage(channel.naishikyoShare)}
-                                </td>
-                                <td className="px-4 py-3 text-right text-slate-600">
-                                  {channel.lastActiveMonthLabel ?? "—"}
-                                </td>
-                                <td className="px-4 py-3 text-right text-slate-600">
-                                  {channel.trendDiff !== null
-                                    ? `${channel.trendDiff >= 0 ? "+" : ""}${channel.trendDiff.toLocaleString("ja-JP")}件${
-                                        channel.trendRate !== null
-                                          ? ` (${channel.trendRate >= 0 ? "+" : ""}${channel.trendRate.toLocaleString("ja-JP")}%)`
-                                          : ""
-                                      }`
-                                    : "—"}
-                                </td>
-                                <td className="px-4 py-3 text-right text-slate-600">
-                                  {channel.dominantType
-                                    ? `${channel.dominantType} ${formatPercentage(channel.dominantShare)}`
-                                    : "—"}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    {channelInsightHighlights.length > 0 && (
+                    {multivariateInsights.highlights.length > 0 && (
                       <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
                         <h3 className="text-sm font-semibold text-slate-800">注目ポイント</h3>
                         <ul className="mt-2 space-y-1 text-xs text-slate-600">
-                          {channelInsightHighlights.map((text, index) => (
-                            <li key={`channel-highlight-${index}`}>・{text}</li>
+                          {multivariateInsights.highlights.map((item, index) => (
+                            <li key={`multivariate-highlight-${index}`}>・{item}</li>
                           ))}
                         </ul>
                       </div>
                     )}
-                  </div>
+
+                    <div className="space-y-4">
+                      {multivariateInsights.weekdayGroups.map((group) => {
+                        const groupTotal = group.slots.reduce((sum, slot) => sum + slot.totalPatients, 0);
+                        return (
+                          <div
+                            key={`weekday-group-${group.weekday}`}
+                            className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <h3 className="text-sm font-semibold text-slate-800">{group.label}曜</h3>
+                              <span className="text-xs text-slate-500">{groupTotal.toLocaleString("ja-JP")}名</span>
+                            </div>
+                            <div className="mt-3 overflow-x-auto">
+                              <table className="w-full min-w-[520px] border-collapse text-xs">
+                                <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left font-semibold">時間帯</th>
+                                    <th className="px-3 py-2 text-right font-semibold">来院数</th>
+                                    <th className="px-3 py-2 text-right font-semibold">平均点数</th>
+                                    <th className="px-3 py-2 text-left font-semibold">主な年代</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
+                                  {group.slots.map((slot) => (
+                                    <tr
+                                      key={`weekday-${slot.weekday}-hour-${slot.hour}`}
+                                      className="hover:bg-slate-50"
+                                    >
+                                      <td className="px-3 py-2 font-semibold">{formatHourLabel(slot.hour)}</td>
+                                      <td className="px-3 py-2 text-right">{slot.totalPatients.toLocaleString("ja-JP")}</td>
+                                      <td className="px-3 py-2 text-right">
+                                        {slot.avgPoints !== null ? `${Math.round(slot.avgPoints).toLocaleString("ja-JP")}点` : "—"}
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {(() => {
+                                          if (slot.ageBreakdown.length === 0) {
+                                            return "—";
+                                          }
+                                          return slot.ageBreakdown
+                                            .slice(0, 3)
+                                            .map((age) => `${age.label} ${formatPercentage(age.share)}`)
+                                            .join(" / ");
+                                        })()}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
                 ) : (
                   <div className="rounded-2xl border border-dashed border-brand-200 bg-brand-50/70 px-4 py-3 text-xs text-brand-700">
-                    来院経路アンケートCSVを取り込むと、チャネル別のインサイトが表示されます。
-                    まずはアンケートデータを読み込んでください。
+                    予約ログとカルテ集計を取り込むと、多変量解析ダッシュボードが表示されます。
                   </div>
                 )}
 
