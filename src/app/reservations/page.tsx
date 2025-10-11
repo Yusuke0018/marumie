@@ -11,10 +11,8 @@ import {
 } from "react";
 import { RefreshCw, Share2, Link as LinkIcon } from "lucide-react";
 import { uploadDataToR2, fetchDataFromR2 } from "@/lib/dataShare";
-import {
-  getDayType,
-  getWeekdayName,
-} from "@/lib/dateUtils";
+import { getDayType, getWeekdayName } from "@/lib/dateUtils";
+import type { DayType } from "@/lib/dateUtils";
 import {
   Reservation,
   loadReservationsFromStorage,
@@ -67,6 +65,8 @@ type DailyBucket = {
   date: string;
   total: number;
 };
+
+type BasicDayType = "平日" | "土曜" | "日曜" | "祝日";
 
 type MonthlyBucket = {
   month: string;
@@ -227,7 +227,7 @@ type WeekdayBucket = {
 };
 
 type DayTypeBucket = {
-  dayType: string;
+  dayType: BasicDayType;
   total: number;
   初診: number;
   再診: number;
@@ -247,6 +247,25 @@ type AggregatedReservationInsights = {
   departmentHourlyMap: Map<string, DepartmentHourly>;
   overallHourly: HourlyBucket[];
   overallDaily: DailyBucket[];
+};
+
+const DAY_TYPE_ORDER: BasicDayType[] = ["平日", "土曜", "日曜", "祝日"];
+
+const simplifyDayType = (dayType: DayType): BasicDayType => {
+  switch (dayType) {
+    case "祝日":
+    case "連休初日":
+    case "連休中日":
+    case "連休最終日":
+    case "大型連休":
+      return "祝日";
+    case "日曜":
+      return "日曜";
+    case "土曜":
+      return "土曜";
+    default:
+      return "平日";
+  }
 };
 
 const aggregateReservationInsights = (
@@ -278,13 +297,24 @@ const aggregateReservationInsights = (
   });
 
   const dayTypeMap = new Map<
-    string,
+    BasicDayType,
     { total: number; 初診: number; 再診: number; days: Set<string> }
   >();
+  DAY_TYPE_ORDER.forEach((dayType) => {
+    dayTypeMap.set(dayType, {
+      total: 0,
+      初診: 0,
+      再診: 0,
+      days: new Set<string>(),
+    });
+  });
   const overallDailyMap = new Map<string, number>();
   const overallHourly = createEmptyHourlyBuckets();
   const departmentHourlyMap = new Map<string, DepartmentHourly>();
-  const dayInfoCache = new Map<string, { weekday: string; dayType: string }>();
+  const dayInfoCache = new Map<
+    string,
+    { weekday: string; dayType: BasicDayType }
+  >();
   let initialCount = 0;
   let followupCount = 0;
   const departmentSet = new Set<string>();
@@ -337,11 +367,12 @@ const aggregateReservationInsights = (
     let dayInfo = dayInfoCache.get(reservation.reservationDate);
     if (!dayInfo) {
       const dayTypeValue = getDayType(reservation.reservationDate);
+      const simplifiedDayType = simplifyDayType(dayTypeValue);
       const weekdayValue =
-        dayTypeValue === "祝日"
+        simplifiedDayType === "祝日"
           ? "祝日"
           : getWeekdayName(reservation.reservationDate);
-      dayInfo = { weekday: weekdayValue, dayType: dayTypeValue };
+      dayInfo = { weekday: weekdayValue, dayType: simplifiedDayType };
       dayInfoCache.set(reservation.reservationDate, dayInfo);
     }
 
@@ -382,6 +413,7 @@ const aggregateReservationInsights = (
   });
 
   const dayTypeData: DayTypeBucket[] = Array.from(dayTypeMap.entries())
+    .filter(([, data]) => data.total > 0)
     .map(([dayType, data]) => ({
       dayType,
       total: data.total,
@@ -909,8 +941,10 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-background">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-12">
-        <section className="relative overflow-hidden rounded-3xl border border-brand-200 bg-gradient-to-r from-white via-brand-50 to-brand-100 p-8 shadow-card">
-          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+        <section className="relative overflow-hidden rounded-3xl border border-indigo-200 bg-gradient-to-br from-white via-indigo-50 to-sky-100 p-8 shadow-card">
+          <div className="pointer-events-none absolute -right-16 top-0 h-48 w-48 rounded-full bg-gradient-to-br from-indigo-200/50 via-sky-200/40 to-purple-200/40 blur-3xl" />
+          <div className="pointer-events-none absolute -left-20 bottom-0 h-52 w-52 rounded-full bg-gradient-to-br from-sky-200/45 via-emerald-200/30 to-white/0 blur-3xl" />
+          <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="space-y-3">
               <p className="text-sm font-semibold text-brand-600">
                 Reservation Insights Dashboard
@@ -928,7 +962,7 @@ export default function HomePage() {
                 <ul className="space-y-1 text-sm leading-relaxed text-blue-800">
                   <li>
                     • <strong>曜日別／日付タイプ別</strong>:
-                    平日・土日・祝日・連休の傾向を比較。
+                    平日・土曜・日曜・祝日の傾向を比較。
                   </li>
                   <li>
                     • <strong>時間帯別グラフ</strong>:
@@ -1068,7 +1102,7 @@ export default function HomePage() {
                 : `日付タイプ別 予約傾向（${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}）`
               : "日付タイプ別 予約傾向"
           }
-          description="平日・休日・祝日・連休など、日付のタイプごとの予約パターンを表示しています。"
+          description="平日・土曜・日曜・祝日の4分類で予約パターンを表示しています。"
         >
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
