@@ -12,7 +12,6 @@ import {
   type ChangeEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import Link from "next/link";
 import {
   RefreshCw,
   Share2,
@@ -578,6 +577,55 @@ const SectionCard = ({ title, description, action, children }: SectionCardProps)
   </section>
 );
 
+const STAT_TONE_STYLES: Record<
+  "brand" | "accent" | "muted" | "emerald",
+  {
+    container: string;
+    label: string;
+    value: string;
+    positive: string;
+    negative: string;
+    glow: string;
+  }
+> = {
+  brand: {
+    container:
+      "border border-transparent bg-gradient-to-br from-brand-500 via-brand-400 to-brand-600 text-white shadow-xl shadow-brand-600/30",
+    label: "text-white/80",
+    value: "text-white drop-shadow-sm",
+    positive: "text-emerald-100",
+    negative: "text-rose-100",
+    glow: "bg-white/20",
+  },
+  accent: {
+    container:
+      "border border-transparent bg-gradient-to-br from-accent-400 via-rose-400 to-accent-600 text-white shadow-xl shadow-accent-500/35",
+    label: "text-white/85",
+    value: "text-white drop-shadow-sm",
+    positive: "text-emerald-100",
+    negative: "text-rose-100",
+    glow: "bg-white/25",
+  },
+  emerald: {
+    container:
+      "border border-transparent bg-gradient-to-br from-emerald-400 via-emerald-500 to-brand-500 text-white shadow-xl shadow-emerald-500/30",
+    label: "text-white/80",
+    value: "text-white drop-shadow-sm",
+    positive: "text-emerald-100",
+    negative: "text-rose-100",
+    glow: "bg-white/20",
+  },
+  muted: {
+    container:
+      "border border-transparent bg-gradient-to-br from-slate-900 via-blue-600 to-slate-800 text-white shadow-xl shadow-slate-900/35",
+    label: "text-slate-100/80",
+    value: "text-white drop-shadow-sm",
+    positive: "text-emerald-200",
+    negative: "text-rose-200",
+    glow: "bg-blue-400/30",
+  },
+};
+
 const StatCard = ({
   label,
   value,
@@ -591,24 +639,32 @@ const StatCard = ({
   monthOverMonth?: { value: number; percentage: number } | null;
   isSingleMonth: boolean;
 }) => {
-  const toneClass =
-    tone === "brand"
-      ? "text-brand-600"
-      : tone === "accent"
-        ? "text-accent-600"
-        : tone === "emerald"
-          ? "text-emerald-600"
-          : "text-slate-900";
+  const styles = STAT_TONE_STYLES[tone];
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-card sm:p-4">
-      <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:text-xs">
+    <div
+      className={`group relative overflow-hidden rounded-[22px] p-4 transition-transform duration-300 ease-out hover:-translate-y-1 hover:shadow-2xl sm:p-5 ${styles.container}`}
+    >
+      <div
+        className={`pointer-events-none absolute -right-8 -top-12 h-32 w-32 rounded-full blur-3xl transition-all duration-500 group-hover:scale-110 ${styles.glow}`}
+      />
+      <dt
+        className={`text-[10px] font-semibold uppercase tracking-[0.18em] sm:text-xs ${styles.label}`}
+      >
         {label}
       </dt>
-      <dd className={`mt-1 text-xl font-bold sm:mt-2 sm:text-2xl ${toneClass}`}>{value}</dd>
+      <dd className={`mt-2 text-2xl font-bold leading-tight sm:text-3xl ${styles.value}`}>
+        {value}
+      </dd>
       {monthOverMonth && (
-        <p className={`mt-1 text-xs font-medium ${monthOverMonth.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-          {isSingleMonth ? '前月比' : '期間比'}: {monthOverMonth.value >= 0 ? '+' : ''}{monthOverMonth.value} ({monthOverMonth.percentage >= 0 ? '+' : ''}{monthOverMonth.percentage.toFixed(1)}%)
+        <p
+          className={`mt-3 text-xs font-semibold ${
+            monthOverMonth.value >= 0 ? styles.positive : styles.negative
+          }`}
+        >
+          {isSingleMonth ? "前月比" : "期間比"}: {monthOverMonth.value >= 0 ? "+" : ""}
+          {monthOverMonth.value} ({monthOverMonth.percentage >= 0 ? "+" : ""}
+          {monthOverMonth.percentage.toFixed(1)}%)
         </p>
       )}
     </div>
@@ -815,13 +871,6 @@ const LIFESTYLE_VISIT_BUCKETS: RangeBucket[] = [
   { id: "13+", label: "13回以上", min: 13, max: Number.POSITIVE_INFINITY },
 ];
 
-const LIFESTYLE_INITIAL_VISIT_BUCKETS: RangeBucket[] = [
-  { id: "1", label: "1回のみ", min: 1, max: 1 },
-  { id: "2-3", label: "2-3回", min: 2, max: 3 },
-  { id: "4-6", label: "4-6回", min: 4, max: 6 },
-  { id: "7+", label: "7回以上", min: 7, max: Number.POSITIVE_INFINITY },
-];
-
 type AgeGroupId = "20-39" | "40-49" | "50-59" | "60-69" | "70-79" | "80+";
 
 const LIFESTYLE_AGE_GROUPS: Array<{ id: AgeGroupId; label: string; min: number; max: number }> = [
@@ -1016,14 +1065,6 @@ type LifestyleAnalysisResult = {
     rates: Record<LifestyleStatus, number>;
     averageVisits: number | null;
   }>;
-  initialStats: {
-    total: number;
-    statusCounts: Record<LifestyleStatus, number>;
-    continuationRate: number;
-    visitBands: LifestyleDistributionItem[];
-    monthly: Array<{ month: string; label: string; count: number; averageVisits: number | null }>;
-    singleVisit: { total: number; list: LifestylePatientSummary[] };
-  };
   ageStats: {
     groups: Array<{
       id: AgeGroupId;
@@ -1846,10 +1887,18 @@ function PatientAnalysisPageContent() {
         };
       });
 
+      const maxAverageAmountCandidates = UNIT_PRICE_GROUPS.map(
+        (group) => stats[group.id]?.averageAmount ?? null,
+      ).filter((value): value is number => value !== null);
+
       return {
         key,
         label,
         stats,
+        maxAverageAmount:
+          maxAverageAmountCandidates.length > 0
+            ? Math.max(...maxAverageAmountCandidates)
+            : null,
       };
     });
   }, [unitPriceWeekdaySummaries]);
@@ -2320,67 +2369,6 @@ function PatientAnalysisPageContent() {
       };
     });
 
-    const initialPatients = patients.filter((patient) => patient.firstVisitType === "初診");
-    const initialStatusCounts: Record<LifestyleStatus, number> = {
-      regular: 0,
-      delayed: 0,
-      atRisk: 0,
-    };
-    initialPatients.forEach((patient) => {
-      initialStatusCounts[patient.status] += 1;
-    });
-    const initialVisitBands: LifestyleDistributionItem[] =
-      LIFESTYLE_INITIAL_VISIT_BUCKETS.map((bucket) => {
-        const count = initialPatients.filter((patient) => {
-          if (bucket.max === Number.POSITIVE_INFINITY) {
-            return patient.visitCount >= bucket.min;
-          }
-          return patient.visitCount >= bucket.min && patient.visitCount <= bucket.max;
-        }).length;
-        return {
-          id: bucket.id,
-          label: bucket.label,
-          count,
-          percentage:
-            initialPatients.length > 0
-              ? roundTo1Decimal((count / initialPatients.length) * 100)
-              : 0,
-        };
-      });
-
-    const initialMonthlyMap = new Map<
-      string,
-      { count: number; totalVisits: number }
-    >();
-    initialPatients.forEach((patient) => {
-      const month = patient.firstVisitMonth;
-      if (!initialMonthlyMap.has(month)) {
-        initialMonthlyMap.set(month, { count: 0, totalVisits: 0 });
-      }
-      const bucket = initialMonthlyMap.get(month)!;
-      bucket.count += 1;
-      bucket.totalVisits += patient.visitCount;
-    });
-    const initialMonthly = Array.from(initialMonthlyMap.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([month, bucket]) => ({
-        month,
-        label: formatMonthLabel(month),
-        count: bucket.count,
-        averageVisits:
-          bucket.count > 0 ? roundTo1Decimal(bucket.totalVisits / bucket.count) : null,
-      }));
-
-    const singleVisitInitialPatients = initialPatients
-      .filter((patient) => patient.visitCount === 1)
-      .sort((a, b) => b.firstVisitDate.localeCompare(a.firstVisitDate));
-    const initialSingleVisitList = singleVisitInitialPatients.slice(0, 10);
-
-    const initialContinuationRate =
-      initialPatients.length > 0
-        ? roundTo1Decimal((initialStatusCounts.regular / initialPatients.length) * 100)
-        : 0;
-
     const ageGroupSummaries = LIFESTYLE_AGE_GROUPS.map((group) => {
       const groupPatients = patients.filter((patient) => {
         if (patient.age === null) {
@@ -2457,17 +2445,6 @@ function PatientAnalysisPageContent() {
       daysDistribution,
       visitDistribution,
       diseaseStats,
-      initialStats: {
-        total: initialPatients.length,
-        statusCounts: initialStatusCounts,
-        continuationRate: initialContinuationRate,
-        visitBands: initialVisitBands,
-        monthly: initialMonthly,
-        singleVisit: {
-          total: singleVisitInitialPatients.length,
-          list: initialSingleVisitList,
-        },
-      },
       ageStats: {
         groups: ageGroupSummaries,
         ranking: ageRanking,
@@ -3199,61 +3176,122 @@ function PatientAnalysisPageContent() {
           }`}
         >
           <div className="flex flex-col gap-8">
-        <section className="relative overflow-hidden rounded-3xl border border-brand-200 bg-gradient-to-r from-white via-brand-50 to-brand-100 p-8 shadow-card">
-          <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-            <div className="space-y-4">
-              <p className="text-sm font-semibold text-brand-600">Patient Insights Dashboard</p>
-              <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">患者分析（カルテ集計）</h1>
-              <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                カルテ集計CSVをアップロードすると、2025年10月以降の月次指標
-                （総患者・純初診・再初診・再診・平均年齢）を自動で可視化します。共有URLを使えば、同じ集計結果を閲覧専用モードで共有できます。
-              </p>
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-relaxed text-emerald-700 sm:px-5">
-                <p className="mb-2 text-sm font-semibold text-emerald-900">患者区分の見方</p>
-                <ul className="space-y-1">
-                  <li>・<strong>純初診</strong> : 当院での受診が今回初めての患者様</li>
-                  <li>・<strong>再初診</strong> : 過去に受診歴はあるが、新たな症状で初診扱いの患者様</li>
-                  <li>・<strong>再診</strong> : 継続診療を目的とした患者様</li>
+        {lifestyleOnly ? (
+          <section className="relative overflow-hidden rounded-3xl border border-rose-200 bg-gradient-to-br from-rose-50 via-white to-sky-50 p-8 shadow-card">
+            <div className="pointer-events-none absolute -right-16 top-0 h-48 w-48 rounded-full bg-gradient-to-br from-rose-200/40 via-accent-300/30 to-brand-200/40 blur-3xl" />
+            <div className="pointer-events-none absolute -left-12 bottom-0 h-40 w-40 rounded-full bg-gradient-to-br from-sky-200/40 via-brand-300/30 to-emerald-200/40 blur-3xl" />
+            <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+              <div className="space-y-4">
+                <p className="text-sm font-semibold text-rose-600">Lifestyle Care Tracker</p>
+                <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">生活習慣病 継続分析</h1>
+                <p className="max-w-2xl text-sm leading-6 text-slate-600">
+                  傷病名CSV（主病）とカルテ集計CSVを組み合わせ、生活習慣病患者の継続受診状況をフォローアップ専用に可視化します。
+                  生活習慣病以外の集計は表示せず、フォロー対象患者の抽出と優先度判断に集中できるビューです。
+                </p>
+                {lifestyleAnalysis ? (
+                  <div className="rounded-2xl border border-emerald-200 bg-white/80 px-4 py-3 text-sm text-emerald-700 shadow-soft sm:px-5">
+                    <p className="text-sm font-semibold text-emerald-900">
+                      対象患者 {lifestyleAnalysis.totalPatients.toLocaleString("ja-JP")}名
+                    </p>
+                    <p className="mt-1 text-xs text-emerald-700">
+                      継続受診率 {formatPercentage(lifestyleAnalysis.continuationRate)} ・ 基準日{" "}
+                      {formatDateLabel(lifestyleAnalysis.baselineDateIso)}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-rose-200 bg-white/70 px-4 py-3 text-sm text-rose-600">
+                    主病CSVとカルテ集計CSVを取り込むと、生活習慣病患者の継続状況が表示されます。
+                  </div>
+                )}
+                {isReadOnly && (
+                  <p className="rounded-2xl border border-dashed border-rose-300 bg-white/80 px-4 py-3 text-sm font-medium text-rose-600">
+                    共有URLから閲覧中です。閲覧者が操作すると共有データにも反映されるため取り扱いにご注意ください。
+                  </p>
+                )}
+                {lastUpdated && (
+                  <p className="text-xs font-medium text-slate-500">
+                    カルテ集計 最終更新: {new Date(lastUpdated).toLocaleString("ja-JP")}
+                  </p>
+                )}
+              </div>
+              <div className="max-w-xs rounded-2xl border border-sky-200 bg-white/85 p-4 text-xs text-slate-600 shadow-soft">
+                <p className="font-semibold text-sky-700">フォローアップのヒント</p>
+                <ul className="mt-2 space-y-2">
+                  <li>・受診遅延（91〜180日）は電話/SMSでの早期フォローがおすすめです。</li>
+                  <li>・離脱リスク（181日以上）は服薬状況の確認や来院提案を重点的に行いましょう。</li>
+                  <li>・年齢層別の継続率を比較し、優先的に支援したい層を決めてください。</li>
                 </ul>
               </div>
-              {isReadOnly && (
-                <p className="rounded-2xl border border-dashed border-brand-300 bg-white/80 px-4 py-3 text-sm font-medium text-brand-700">
-                  共有URLから閲覧中です。閲覧者が操作すると共有データにも反映されるため取り扱いにご注意ください。
-                </p>
-              )}
-              {lastUpdated && (
-                <p className="text-xs font-medium text-slate-500">
-                  最終更新: {new Date(lastUpdated).toLocaleString("ja-JP")}
-                </p>
-              )}
             </div>
-            <p className="text-xs text-slate-500">
-              CSVのアップロードや共有はページ下部の「データ管理」セクションから操作できます。
-            </p>
-          </div>
-          {isLoadingShared && (
-            <div className="mt-6 rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3">
-              <p className="flex items-center gap-2 text-sm text-brand-700">
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                共有データを読み込んでいます...
+            {isLoadingShared && (
+              <div className="mt-6 rounded-2xl border border-rose-200 bg-white/80 px-4 py-3">
+                <p className="flex items-center gap-2 text-sm text-rose-600">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  共有データを読み込んでいます...
+                </p>
+              </div>
+            )}
+          </section>
+        ) : (
+          <section className="relative overflow-hidden rounded-3xl border border-brand-200 bg-gradient-to-r from-white via-brand-50 to-sky-50 p-8 shadow-card">
+            <div className="pointer-events-none absolute -right-12 top-0 h-44 w-44 rounded-full bg-gradient-to-br from-brand-200/60 via-emerald-200/40 to-sky-200/40 blur-3xl" />
+            <div className="pointer-events-none absolute -left-16 bottom-0 h-40 w-40 rounded-full bg-gradient-to-br from-accent-200/40 via-rose-200/30 to-white/0 blur-3xl" />
+            <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+              <div className="space-y-4">
+                <p className="text-sm font-semibold text-brand-600">Patient Insights Dashboard</p>
+                <h1 className="text-3xl font-bold text-slate-900 md:text-4xl">患者分析（カルテ集計）</h1>
+                <p className="max-w-2xl text-sm leading-6 text-slate-600">
+                  カルテ集計CSVをアップロードすると、月次の総患者・純初診・再初診・再診・平均年齢を自動で可視化します。
+                  共有URLを作成すれば、同じ集計結果を閲覧専用モードで院内共有できます。
+                </p>
+                <div className="rounded-2xl border border-emerald-200 bg-white/80 px-4 py-3 text-sm leading-relaxed text-emerald-700 shadow-soft sm:px-5">
+                  <p className="mb-2 text-sm font-semibold text-emerald-900">患者区分の見方</p>
+                  <ul className="space-y-1">
+                    <li>・<strong>純初診</strong> : 当院での受診が今回初めての患者様</li>
+                    <li>・<strong>再初診</strong> : 過去に受診歴はあるが、新たな症状で初診扱いの患者様</li>
+                    <li>・<strong>再診</strong> : 継続診療を目的とした患者様</li>
+                  </ul>
+                </div>
+                {isReadOnly && (
+                  <p className="rounded-2xl border border-dashed border-brand-300 bg-white/80 px-4 py-3 text-sm font-medium text-brand-700">
+                    共有URLから閲覧中です。閲覧者が操作すると共有データにも反映されるため取り扱いにご注意ください。
+                  </p>
+                )}
+                {lastUpdated && (
+                  <p className="text-xs font-medium text-slate-500">
+                    最終更新: {new Date(lastUpdated).toLocaleString("ja-JP")}
+                  </p>
+                )}
+              </div>
+              <p className="text-xs text-slate-500">
+                CSVのアップロードや共有はページ下部の「データ管理」セクションから操作できます。
               </p>
             </div>
-          )}
-        </section>
-
-        <section className="rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-soft">
-          {summaryHighlights.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-              {summaryHighlights.map((highlight) => (
-                <SummaryHighlightCard key={highlight.id} {...highlight} />
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-              CSVをアップロードすると期間サマリーが表示されます。
-            </div>
-          )}
-        </section>
+            {isLoadingShared && (
+              <div className="mt-6 rounded-2xl border border-brand-200 bg-white/80 px-4 py-3">
+                <p className="flex items-center gap-2 text-sm text-brand-700">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  共有データを読み込んでいます...
+                </p>
+              </div>
+            )}
+          </section>
+        )}
+        {!lifestyleOnly && (
+          <section className="rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-soft">
+            {summaryHighlights.length > 0 ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+                {summaryHighlights.map((highlight) => (
+                  <SummaryHighlightCard key={highlight.id} {...highlight} />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+                CSVをアップロードすると期間サマリーが表示されます。
+              </div>
+            )}
+          </section>
+        )}
 
         <PatientsFilterPortal
           allMonths={allAvailableMonths}
@@ -3270,6 +3308,8 @@ function PatientAnalysisPageContent() {
           openManagement={() => setIsManagementOpen(true)}
         />
 
+        {!lifestyleOnly && (
+          <>
         {stats.length > 0 ? (
           <>
             {latestStat && (
@@ -3487,6 +3527,8 @@ function PatientAnalysisPageContent() {
           </SectionCard>
         )}
 
+        {!lifestyleOnly && (
+          <>
         <SectionCard
           title="診療科別 平均単価（保険点数換算）"
           description="カルテ集計CSVの点数列を基に、指定科目の平均点数と保険点数×10円による概算単価を算出しています。"
@@ -3559,15 +3601,30 @@ function PatientAnalysisPageContent() {
                           const stat = row.stats[group.id];
                           return (
                             <Fragment key={`${row.key}-${group.id}`}>
-                              <td className="px-4 py-3 text-center text-slate-600">
-                                {stat.patientCount > 0
-                                  ? `${stat.patientCount.toLocaleString("ja-JP")}名`
-                                  : "—"}
+                              <td className="px-4 py-3 text-center">
+                                {stat.patientCount > 0 ? (
+                                  <span className="inline-flex items-center justify-center rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 shadow-sm">
+                                    {stat.patientCount.toLocaleString("ja-JP")}名
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )}
                               </td>
-                              <td className="px-4 py-3 text-center text-slate-600">
-                                {stat.averageAmount !== null
-                                  ? `¥${stat.averageAmount.toLocaleString("ja-JP")}`
-                                  : "—"}
+                              <td className="px-4 py-3 text-center">
+                                {stat.averageAmount !== null ? (
+                                  <span
+                                    className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-sm font-bold shadow-sm ${
+                                      row.maxAverageAmount !== null &&
+                                      stat.averageAmount === row.maxAverageAmount
+                                        ? "bg-gradient-to-r from-accent-500 via-rose-400 to-accent-600 text-white shadow-md shadow-rose-400/50"
+                                        : "bg-blue-50 text-blue-700"
+                                    }`}
+                                  >
+                                    ¥{stat.averageAmount.toLocaleString("ja-JP")}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )}
                               </td>
                             </Fragment>
                           );
@@ -3587,8 +3644,10 @@ function PatientAnalysisPageContent() {
             </p>
           )}
         </SectionCard>
+          </>
+        )}
 
-        {lifestyleOnly ? (
+        {lifestyleOnly && (
           <SectionCard
             title="生活習慣病 継続性分析"
             description="傷病名CSV（主病）とカルテ集計CSVを突合し、生活習慣病患者の受診継続性を評価しています。"
@@ -3743,78 +3802,6 @@ function PatientAnalysisPageContent() {
 
                 <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-slate-800">初診患者の継続状況</h3>
-                    <div className="text-xs text-slate-500">
-                      初診患者 {lifestyleAnalysis.initialStats.total.toLocaleString("ja-JP")}名 /
-                      継続受診率 {formatPercentage(lifestyleAnalysis.initialStats.continuationRate)} /
-                      初診後1回のみ {lifestyleAnalysis.initialStats.singleVisit.total.toLocaleString("ja-JP")}名
-                    </div>
-                  </div>
-                  <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                    <div>
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        来院回数別
-                      </h4>
-                      <table className="mt-2 w-full border-collapse text-sm">
-                        <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                          <tr>
-                            <th className="px-3 py-2 text-left font-semibold">区分</th>
-                            <th className="px-3 py-2 text-right font-semibold">人数</th>
-                            <th className="px-3 py-2 text-right font-semibold">構成比</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {lifestyleAnalysis.initialStats.visitBands.map((item) => (
-                            <tr key={item.id}>
-                              <td className="px-3 py-2 text-slate-700">{item.label}</td>
-                              <td className="px-3 py-2 text-right text-slate-600">
-                                {item.count.toLocaleString("ja-JP")}名
-                              </td>
-                              <td className="px-3 py-2 text-right text-slate-600">
-                                {formatPercentage(item.percentage)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        初診月別
-                      </h4>
-                      <table className="mt-2 w-full border-collapse text-sm">
-                        <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                          <tr>
-                            <th className="px-3 py-2 text-left font-semibold">月</th>
-                            <th className="px-3 py-2 text-right font-semibold">患者数</th>
-                            <th className="px-3 py-2 text-right font-semibold">平均来院回数</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {lifestyleAnalysis.initialStats.monthly.map((item) => (
-                            <tr key={item.month}>
-                              <td className="px-3 py-2 text-slate-700">{item.label}</td>
-                              <td className="px-3 py-2 text-right text-slate-600">
-                                {item.count.toLocaleString("ja-JP")}名
-                              </td>
-                              <td className="px-3 py-2 text-right text-slate-600">
-                                {item.averageVisits !== null
-                                  ? `${item.averageVisits.toLocaleString("ja-JP", {
-                                      minimumFractionDigits: 1,
-                                      maximumFractionDigits: 1,
-                                    })}回`
-                                  : "—"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
                     <h3 className="text-sm font-semibold text-slate-800">年齢別の離脱率</h3>
                     {lifestyleAnalysis.ageStats.ranking.length >= 2 && (
                       <div className="flex flex-wrap gap-2 text-xs">
@@ -3906,23 +3893,6 @@ function PatientAnalysisPageContent() {
                 生活習慣病の主病データとカルテ集計を取り込むと、継続状況が表示されます。
               </p>
             )}
-          </SectionCard>
-        ) : (
-          <SectionCard
-            title="生活習慣病 継続性分析"
-            description="生活習慣病患者の継続状況は専用ページで確認できます。"
-          >
-            <div className="flex flex-col items-start gap-3 rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft">
-              <p className="text-sm text-slate-600">
-                生活習慣病患者の継続受診率や年齢別傾向、疾患別の離脱状況を詳細に確認したい場合は、以下のボタンから専用ページをご覧ください。
-              </p>
-              <Link
-                href="/patients/lifestyle"
-                className="inline-flex items-center gap-2 rounded-full bg-brand-500 px-5 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-brand-600"
-              >
-                生活習慣病 継続分析ページを開く
-              </Link>
-            </div>
           </SectionCard>
         )}
 
@@ -4543,6 +4513,8 @@ function PatientAnalysisPageContent() {
             </>
           )}
         </SectionCard>
+          </>
+        )}
 
           </div>
           {isManagementOpen && (
@@ -4619,11 +4591,16 @@ function PatientAnalysisPageContent() {
                   </div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
-                  <p className="text-xs font-semibold text-slate-700">その他のデータ管理</p>
+                  <p className="text-xs font-semibold text-slate-700">
+                    {lifestyleOnly ? "生活習慣病関連データ" : "その他のデータ管理"}
+                  </p>
                   <p className="text-[11px] text-slate-500">
-                    以下でアップロードすると予約ログ・アンケート・広告の各ページへ即時反映されます。
+                    {lifestyleOnly
+                      ? "主病CSVを更新すると生活習慣病ビューに即時反映されます。"
+                      : "以下でアップロードすると予約ログ・アンケート・広告の各ページへ即時反映されます。"}
                   </p>
                   <div className="mt-3 grid gap-3">
+                    {!lifestyleOnly && (
                     <div className="rounded-2xl border border-brand-200 bg-white/90 p-4 space-y-3">
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -4664,6 +4641,8 @@ function PatientAnalysisPageContent() {
                         </p>
                       )}
                     </div>
+                    )}
+                    {!lifestyleOnly && (
                     <div className="rounded-2xl border border-purple-200 bg-white/90 p-4 space-y-3">
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -4708,6 +4687,7 @@ function PatientAnalysisPageContent() {
                         </p>
                       )}
                     </div>
+                    )}
                     <div className="rounded-2xl border border-amber-200 bg-white/90 p-4 space-y-3">
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -4766,6 +4746,7 @@ function PatientAnalysisPageContent() {
                         </p>
                       )}
                     </div>
+                    {!lifestyleOnly && (
                     <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 space-y-3">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
@@ -4822,6 +4803,7 @@ function PatientAnalysisPageContent() {
                         </p>
                       )}
                     </div>
+                    )}
                   </div>
                 </div>
                 {shareUrl && (
