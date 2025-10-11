@@ -9,8 +9,8 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  type TooltipPayload,
 } from "recharts";
+import type { DefaultTooltipPayload } from "recharts/types/component/DefaultTooltipContent";
 import type { KarteRecordWithCategory } from "@/lib/karteAnalytics";
 
 type WeekdayAverageChartProps = {
@@ -153,7 +153,7 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
           />
           <Tooltip
             formatter={(value: number, name: string) => [`${value}人`, name]}
-            itemSorter={(item: TooltipPayload) =>
+            itemSorter={(item: DefaultTooltipPayload) =>
               seriesOrder.indexOf((item.name as DepartmentGroup) ?? seriesOrder[0])}
           />
           <Legend
