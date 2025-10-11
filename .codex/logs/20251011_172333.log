@@ -1,0 +1,10 @@
+timestamp: 2025-10-11 17:23:33 JST
+branch: main
+commit: 92ff348838f86bb6e0160eebe68bbe0b70c8603d
+summary: enhance day-type reservation breakdown visuals
+changes:
+  - src/app/reservations/page.tsx (add shared stats, chips, and highlight for top-performing day types)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (success)
