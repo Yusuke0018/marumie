@@ -148,6 +148,41 @@ const normalizeDiseaseName = (value: string | undefined): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const sanitizeIdPart = (value: string | null | undefined): string =>
+  value ? value.replace(/\|/g, "").trim() : "";
+
+const createDiagnosisBaseKeyFromParts = (
+  department: string,
+  monthKey: string,
+  diseaseName: string,
+  startDate: string,
+  patientNumber: string | null,
+  patientNameNormalized: string | null,
+  birthDateIso: string | null,
+): string =>
+  [
+    department,
+    monthKey,
+    diseaseName,
+    startDate,
+    patientNumber ?? "",
+    patientNameNormalized ?? "",
+    birthDateIso ?? "",
+  ]
+    .map(sanitizeIdPart)
+    .join("|");
+
+const createDiagnosisBaseKeyFromRecord = (record: DiagnosisRecord): string =>
+  createDiagnosisBaseKeyFromParts(
+    record.department,
+    record.monthKey,
+    record.diseaseName,
+    record.startDate,
+    record.patientNumber ?? null,
+    record.patientNameNormalized ?? null,
+    record.birthDateIso ?? null,
+  );
+
 const normalizePatientNumber = (value: string | undefined): string | null => {
   if (!value) {
     return null;
@@ -281,13 +316,6 @@ export const parseDiagnosisCsv = (content: string): DiagnosisRecord[] => {
   const results: DiagnosisRecord[] = [];
   const occurrenceCounter = new Map<string, number>();
 
-  const sanitizeKeyPart = (value: string | null | undefined): string => {
-    if (!value) {
-      return "";
-    }
-    return value.replace(/\|/g, "").trim();
-  };
-
   parsed.data.forEach((row) => {
     const mainFlag = (row["主病"] ?? "").trim();
     if (mainFlag !== "主病") {
@@ -314,23 +342,20 @@ export const parseDiagnosisCsv = (content: string): DiagnosisRecord[] => {
     const patientNameNormalizedRaw = normalizePatientName(
       row["患者氏名"] ?? row["患者名"] ?? row["患者"] ?? row["氏名"],
     );
-    const patientNameKeyPart = sanitizeKeyPart(patientNameNormalizedRaw);
     const birthDateIso = parseDate(row["患者生年月日"]);
     const monthKey = toMonthKey(startDate);
-    const signatureParts = [
+    const baseKey = createDiagnosisBaseKeyFromParts(
       department,
       monthKey,
       diseaseName,
       startDate,
-      patientNumber ?? "",
-      patientNameKeyPart,
-      birthDateIso ?? "",
-    ]
-      .map((part) => sanitizeKeyPart(part))
-      .join("|");
-    const occurrence = occurrenceCounter.get(signatureParts) ?? 0;
-    occurrenceCounter.set(signatureParts, occurrence + 1);
-    const recordId = `${signatureParts}|occ:${occurrence}`;
+      patientNumber ?? null,
+      patientNameNormalizedRaw,
+      birthDateIso,
+    );
+    const occurrence = occurrenceCounter.get(baseKey) ?? 0;
+    occurrenceCounter.set(baseKey, occurrence + 1);
+    const recordId = `${baseKey}|occ:${occurrence}`;
 
     results.push({
       id: recordId,
@@ -352,14 +377,23 @@ export const mergeDiagnosisRecords = (
   existing: DiagnosisRecord[],
   incoming: DiagnosisRecord[],
 ): DiagnosisRecord[] => {
-  const map = new Map<string, DiagnosisRecord>();
-  for (const record of existing) {
-    map.set(record.id, record);
-  }
-  for (const record of incoming) {
-    map.set(record.id, record);
-  }
-  return Array.from(map.values()).sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const baseCounter = new Map<string, number>();
+  const combined: DiagnosisRecord[] = [];
+
+  const pushWithAssignedId = (record: DiagnosisRecord) => {
+    const baseKey = createDiagnosisBaseKeyFromRecord(record);
+    const occurrence = baseCounter.get(baseKey) ?? 0;
+    baseCounter.set(baseKey, occurrence + 1);
+    combined.push({
+      ...record,
+      id: `${baseKey}|occ:${occurrence}`,
+    });
+  };
+
+  existing.forEach(pushWithAssignedId);
+  incoming.forEach(pushWithAssignedId);
+
+  return combined.sort((a, b) => a.startDate.localeCompare(b.startDate));
 };
 
 export const loadDiagnosisFromStorage = (): DiagnosisRecord[] => {
