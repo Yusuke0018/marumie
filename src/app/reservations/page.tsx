@@ -10,6 +10,7 @@ import {
   Suspense,
   useRef,
 } from "react";
+import { inflate } from "pako";
 import { RefreshCw, Share2, Link as LinkIcon } from "lucide-react";
 import { uploadDataToR2, fetchDataFromR2 } from "@/lib/dataShare";
 import { getDayType, getWeekdayName } from "@/lib/dateUtils";
@@ -684,21 +685,50 @@ export default function HomePage() {
       };
 
       const applyRawPayload = (rawData: string, uploadedAt?: string) => {
-        const tryParse = (text: string): unknown | null => {
+        const decodeToJson = (text: string): unknown | null => {
           try {
             return JSON.parse(text);
-          } catch {
+          } catch (error) {
+            void error;
             return null;
           }
         };
 
-        let parsed: unknown = tryParse(rawData);
-        if (!parsed) {
-          const decoded = decodeFromShare(rawData);
-          if (decoded) {
-            parsed = tryParse(decoded);
+        const tryDecode = (input: string): unknown | null => {
+          let parsed = decodeToJson(input);
+          if (parsed) {
+            return parsed;
           }
-        }
+
+          const base64Decoded = decodeFromShare(input);
+          if (base64Decoded) {
+            parsed = decodeToJson(base64Decoded);
+            if (parsed) {
+              return parsed;
+            }
+
+            if (typeof window !== "undefined") {
+              try {
+                const binary = window.atob(input);
+                const bytes = new Uint8Array(binary.length);
+                for (let index = 0; index < binary.length; index += 1) {
+                  bytes[index] = binary.charCodeAt(index);
+                }
+                const inflated = inflate(bytes, { to: "string" }) as string;
+                const jsonFromInflated = decodeToJson(inflated);
+                if (jsonFromInflated) {
+                  return jsonFromInflated;
+                }
+              } catch (error) {
+                console.warn("共有データの展開に失敗しました", error);
+              }
+            }
+          }
+
+          return null;
+        };
+
+        const parsed = tryDecode(rawData);
         if (!parsed) {
           return false;
         }
