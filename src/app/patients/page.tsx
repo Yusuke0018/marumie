@@ -754,6 +754,83 @@ const UNIT_PRICE_GROUPS: Array<{
   },
 ];
 
+type LifestyleDiseaseType = "hypertension" | "diabetes" | "lipid" | "multiple";
+
+const LIFESTYLE_DISEASE_TYPES: Array<{ id: LifestyleDiseaseType; label: string }> = [
+  { id: "hypertension", label: "高血圧" },
+  { id: "diabetes", label: "糖尿病" },
+  { id: "lipid", label: "脂質異常症" },
+  { id: "multiple", label: "複数疾患/その他" },
+];
+
+const LIFESTYLE_DISEASE_LABEL_MAP = new Map(
+  LIFESTYLE_DISEASE_TYPES.map((item) => [item.id, item.label]),
+);
+
+type LifestyleStatus = "regular" | "delayed" | "atRisk";
+
+const LIFESTYLE_STATUS_ORDER: LifestyleStatus[] = ["regular", "delayed", "atRisk"];
+
+const LIFESTYLE_STATUS_CONFIG: Record<
+  LifestyleStatus,
+  { label: string; description: string; badge: string }
+> = {
+  regular: {
+    label: "定期受診中",
+    description: "最終来院から90日以内",
+    badge: "bg-emerald-50 text-emerald-600",
+  },
+  delayed: {
+    label: "受診遅延",
+    description: "最終来院から91〜180日",
+    badge: "bg-amber-50 text-amber-600",
+  },
+  atRisk: {
+    label: "離脱リスク",
+    description: "最終来院から181日以上",
+    badge: "bg-rose-50 text-rose-600",
+  },
+};
+
+type RangeBucket = { id: string; label: string; min: number; max: number };
+
+const LIFESTYLE_DAYS_BUCKETS: RangeBucket[] = [
+  { id: "0-30", label: "0-30日", min: 0, max: 30 },
+  { id: "31-60", label: "31-60日", min: 31, max: 60 },
+  { id: "61-90", label: "61-90日", min: 61, max: 90 },
+  { id: "91-120", label: "91-120日", min: 91, max: 120 },
+  { id: "121-150", label: "121-150日", min: 121, max: 150 },
+  { id: "151-180", label: "151-180日", min: 151, max: 180 },
+  { id: "181-240", label: "181-240日", min: 181, max: 240 },
+  { id: "241+", label: "241日以上", min: 241, max: Number.POSITIVE_INFINITY },
+];
+
+const LIFESTYLE_VISIT_BUCKETS: RangeBucket[] = [
+  { id: "1-3", label: "1-3回", min: 1, max: 3 },
+  { id: "4-6", label: "4-6回", min: 4, max: 6 },
+  { id: "7-9", label: "7-9回", min: 7, max: 9 },
+  { id: "10-12", label: "10-12回", min: 10, max: 12 },
+  { id: "13+", label: "13回以上", min: 13, max: Number.POSITIVE_INFINITY },
+];
+
+const LIFESTYLE_INITIAL_VISIT_BUCKETS: RangeBucket[] = [
+  { id: "1", label: "1回のみ", min: 1, max: 1 },
+  { id: "2-3", label: "2-3回", min: 2, max: 3 },
+  { id: "4-6", label: "4-6回", min: 4, max: 6 },
+  { id: "7+", label: "7回以上", min: 7, max: Number.POSITIVE_INFINITY },
+];
+
+type AgeGroupId = "20-39" | "40-49" | "50-59" | "60-69" | "70-79" | "80+";
+
+const LIFESTYLE_AGE_GROUPS: Array<{ id: AgeGroupId; label: string; min: number; max: number }> = [
+  { id: "20-39", label: "20-39歳", min: 20, max: 39 },
+  { id: "40-49", label: "40-49歳", min: 40, max: 49 },
+  { id: "50-59", label: "50-59歳", min: 50, max: 59 },
+  { id: "60-69", label: "60-69歳", min: 60, max: 69 },
+  { id: "70-79", label: "70-79歳", min: 70, max: 79 },
+  { id: "80+", label: "80歳以上", min: 80, max: 150 },
+];
+
 const UNIT_PRICE_WEEKDAY_DEFINITIONS = [
   { key: "mon", label: "月曜", weekdayIndex: 1 },
   { key: "tue", label: "火曜", weekdayIndex: 2 },
@@ -789,6 +866,142 @@ const getWeekdayKeyFromDate = (dateIso: string): UnitPriceWeekdayKey => {
     default:
       return "sat";
   }
+};
+
+const normalizeLifestyleName = (value: string) =>
+  value.replace(/\s+/g, "").toLowerCase();
+
+const includesAnyKeyword = (normalized: string, keywords: string[]) =>
+  keywords.some((keyword) => normalized.includes(keyword));
+
+const determineLifestyleDiseaseTypes = (diseaseNames: Set<string>) => {
+  const types = new Set<Exclude<LifestyleDiseaseType, "multiple">>();
+  for (const name of diseaseNames) {
+    const normalized = normalizeLifestyleName(name);
+    if (includesAnyKeyword(normalized, ["高血圧"])) {
+      types.add("hypertension");
+    }
+    if (includesAnyKeyword(normalized, ["糖尿病"])) {
+      types.add("diabetes");
+    }
+    if (
+      includesAnyKeyword(normalized, [
+        "脂質異常",
+        "ｺﾚｽﾃﾛｰﾙ",
+        "コレステロール",
+        "高脂血症",
+      ])
+    ) {
+      types.add("lipid");
+    }
+  }
+  return types;
+};
+
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+const differenceInDays = (baseIso: string, targetIso: string) => {
+  const base = new Date(`${baseIso}T00:00:00`);
+  const target = new Date(`${targetIso}T00:00:00`);
+  if (Number.isNaN(base.getTime()) || Number.isNaN(target.getTime())) {
+    return null;
+  }
+  const diff = Math.floor((base.getTime() - target.getTime()) / MS_PER_DAY);
+  return diff < 0 ? 0 : diff;
+};
+
+const selectLifestyleStatus = (daysSinceLast: number | null): LifestyleStatus | null => {
+  if (daysSinceLast === null) {
+    return null;
+  }
+  if (daysSinceLast <= 90) {
+    return "regular";
+  }
+  if (daysSinceLast <= 180) {
+    return "delayed";
+  }
+  return "atRisk";
+};
+
+const formatDateLabel = (iso: string) => {
+  const [year, month, day] = iso.split("-");
+  if (!year || !month || !day) {
+    return iso;
+  }
+  return `${year}/${month}/${day}`;
+};
+
+const formatPercentage = (value: number | null | undefined) => {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "—";
+  }
+  return `${value.toLocaleString("ja-JP", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })}%`;
+};
+
+type LifestylePatientSummary = {
+  patientNumber: string;
+  patientName: string | null;
+  diseaseType: LifestyleDiseaseType;
+  diseaseLabels: string[];
+  diseaseNames: string[];
+  firstVisitDate: string;
+  lastVisitDate: string;
+  firstVisitMonth: string;
+  firstVisitType: string | null;
+  visitCount: number;
+  status: LifestyleStatus;
+  daysSinceLast: number;
+  age: number | null;
+};
+
+type LifestyleDistributionItem = {
+  id: string;
+  label: string;
+  count: number;
+  percentage: number;
+};
+
+type LifestyleAnalysisResult = {
+  totalPatients: number;
+  rangeStartIso: string;
+  baselineDateIso: string;
+  patients: LifestylePatientSummary[];
+  statusCounts: Record<LifestyleStatus, number>;
+  continuationRate: number;
+  daysDistribution: LifestyleDistributionItem[];
+  visitDistribution: LifestyleDistributionItem[];
+  diseaseStats: Array<{
+    id: LifestyleDiseaseType;
+    label: string;
+    total: number;
+    statusCounts: Record<LifestyleStatus, number>;
+    rates: Record<LifestyleStatus, number>;
+    averageVisits: number | null;
+  }>;
+  initialStats: {
+    total: number;
+    statusCounts: Record<LifestyleStatus, number>;
+    continuationRate: number;
+    visitBands: LifestyleDistributionItem[];
+    monthly: Array<{ month: string; label: string; count: number; averageVisits: number | null }>;
+    singleVisit: { total: number; list: LifestylePatientSummary[] };
+  };
+  ageStats: {
+    groups: Array<{
+      id: AgeGroupId;
+      label: string;
+      count: number;
+      statusCounts: Record<LifestyleStatus, number>;
+      rates: Record<LifestyleStatus, number>;
+      averageVisits: number | null;
+    }>;
+    ranking: Array<{ label: string; continuationRate: number; count: number }>;
+  };
+  delayedPatients: { total: number; list: LifestylePatientSummary[] };
+  atRiskPatients: { total: number; list: LifestylePatientSummary[]; highEngagement: number };
 };
 
 const normalizePatientName = (value: string | null | undefined): string | null => {
@@ -1802,6 +2015,397 @@ export default function PatientAnalysisPage() {
     selectedShiftDepartment && shiftAnalysis.byDepartment.has(selectedShiftDepartment)
       ? shiftAnalysis.byDepartment.get(selectedShiftDepartment)!
       : [];
+
+  const lifestyleAnalysis = useMemo<LifestyleAnalysisResult | null>(() => {
+    if (diagnosisRecords.length === 0 || classifiedRecords.length === 0) {
+      return null;
+    }
+
+    const patientDiseaseMap = new Map<string, { diseaseNames: Set<string> }>();
+
+    for (const record of diagnosisRecords) {
+      if (record.category !== "生活習慣病") {
+        continue;
+      }
+      if (!record.patientNumber) {
+        continue;
+      }
+      const key = record.patientNumber;
+      if (!patientDiseaseMap.has(key)) {
+        patientDiseaseMap.set(key, { diseaseNames: new Set<string>() });
+      }
+      patientDiseaseMap.get(key)!.diseaseNames.add(record.diseaseName);
+    }
+
+    if (patientDiseaseMap.size === 0) {
+      return null;
+    }
+
+    const sourceRecords = classifiedRecords.filter((record) => record.monthKey >= KARTE_MIN_MONTH);
+    if (sourceRecords.length === 0) {
+      return null;
+    }
+
+    let baselineDateIso = sourceRecords[0].dateIso;
+    let rangeStartIso = sourceRecords[0].dateIso;
+
+    const patientVisitMap = new Map<
+      string,
+      {
+        entries: KarteRecordWithCategory[];
+        visitDates: Set<string>;
+        birthDateIso: string | null;
+        patientName: string | null;
+      }
+    >();
+
+    for (const record of sourceRecords) {
+      if (record.dateIso > baselineDateIso) {
+        baselineDateIso = record.dateIso;
+      }
+      if (record.dateIso < rangeStartIso) {
+        rangeStartIso = record.dateIso;
+      }
+      if (record.patientNumber === null) {
+        continue;
+      }
+      const patientNumber = String(record.patientNumber);
+      if (!patientDiseaseMap.has(patientNumber)) {
+        continue;
+      }
+      if (!patientVisitMap.has(patientNumber)) {
+        patientVisitMap.set(patientNumber, {
+          entries: [],
+          visitDates: new Set<string>(),
+          birthDateIso: null,
+          patientName: null,
+        });
+      }
+      const slot = patientVisitMap.get(patientNumber)!;
+      slot.entries.push(record);
+      slot.visitDates.add(record.dateIso);
+      if (!slot.birthDateIso && record.birthDateIso) {
+        slot.birthDateIso = record.birthDateIso;
+      }
+      if (!slot.patientName && record.patientNameNormalized) {
+        slot.patientName = record.patientNameNormalized;
+      }
+    }
+
+    const patients: LifestylePatientSummary[] = [];
+
+    patientVisitMap.forEach((slot, patientNumber) => {
+      const diseaseMeta = patientDiseaseMap.get(patientNumber);
+      if (!diseaseMeta) {
+        return;
+      }
+      if (slot.visitDates.size === 0) {
+        return;
+      }
+
+      const diseaseNames = diseaseMeta.diseaseNames;
+      const baseTypes = determineLifestyleDiseaseTypes(diseaseNames);
+      const diseaseType: LifestyleDiseaseType =
+        baseTypes.size === 0
+          ? "multiple"
+          : baseTypes.size >= 2
+            ? "multiple"
+            : baseTypes.values().next().value;
+
+      const labelCandidates =
+        diseaseType === "multiple"
+          ? Array.from(baseTypes).map(
+              (type) => LIFESTYLE_DISEASE_LABEL_MAP.get(type) ?? "",
+            )
+          : [LIFESTYLE_DISEASE_LABEL_MAP.get(diseaseType) ?? ""];
+
+      const diseaseLabels =
+        diseaseType === "multiple" && baseTypes.size === 0
+          ? ["その他"]
+          : labelCandidates.filter((label) => label.length > 0);
+
+      const visitDates = Array.from(slot.visitDates).sort((a, b) => a.localeCompare(b));
+      const firstVisitDate = visitDates[0];
+      const lastVisitDate = visitDates[visitDates.length - 1];
+      const daysSinceLast = differenceInDays(baselineDateIso, lastVisitDate);
+      const status = selectLifestyleStatus(daysSinceLast);
+      if (!status) {
+        return;
+      }
+
+      const sortedEntries = [...slot.entries].sort((a, b) => {
+        const diff = a.dateIso.localeCompare(b.dateIso);
+        if (diff !== 0) {
+          return diff;
+        }
+        return (a.department ?? "").localeCompare(b.department ?? "", "ja");
+      });
+      const firstVisitEntries = sortedEntries.filter((entry) => entry.dateIso === firstVisitDate);
+      const firstEntry =
+        firstVisitEntries.find((entry) => entry.visitType === "初診") ?? firstVisitEntries[0] ?? null;
+      const firstVisitType = firstEntry?.visitType ?? null;
+
+      const age = calculateAge(slot.birthDateIso ?? null, baselineDateIso);
+
+      patients.push({
+        patientNumber,
+        patientName: slot.patientName,
+        diseaseType,
+        diseaseLabels,
+        diseaseNames: Array.from(diseaseNames),
+        firstVisitDate,
+        lastVisitDate,
+        firstVisitMonth: firstVisitDate.slice(0, 7),
+        firstVisitType,
+        visitCount: visitDates.length,
+        status,
+        daysSinceLast: daysSinceLast ?? 0,
+        age,
+      });
+    });
+
+    if (patients.length === 0) {
+      return null;
+    }
+
+    const totalPatients = patients.length;
+    const statusCounts: Record<LifestyleStatus, number> = {
+      regular: 0,
+      delayed: 0,
+      atRisk: 0,
+    };
+    patients.forEach((patient) => {
+      statusCounts[patient.status] += 1;
+    });
+
+    const continuationRate =
+      totalPatients > 0 ? roundTo1Decimal((statusCounts.regular / totalPatients) * 100) : 0;
+
+    const daysDistribution: LifestyleDistributionItem[] = LIFESTYLE_DAYS_BUCKETS.map((bucket) => {
+      const count = patients.filter((patient) => {
+        if (bucket.max === Number.POSITIVE_INFINITY) {
+          return patient.daysSinceLast >= bucket.min;
+        }
+        return patient.daysSinceLast >= bucket.min && patient.daysSinceLast <= bucket.max;
+      }).length;
+      return {
+        id: bucket.id,
+        label: bucket.label,
+        count,
+        percentage:
+          totalPatients > 0 ? roundTo1Decimal((count / totalPatients) * 100) : 0,
+      };
+    });
+
+    const visitDistribution: LifestyleDistributionItem[] = LIFESTYLE_VISIT_BUCKETS.map(
+      (bucket) => {
+        const count = patients.filter((patient) => {
+          if (bucket.max === Number.POSITIVE_INFINITY) {
+            return patient.visitCount >= bucket.min;
+          }
+          return patient.visitCount >= bucket.min && patient.visitCount <= bucket.max;
+        }).length;
+        return {
+          id: bucket.id,
+          label: bucket.label,
+          count,
+          percentage:
+            totalPatients > 0 ? roundTo1Decimal((count / totalPatients) * 100) : 0,
+        };
+      },
+    );
+
+    const diseaseStats = LIFESTYLE_DISEASE_TYPES.map(({ id, label }) => {
+      const groupPatients = patients.filter((patient) =>
+        id === "multiple" ? patient.diseaseType === "multiple" : patient.diseaseType === id,
+      );
+      const groupTotal = groupPatients.length;
+      const groupStatus: Record<LifestyleStatus, number> = {
+        regular: 0,
+        delayed: 0,
+        atRisk: 0,
+      };
+      let visitSum = 0;
+      groupPatients.forEach((patient) => {
+        groupStatus[patient.status] += 1;
+        visitSum += patient.visitCount;
+      });
+      const rates: Record<LifestyleStatus, number> = {
+        regular:
+          groupTotal > 0 ? roundTo1Decimal((groupStatus.regular / groupTotal) * 100) : 0,
+        delayed:
+          groupTotal > 0 ? roundTo1Decimal((groupStatus.delayed / groupTotal) * 100) : 0,
+        atRisk:
+          groupTotal > 0 ? roundTo1Decimal((groupStatus.atRisk / groupTotal) * 100) : 0,
+      };
+      const averageVisits =
+        groupTotal > 0 ? roundTo1Decimal(visitSum / groupTotal) : null;
+      return {
+        id,
+        label,
+        total: groupTotal,
+        statusCounts: groupStatus,
+        rates,
+        averageVisits,
+      };
+    });
+
+    const initialPatients = patients.filter((patient) => patient.firstVisitType === "初診");
+    const initialStatusCounts: Record<LifestyleStatus, number> = {
+      regular: 0,
+      delayed: 0,
+      atRisk: 0,
+    };
+    initialPatients.forEach((patient) => {
+      initialStatusCounts[patient.status] += 1;
+    });
+    const initialVisitBands: LifestyleDistributionItem[] =
+      LIFESTYLE_INITIAL_VISIT_BUCKETS.map((bucket) => {
+        const count = initialPatients.filter((patient) => {
+          if (bucket.max === Number.POSITIVE_INFINITY) {
+            return patient.visitCount >= bucket.min;
+          }
+          return patient.visitCount >= bucket.min && patient.visitCount <= bucket.max;
+        }).length;
+        return {
+          id: bucket.id,
+          label: bucket.label,
+          count,
+          percentage:
+            initialPatients.length > 0
+              ? roundTo1Decimal((count / initialPatients.length) * 100)
+              : 0,
+        };
+      });
+
+    const initialMonthlyMap = new Map<
+      string,
+      { count: number; totalVisits: number }
+    >();
+    initialPatients.forEach((patient) => {
+      const month = patient.firstVisitMonth;
+      if (!initialMonthlyMap.has(month)) {
+        initialMonthlyMap.set(month, { count: 0, totalVisits: 0 });
+      }
+      const bucket = initialMonthlyMap.get(month)!;
+      bucket.count += 1;
+      bucket.totalVisits += patient.visitCount;
+    });
+    const initialMonthly = Array.from(initialMonthlyMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([month, bucket]) => ({
+        month,
+        label: formatMonthLabel(month),
+        count: bucket.count,
+        averageVisits:
+          bucket.count > 0 ? roundTo1Decimal(bucket.totalVisits / bucket.count) : null,
+      }));
+
+    const singleVisitInitialPatients = initialPatients
+      .filter((patient) => patient.visitCount === 1)
+      .sort((a, b) => b.firstVisitDate.localeCompare(a.firstVisitDate));
+    const initialSingleVisitList = singleVisitInitialPatients.slice(0, 10);
+
+    const initialContinuationRate =
+      initialPatients.length > 0
+        ? roundTo1Decimal((initialStatusCounts.regular / initialPatients.length) * 100)
+        : 0;
+
+    const ageGroupSummaries = LIFESTYLE_AGE_GROUPS.map((group) => {
+      const groupPatients = patients.filter((patient) => {
+        if (patient.age === null) {
+          return false;
+        }
+        return patient.age >= group.min && patient.age <= group.max;
+      });
+      const groupCount = groupPatients.length;
+      const groupStatus: Record<LifestyleStatus, number> = {
+        regular: 0,
+        delayed: 0,
+        atRisk: 0,
+      };
+      let visits = 0;
+      groupPatients.forEach((patient) => {
+        groupStatus[patient.status] += 1;
+        visits += patient.visitCount;
+      });
+      const rates: Record<LifestyleStatus, number> = {
+        regular:
+          groupCount > 0 ? roundTo1Decimal((groupStatus.regular / groupCount) * 100) : 0,
+        delayed:
+          groupCount > 0 ? roundTo1Decimal((groupStatus.delayed / groupCount) * 100) : 0,
+        atRisk:
+          groupCount > 0 ? roundTo1Decimal((groupStatus.atRisk / groupCount) * 100) : 0,
+      };
+      return {
+        id: group.id,
+        label: group.label,
+        count: groupCount,
+        statusCounts: groupStatus,
+        rates,
+        averageVisits: groupCount > 0 ? roundTo1Decimal(visits / groupCount) : null,
+      };
+    });
+
+    const ageRanking = ageGroupSummaries
+      .filter((group) => group.count > 0)
+      .map((group) => ({
+        label: group.label,
+        continuationRate: group.rates.regular,
+        count: group.count,
+      }))
+      .sort(
+        (a, b) =>
+          b.continuationRate - a.continuationRate ||
+          b.count - a.count,
+      );
+
+    const delayedPatientsAll = patients
+      .filter((patient) => patient.status === "delayed")
+      .sort((a, b) => b.lastVisitDate.localeCompare(a.lastVisitDate));
+    const delayedPatients = {
+      total: delayedPatientsAll.length,
+      list: delayedPatientsAll.slice(0, 30),
+    };
+
+    const atRiskPatientsAll = patients
+      .filter((patient) => patient.status === "atRisk")
+      .sort((a, b) => b.lastVisitDate.localeCompare(a.lastVisitDate));
+    const atRiskPatients = {
+      total: atRiskPatientsAll.length,
+      list: atRiskPatientsAll.slice(0, 30),
+      highEngagement: atRiskPatientsAll.filter((patient) => patient.visitCount >= 4).length,
+    };
+
+    return {
+      totalPatients,
+      rangeStartIso,
+      baselineDateIso,
+      patients,
+      statusCounts,
+      continuationRate,
+      daysDistribution,
+      visitDistribution,
+      diseaseStats,
+      initialStats: {
+        total: initialPatients.length,
+        statusCounts: initialStatusCounts,
+        continuationRate: initialContinuationRate,
+        visitBands: initialVisitBands,
+        monthly: initialMonthly,
+        singleVisit: {
+          total: singleVisitInitialPatients.length,
+          list: initialSingleVisitList,
+        },
+      },
+      ageStats: {
+        groups: ageGroupSummaries,
+        ranking: ageRanking,
+      },
+      delayedPatients,
+      atRiskPatients,
+    };
+  }, [diagnosisRecords, classifiedRecords]);
 
   const filteredDiagnosisRecords = useMemo(() => {
     if (diagnosisRecords.length === 0) {
@@ -2910,6 +3514,444 @@ export default function PatientAnalysisPage() {
           ) : (
             <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
               該当期間に保険点数が登録された診療データがありません。カルテ集計CSVの点数列をご確認ください。
+            </p>
+          )}
+        </SectionCard>
+
+        <SectionCard
+          title="生活習慣病 継続性分析"
+          description="傷病名CSV（主病）とカルテ集計CSVを突合し、生活習慣病患者の受診継続性を評価しています。"
+        >
+          {lifestyleAnalysis ? (
+            <div className="space-y-6">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="text-xs font-semibold text-emerald-700">生活習慣病患者数</p>
+                  <p className="mt-2 text-2xl font-bold text-emerald-900">
+                    {lifestyleAnalysis.totalPatients.toLocaleString("ja-JP")}名
+                  </p>
+                  <p className="mt-2 text-xs text-emerald-700">
+                    継続受診率 {formatPercentage(lifestyleAnalysis.continuationRate)}
+                  </p>
+                </div>
+                {LIFESTYLE_STATUS_ORDER.map((status) => {
+                  const config = LIFESTYLE_STATUS_CONFIG[status];
+                  const count = lifestyleAnalysis.statusCounts[status];
+                  const percentage =
+                    lifestyleAnalysis.totalPatients > 0
+                      ? roundTo1Decimal((count / lifestyleAnalysis.totalPatients) * 100)
+                      : 0;
+                  return (
+                    <div
+                      key={status}
+                      className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft"
+                    >
+                      <span
+                        className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${config.badge}`}
+                      >
+                        {config.label}
+                      </span>
+                      <p className="mt-3 text-2xl font-bold text-slate-900">
+                        {count.toLocaleString("ja-JP")}名
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {config.description}（{formatPercentage(percentage)}）
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+                データ期間: {formatDateLabel(lifestyleAnalysis.rangeStartIso)}〜
+                {formatDateLabel(lifestyleAnalysis.baselineDateIso)}（基準日:
+                {formatDateLabel(lifestyleAnalysis.baselineDateIso)}）。最終来院からの経過日数は基準日までの差分で計算しています。
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
+                  <h3 className="text-sm font-semibold text-slate-800">最終来院からの経過日数</h3>
+                  <table className="mt-3 w-full border-collapse text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold">区分</th>
+                        <th className="px-3 py-2 text-right font-semibold">人数</th>
+                        <th className="px-3 py-2 text-right font-semibold">構成比</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {lifestyleAnalysis.daysDistribution.map((item) => (
+                        <tr key={item.id} className="bg-white">
+                          <td className="px-3 py-2 text-slate-700">{item.label}</td>
+                          <td className="px-3 py-2 text-right text-slate-600">
+                            {item.count.toLocaleString("ja-JP")}名
+                          </td>
+                          <td className="px-3 py-2 text-right text-slate-600">
+                            {formatPercentage(item.percentage)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
+                  <h3 className="text-sm font-semibold text-slate-800">来院回数の分布</h3>
+                  <table className="mt-3 w-full border-collapse text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold">回数</th>
+                        <th className="px-3 py-2 text-right font-semibold">人数</th>
+                        <th className="px-3 py-2 text-right font-semibold">構成比</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {lifestyleAnalysis.visitDistribution.map((item) => (
+                        <tr key={item.id} className="bg-white">
+                          <td className="px-3 py-2 text-slate-700">{item.label}</td>
+                          <td className="px-3 py-2 text-right text-slate-600">
+                            {item.count.toLocaleString("ja-JP")}名
+                          </td>
+                          <td className="px-3 py-2 text-right text-slate-600">
+                            {formatPercentage(item.percentage)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
+                <h3 className="text-sm font-semibold text-slate-800">疾患別の継続状況</h3>
+                <table className="mt-3 w-full border-collapse text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold">疾患カテゴリ</th>
+                      <th className="px-3 py-2 text-right font-semibold">患者数</th>
+                      <th className="px-3 py-2 text-right font-semibold">定期受診中</th>
+                      <th className="px-3 py-2 text-right font-semibold">受診遅延</th>
+                      <th className="px-3 py-2 text-right font-semibold">離脱リスク</th>
+                      <th className="px-3 py-2 text-right font-semibold">平均来院回数</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {lifestyleAnalysis.diseaseStats.map((item) => (
+                      <tr key={item.id} className="bg-white">
+                        <td className="px-3 py-2 text-slate-700">{item.label}</td>
+                        <td className="px-3 py-2 text-right text-slate-600">
+                          {item.total.toLocaleString("ja-JP")}名
+                        </td>
+                        <td className="px-3 py-2 text-right text-emerald-600">
+                          {item.statusCounts.regular.toLocaleString("ja-JP")}名（
+                          {formatPercentage(item.rates.regular)}）
+                        </td>
+                        <td className="px-3 py-2 text-right text-amber-600">
+                          {item.statusCounts.delayed.toLocaleString("ja-JP")}名（
+                          {formatPercentage(item.rates.delayed)}）
+                        </td>
+                        <td className="px-3 py-2 text-right text-rose-600">
+                          {item.statusCounts.atRisk.toLocaleString("ja-JP")}名（
+                          {formatPercentage(item.rates.atRisk)}）
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-600">
+                          {item.averageVisits !== null
+                            ? `${item.averageVisits.toLocaleString("ja-JP", {
+                                minimumFractionDigits: 1,
+                                maximumFractionDigits: 1,
+                              })}回`
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="mt-2 text-[11px] text-slate-500">
+                  ※ 「複数疾患/その他」には複合疾患および上記3疾患以外の生活習慣病が含まれます。
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-slate-800">初診患者の継続状況</h3>
+                  <div className="text-xs text-slate-500">
+                    初診患者 {lifestyleAnalysis.initialStats.total.toLocaleString("ja-JP")}名 /
+                    継続受診率 {formatPercentage(lifestyleAnalysis.initialStats.continuationRate)} /
+                    初診後1回のみ {lifestyleAnalysis.initialStats.singleVisit.total.toLocaleString("ja-JP")}名
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      来院回数別
+                    </h4>
+                    <table className="mt-2 w-full border-collapse text-sm">
+                      <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-semibold">区分</th>
+                          <th className="px-3 py-2 text-right font-semibold">人数</th>
+                          <th className="px-3 py-2 text-right font-semibold">構成比</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {lifestyleAnalysis.initialStats.visitBands.map((item) => (
+                          <tr key={item.id}>
+                            <td className="px-3 py-2 text-slate-700">{item.label}</td>
+                            <td className="px-3 py-2 text-right text-slate-600">
+                              {item.count.toLocaleString("ja-JP")}名
+                            </td>
+                            <td className="px-3 py-2 text-right text-slate-600">
+                              {formatPercentage(item.percentage)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      初診月別
+                    </h4>
+                    <table className="mt-2 w-full border-collapse text-sm">
+                      <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-semibold">月</th>
+                          <th className="px-3 py-2 text-right font-semibold">患者数</th>
+                          <th className="px-3 py-2 text-right font-semibold">平均来院回数</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {lifestyleAnalysis.initialStats.monthly.map((item) => (
+                          <tr key={item.month}>
+                            <td className="px-3 py-2 text-slate-700">{item.label}</td>
+                            <td className="px-3 py-2 text-right text-slate-600">
+                              {item.count.toLocaleString("ja-JP")}名
+                            </td>
+                            <td className="px-3 py-2 text-right text-slate-600">
+                              {item.averageVisits !== null
+                                ? `${item.averageVisits.toLocaleString("ja-JP", {
+                                    minimumFractionDigits: 1,
+                                    maximumFractionDigits: 1,
+                                  })}回`
+                                : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                {lifestyleAnalysis.initialStats.singleVisit.list.length > 0 && (
+                  <div className="mt-4">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-rose-600">
+                      初診後1回のみで離脱した患者（最新10名）
+                    </h4>
+                    <div className="mt-2 overflow-x-auto">
+                      <table className="w-full min-w-[600px] border-collapse text-sm">
+                        <thead className="bg-rose-50 text-xs uppercase tracking-wide text-rose-600">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-semibold">患者番号</th>
+                            <th className="px-3 py-2 text-left font-semibold">氏名</th>
+                            <th className="px-3 py-2 text-left font-semibold">初診日</th>
+                            <th className="px-3 py-2 text-left font-semibold">疾患カテゴリ</th>
+                            <th className="px-3 py-2 text-left font-semibold">最終来院</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-rose-100">
+                          {lifestyleAnalysis.initialStats.singleVisit.list.map((patient) => (
+                            <tr key={`single-${patient.patientNumber}`} className="bg-white">
+                              <td className="px-3 py-2 text-slate-600">{patient.patientNumber}</td>
+                              <td className="px-3 py-2 text-slate-700">
+                                {patient.patientName ?? "氏名未登録"}
+                              </td>
+                              <td className="px-3 py-2 text-slate-600">
+                                {formatDateLabel(patient.firstVisitDate)}
+                              </td>
+                              <td className="px-3 py-2 text-slate-600">
+                                {patient.diseaseLabels.join(" / ")}
+                              </td>
+                              <td className="px-3 py-2 text-slate-600">
+                                {formatDateLabel(patient.lastVisitDate)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-slate-800">年齢別の離脱率</h3>
+                  {lifestyleAnalysis.ageStats.ranking.length > 0 && (
+                    <div className="text-xs text-slate-500">
+                      継続受診率トップ:
+                      {lifestyleAnalysis.ageStats.ranking
+                        .slice(0, 3)
+                        .map(
+                          (item) =>
+                            ` ${item.label}（${formatPercentage(item.continuationRate)}）`,
+                        )}
+                    </div>
+                  )}
+                </div>
+                <table className="mt-3 w-full border-collapse text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold">年齢層</th>
+                      <th className="px-3 py-2 text-right font-semibold">患者数</th>
+                      <th className="px-3 py-2 text-right font-semibold">継続受診率</th>
+                      <th className="px-3 py-2 text-right font-semibold">受診遅延率</th>
+                      <th className="px-3 py-2 text-right font-semibold">離脱リスク率</th>
+                      <th className="px-3 py-2 text-right font-semibold">平均来院回数</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {lifestyleAnalysis.ageStats.groups.map((group) => (
+                      <tr key={group.id} className="bg-white">
+                        <td className="px-3 py-2 text-slate-700">{group.label}</td>
+                        <td className="px-3 py-2 text-right text-slate-600">
+                          {group.count.toLocaleString("ja-JP")}名
+                        </td>
+                        <td className="px-3 py-2 text-right text-emerald-600">
+                          {formatPercentage(group.rates.regular)}
+                        </td>
+                        <td className="px-3 py-2 text-right text-amber-600">
+                          {formatPercentage(group.rates.delayed)}
+                        </td>
+                        <td className="px-3 py-2 text-right text-rose-600">
+                          {formatPercentage(group.rates.atRisk)}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-600">
+                          {group.averageVisits !== null
+                            ? `${group.averageVisits.toLocaleString("ja-JP", {
+                                minimumFractionDigits: 1,
+                                maximumFractionDigits: 1,
+                              })}回`
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="rounded-2xl border border-amber-200 bg-white/90 p-4 shadow-soft">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-amber-700">受診遅延患者（91〜180日）</h3>
+                    <span className="text-xs text-amber-600">
+                      {lifestyleAnalysis.delayedPatients.total.toLocaleString("ja-JP")}名
+                    </span>
+                  </div>
+                  {lifestyleAnalysis.delayedPatients.list.length > 0 ? (
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="w-full min-w-[560px] border-collapse text-sm">
+                        <thead className="bg-amber-50 text-xs uppercase tracking-wide text-amber-600">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-semibold">患者番号</th>
+                            <th className="px-3 py-2 text-left font-semibold">氏名</th>
+                            <th className="px-3 py-2 text-left font-semibold">最終来院</th>
+                            <th className="px-3 py-2 text-right font-semibold">経過日数</th>
+                            <th className="px-3 py-2 text-right font-semibold">来院回数</th>
+                            <th className="px-3 py-2 text-left font-semibold">疾患</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-amber-100">
+                          {lifestyleAnalysis.delayedPatients.list.map((patient) => (
+                            <tr key={`delayed-${patient.patientNumber}`} className="bg-white">
+                              <td className="px-3 py-2 text-slate-600">{patient.patientNumber}</td>
+                              <td className="px-3 py-2 text-slate-700">
+                                {patient.patientName ?? "氏名未登録"}
+                              </td>
+                              <td className="px-3 py-2 text-slate-600">
+                                {formatDateLabel(patient.lastVisitDate)}
+                              </td>
+                              <td className="px-3 py-2 text-right text-slate-600">
+                                {patient.daysSinceLast.toLocaleString("ja-JP")}日
+                              </td>
+                              <td className="px-3 py-2 text-right text-slate-600">
+                                {patient.visitCount.toLocaleString("ja-JP")}回
+                              </td>
+                              <td className="px-3 py-2 text-slate-600">
+                                {patient.diseaseLabels.join(" / ")}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-xs text-slate-500">該当患者はいません。</p>
+                  )}
+                  <p className="mt-2 text-[11px] text-amber-600">
+                    ※ リストは直近の最終来院が新しい順に最大30名まで表示しています。
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-rose-200 bg-white/90 p-4 shadow-soft">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-rose-700">離脱リスク患者（181日以上）</h3>
+                    <span className="text-xs text-rose-600">
+                      {lifestyleAnalysis.atRiskPatients.total.toLocaleString("ja-JP")}名（うち過去4回以上通院:
+                      {lifestyleAnalysis.atRiskPatients.highEngagement.toLocaleString("ja-JP")}名）
+                    </span>
+                  </div>
+                  {lifestyleAnalysis.atRiskPatients.list.length > 0 ? (
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="w-full min-w-[560px] border-collapse text-sm">
+                        <thead className="bg-rose-50 text-xs uppercase tracking-wide text-rose-600">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-semibold">患者番号</th>
+                            <th className="px-3 py-2 text-left font-semibold">氏名</th>
+                            <th className="px-3 py-2 text-left font-semibold">最終来院</th>
+                            <th className="px-3 py-2 text-right font-semibold">経過日数</th>
+                            <th className="px-3 py-2 text-right font-semibold">来院回数</th>
+                            <th className="px-3 py-2 text-left font-semibold">疾患</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-rose-100">
+                          {lifestyleAnalysis.atRiskPatients.list.map((patient) => (
+                            <tr key={`risk-${patient.patientNumber}`} className="bg-white">
+                              <td className="px-3 py-2 text-slate-600">{patient.patientNumber}</td>
+                              <td className="px-3 py-2 text-slate-700">
+                                {patient.patientName ?? "氏名未登録"}
+                              </td>
+                              <td className="px-3 py-2 text-slate-600">
+                                {formatDateLabel(patient.lastVisitDate)}
+                              </td>
+                              <td className="px-3 py-2 text-right text-slate-600">
+                                {patient.daysSinceLast.toLocaleString("ja-JP")}日
+                              </td>
+                              <td className="px-3 py-2 text-right text-slate-600">
+                                {patient.visitCount.toLocaleString("ja-JP")}回
+                              </td>
+                              <td className="px-3 py-2 text-slate-600">
+                                {patient.diseaseLabels.join(" / ")}
+                                {patient.diseaseNames.length > 0 && (
+                                  <span className="ml-1 text-[11px] text-slate-500">
+                                    ({patient.diseaseNames.join("・")})
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-xs text-slate-500">該当患者はいません。</p>
+                  )}
+                  <p className="mt-2 text-[11px] text-rose-600">
+                    ※ 離脱リスク患者は最終来院が半年以上前の患者です。過去の来院回数が多い患者を優先的にフォローしてください。
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+              生活習慣病の主病データとカルテ集計を取り込むと、受診継続性の分析結果が表示されます。
             </p>
           )}
         </SectionCard>
