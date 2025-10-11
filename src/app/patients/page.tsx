@@ -2832,7 +2832,7 @@ function PatientAnalysisPageContent() {
           label: string;
           total: number;
           share: number;
-        }>;
+        }>,
       };
     }
 
