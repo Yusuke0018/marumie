@@ -1,0 +1,10 @@
+timestamp: 2025-10-11 16:17:10 JST
+branch: main
+commit: d1157291d9ad1141ce6ab19d76aa28df96cae856
+summary: keep lifestyle diagnosis analytics independent from period filter
+changes:
+  - src/app/patients/page.tsx (skip auto-selecting latest month when viewing lifestyle analysis and use full diagnosis dataset regardless of filter)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (success)
