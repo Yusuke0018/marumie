@@ -1,0 +1,8 @@
+timestamp: 2025-10-11 18:25:05 JST
+branch: main
+commit: 6e038b328a292d389201707b0a248061fa30c0b2
+summary: improve reservation share fallback decoding
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (pending)
