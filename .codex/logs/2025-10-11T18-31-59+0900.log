@@ -1,0 +1,8 @@
+timestamp: 2025-10-11 18:31:59 JST
+branch: main
+commit: 3b6223a49652d03c1442a76c6261baa6479b78f0
+summary: extend reservation share decoding for base64/gzip payloads
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (pending)
