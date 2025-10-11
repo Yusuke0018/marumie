@@ -4,84 +4,49 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Users,
+  UserPlus,
+  Activity,
+  Heart,
+  ArrowRight,
   CalendarClock,
   ClipboardList,
   BarChart3,
-  Activity,
-  ArrowRight,
 } from "lucide-react";
 import { getCompressedItem } from "@/lib/storageCompression";
 import { KARTE_STORAGE_KEY, KARTE_TIMESTAMP_KEY } from "@/lib/storageKeys";
 import {
-  RESERVATION_STORAGE_KEY,
-  RESERVATION_TIMESTAMP_KEY,
-} from "@/lib/reservationData";
-import {
   SURVEY_STORAGE_KEY,
-  SURVEY_TIMESTAMP_KEY,
   type SurveyData,
 } from "@/lib/surveyData";
 import {
-  LISTING_STORAGE_KEY,
-  LISTING_TIMESTAMP_KEY,
-  type ListingCategoryData,
-} from "@/lib/listingData";
-import {
   DIAGNOSIS_STORAGE_KEY,
-  DIAGNOSIS_TIMESTAMP_KEY,
   type DiagnosisRecord,
 } from "@/lib/diagnosisData";
+import { classifyKarteRecords, type KarteRecord } from "@/lib/karteAnalytics";
 
 type DashboardStats = {
   totalPatients: number | null;
+  pureFirstVisits: number | null;
+  revisitCount: number | null;
+  lifestyleDiseasePatients: number | null;
+  internalReferrals: number | null;
   patientUpdated: string | null;
-  totalReservations: number | null;
-  reservationUpdated: string | null;
-  totalSurveys: number | null;
-  surveyUpdated: string | null;
-  totalListings: number | null;
-  listingUpdated: string | null;
-  totalDiagnosis: number | null;
-  diagnosisUpdated: string | null;
-  latestDiagnosisMonth: string | null;
-  latestDiagnosisCount: number | null;
 };
 
 const INITIAL_STATS: DashboardStats = {
   totalPatients: null,
+  pureFirstVisits: null,
+  revisitCount: null,
+  lifestyleDiseasePatients: null,
+  internalReferrals: null,
   patientUpdated: null,
-  totalReservations: null,
-  reservationUpdated: null,
-  totalSurveys: null,
-  surveyUpdated: null,
-  totalListings: null,
-  listingUpdated: null,
-  totalDiagnosis: null,
-  diagnosisUpdated: null,
-  latestDiagnosisMonth: null,
-  latestDiagnosisCount: null,
 };
 
 const formatCount = (value: number | null) =>
-  value === null ? "—" : `${value.toLocaleString("ja-JP")}件`;
+  value === null ? "—" : value.toLocaleString("ja-JP");
 
 const formatTimestamp = (value: string | null) =>
   value ? new Date(value).toLocaleString("ja-JP") : "未更新";
-
-const formatMonthLabel = (month: string | null) => {
-  if (!month) {
-    return "";
-  }
-  const [year, monthStr] = month.split("-");
-  if (!year || !monthStr) {
-    return month;
-  }
-  const numericMonth = Number(monthStr);
-  if (Number.isNaN(numericMonth)) {
-    return month;
-  }
-  return `${year}年${numericMonth}月`;
-};
 
 const safeParse = <T,>(raw: string | null): T | null => {
   if (!raw) {
@@ -103,10 +68,16 @@ export default function HomePage() {
       const next: DashboardStats = { ...INITIAL_STATS };
 
       try {
+        // カルテデータからKPI計算
         const karteRaw = getCompressedItem(KARTE_STORAGE_KEY);
-        const karteRecords = safeParse<unknown[]>(karteRaw);
-        if (Array.isArray(karteRecords)) {
+        const karteRecords = safeParse<KarteRecord[]>(karteRaw);
+        if (Array.isArray(karteRecords) && karteRecords.length > 0) {
           next.totalPatients = karteRecords.length;
+
+          // 純初診数と再診数を計算
+          const classified = classifyKarteRecords(karteRecords);
+          next.pureFirstVisits = classified.filter((r) => r.category === "pureFirst").length;
+          next.revisitCount = classified.filter((r) => r.category === "revisit").length;
         }
         next.patientUpdated = window.localStorage.getItem(KARTE_TIMESTAMP_KEY);
       } catch (error) {
@@ -114,64 +85,44 @@ export default function HomePage() {
       }
 
       try {
-        const reservationsRaw = window.localStorage.getItem(RESERVATION_STORAGE_KEY);
-        const reservations = safeParse<unknown[]>(reservationsRaw);
-        if (Array.isArray(reservations)) {
-          next.totalReservations = reservations.length;
+        // 生活習慣病患者数を計算
+        const diagnosisRaw = getCompressedItem(DIAGNOSIS_STORAGE_KEY);
+        const diagnosisData = safeParse<DiagnosisRecord[]>(diagnosisRaw);
+        if (Array.isArray(diagnosisData)) {
+          const lifestyleDiseaseRecords = diagnosisData.filter(
+            (record) => record.category === "生活習慣病",
+          );
+          // ユニーク患者数を計算（患者番号と患者名で判定）
+          const uniquePatients = new Set<string>();
+          lifestyleDiseaseRecords.forEach((record) => {
+            const key = record.patientNumber
+              ? `pn:${record.patientNumber}`
+              : record.patientNameNormalized && record.birthDateIso
+                ? `nb:${record.patientNameNormalized}|${record.birthDateIso}`
+                : null;
+            if (key) {
+              uniquePatients.add(key);
+            }
+          });
+          next.lifestyleDiseasePatients = uniquePatients.size;
         }
-        next.reservationUpdated = window.localStorage.getItem(RESERVATION_TIMESTAMP_KEY);
       } catch (error) {
-        console.error("Failed to load reservation stats", error);
+        console.error("Failed to load diagnosis stats", error);
       }
 
       try {
+        // 内科の家族・友人紹介を計算
         const surveyRaw = window.localStorage.getItem(SURVEY_STORAGE_KEY);
         const surveyData = safeParse<SurveyData[]>(surveyRaw);
         if (Array.isArray(surveyData)) {
-          next.totalSurveys = surveyData.length;
-        }
-        next.surveyUpdated = window.localStorage.getItem(SURVEY_TIMESTAMP_KEY);
-      } catch (error) {
-        console.error("Failed to load survey stats", error);
-      }
-
-      try {
-        const listingRaw = window.localStorage.getItem(LISTING_STORAGE_KEY);
-        const listingData = safeParse<ListingCategoryData[]>(listingRaw);
-        if (Array.isArray(listingData)) {
-          next.totalListings = listingData.reduce(
-            (total, { data }) => total + (Array.isArray(data) ? data.length : 0),
+          const internalSurveys = surveyData.filter((item) => item.fileType === "外来");
+          next.internalReferrals = internalSurveys.reduce(
+            (sum, item) => sum + item.friendReferral,
             0,
           );
         }
-        next.listingUpdated = window.localStorage.getItem(LISTING_TIMESTAMP_KEY);
       } catch (error) {
-        console.error("Failed to load listing stats", error);
-      }
-
-      try {
-        const diagnosisRaw = window.localStorage.getItem(DIAGNOSIS_STORAGE_KEY);
-        const diagnosisData = safeParse<DiagnosisRecord[]>(diagnosisRaw);
-        if (Array.isArray(diagnosisData)) {
-          next.totalDiagnosis = diagnosisData.length;
-          const monthCounts = new Map<string, number>();
-          diagnosisData.forEach((record) => {
-            if (!record?.monthKey) {
-              return;
-            }
-            const current = monthCounts.get(record.monthKey) ?? 0;
-            monthCounts.set(record.monthKey, current + 1);
-          });
-          const months = Array.from(monthCounts.keys()).sort();
-          const latestMonth = months[months.length - 1];
-          if (latestMonth) {
-            next.latestDiagnosisMonth = latestMonth;
-            next.latestDiagnosisCount = monthCounts.get(latestMonth) ?? null;
-          }
-        }
-        next.diagnosisUpdated = window.localStorage.getItem(DIAGNOSIS_TIMESTAMP_KEY);
-      } catch (error) {
-        console.error("Failed to load diagnosis stats", error);
+        console.error("Failed to load survey stats", error);
       }
 
       setStats(next);
@@ -185,48 +136,48 @@ export default function HomePage() {
 
   const metricCards = [
     {
-      id: "patients",
-      label: "カルテ記録",
+      id: "totalPatients",
+      label: "総患者数",
       value: formatCount(stats.totalPatients),
-      hint: `最終更新: ${formatTimestamp(stats.patientUpdated)}`,
+      unit: "人",
+      hint: `カルテ記録の総数 (最終更新: ${formatTimestamp(stats.patientUpdated)})`,
       icon: Users,
       gradient: "from-brand-500 to-brand-400",
     },
     {
-      id: "reservations",
-      label: "予約ログ",
-      value: formatCount(stats.totalReservations),
-      hint: `最終更新: ${formatTimestamp(stats.reservationUpdated)}`,
-      icon: CalendarClock,
+      id: "pureFirst",
+      label: "純初診数",
+      value: formatCount(stats.pureFirstVisits),
+      unit: "人",
+      hint: "初めて来院された患者数",
+      icon: UserPlus,
       gradient: "from-emerald-500 to-emerald-400",
     },
     {
-      id: "survey",
-      label: "アンケート回答",
-      value: formatCount(stats.totalSurveys),
-      hint: `最終更新: ${formatTimestamp(stats.surveyUpdated)}`,
-      icon: ClipboardList,
+      id: "revisit",
+      label: "再診数",
+      value: formatCount(stats.revisitCount),
+      unit: "人",
+      hint: "再来院された患者数",
+      icon: Users,
       gradient: "from-sky-500 to-sky-400",
     },
     {
-      id: "listing",
-      label: "リスティング日次記録",
-      value: formatCount(stats.totalListings),
-      hint: `最終更新: ${formatTimestamp(stats.listingUpdated)}`,
-      icon: BarChart3,
+      id: "lifestyle",
+      label: "生活習慣病患者数",
+      value: formatCount(stats.lifestyleDiseasePatients),
+      unit: "人",
+      hint: "主病登録から集計（ユニーク患者数）",
+      icon: Activity,
       gradient: "from-amber-500 to-amber-400",
     },
     {
-      id: "diagnosis",
-      label: "主病登録",
-      value: formatCount(stats.totalDiagnosis),
-      hint:
-        stats.latestDiagnosisMonth && stats.latestDiagnosisCount !== null
-          ? `${formatMonthLabel(stats.latestDiagnosisMonth)}: ${stats.latestDiagnosisCount.toLocaleString(
-              "ja-JP",
-            )}件`
-          : `最終更新: ${formatTimestamp(stats.diagnosisUpdated)}`,
-      icon: Activity,
+      id: "referral",
+      label: "内科 家族・友人紹介",
+      value: formatCount(stats.internalReferrals),
+      unit: "件",
+      hint: "外来アンケートから集計",
+      icon: Heart,
       gradient: "from-rose-500 to-rose-400",
     },
   ];
@@ -299,15 +250,15 @@ export default function HomePage() {
                 リベ大総合クリニック大阪院をマルミエにするアプリです。
               </p>
               <p className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">
-                最新のカルテ記録・予約ログ・アンケート・リスティング・主病登録をまとめたダッシュボードから、
-                詳細分析ページへスムーズにアクセスできます。今日の状況を把握し、次のアクションへつなげてください。
+                総患者数、純初診数、再診数、生活習慣病患者数、内科の家族・友人紹介など、
+                重要なKPIをひと目で確認できます。詳細分析ページへスムーズにアクセスし、次のアクションへつなげてください。
               </p>
             </div>
           </div>
         </section>
 
         <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-          {metricCards.map(({ id, label, value, hint, icon: Icon, gradient }) => (
+          {metricCards.map(({ id, label, value, unit, hint, icon: Icon, gradient }) => (
             <div
               key={id}
               className="group relative overflow-hidden rounded-3xl border border-slate-100 bg-white/90 p-6 shadow-soft transition hover:-translate-y-1 hover:shadow-lg"
@@ -320,7 +271,10 @@ export default function HomePage() {
                   <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     {label}
                   </span>
-                  <p className="text-3xl font-bold text-slate-900">{value}</p>
+                  <p className="text-3xl font-bold text-slate-900">
+                    {value}
+                    <span className="ml-1 text-lg font-medium text-slate-600">{unit}</span>
+                  </p>
                   <p className="text-xs text-slate-500">{hint}</p>
                 </div>
                 <span
