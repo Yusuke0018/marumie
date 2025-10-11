@@ -318,7 +318,16 @@ export const parseDiagnosisCsv = (content: string): DiagnosisRecord[] => {
 
   parsed.data.forEach((row) => {
     const mainFlag = (row["主病"] ?? "").trim();
-    if (mainFlag !== "主病") {
+    // 主病フラグの柔軟な判定: "主病", "主", "○", "1" などを許容
+    const isMainDisease =
+      mainFlag === "主病" ||
+      mainFlag === "主" ||
+      mainFlag === "○" ||
+      mainFlag === "1" ||
+      mainFlag.toLowerCase() === "yes" ||
+      mainFlag.toLowerCase() === "true";
+
+    if (!isMainDisease) {
       return;
     }
 
