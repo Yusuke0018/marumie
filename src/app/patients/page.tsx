@@ -881,6 +881,18 @@ const formatHourLabel = (hour: number) => `${hour.toString().padStart(2, "0")}:0
 const normalizeDepartmentLabel = (value: string) =>
   value.replace(/\s+/g, "").replace(/[()（）]/g, "");
 
+const getSixMonthRangeStart = (endMonth: string, months: string[]): string => {
+  if (!endMonth || months.length === 0) {
+    return endMonth;
+  }
+  const endIndex = months.indexOf(endMonth);
+  if (endIndex === -1) {
+    return months[0];
+  }
+  const startIndex = Math.max(0, endIndex - 5);
+  return months[startIndex];
+};
+
 const formatTimestampLabel = (value: string | null) =>
   value ? new Date(value).toLocaleString("ja-JP") : "未登録";
 
@@ -1179,6 +1191,11 @@ function PatientAnalysisPageContent() {
     return Array.from(months).sort();
   }, [classifiedRecords, diagnosisMonths]);
 
+  const latestAvailableMonth = useMemo(
+    () => (allAvailableMonths.length > 0 ? allAvailableMonths[allAvailableMonths.length - 1] : null),
+    [allAvailableMonths],
+  );
+
   const {
     startMonth,
     endMonth,
@@ -1189,24 +1206,68 @@ function PatientAnalysisPageContent() {
     autoSelectLatest: !lifestyleOnly,
   });
 
+  useEffect(() => {
+    if (!lifestyleOnly) {
+      return;
+    }
+    if (!latestAvailableMonth) {
+      return;
+    }
+    if (!endMonth) {
+      setEndMonth(latestAvailableMonth);
+      return;
+    }
+    const expectedStart = getSixMonthRangeStart(endMonth, allAvailableMonths);
+    if (startMonth !== expectedStart) {
+      setStartMonth(expectedStart);
+    }
+  }, [
+    lifestyleOnly,
+    endMonth,
+    startMonth,
+    latestAvailableMonth,
+    allAvailableMonths,
+    setEndMonth,
+    setStartMonth,
+  ]);
+
+  const lifestyleEffectiveEndMonth = lifestyleOnly
+    ? endMonth || latestAvailableMonth
+    : endMonth;
+  const lifestyleEffectiveStartMonth = lifestyleOnly
+    ? lifestyleEffectiveEndMonth
+      ? getSixMonthRangeStart(lifestyleEffectiveEndMonth, allAvailableMonths)
+      : startMonth
+    : startMonth;
+
   const periodFilteredRecords = useMemo(() => {
     if (classifiedRecords.length === 0) {
       return [];
     }
     let filtered = classifiedRecords.filter((record) => record.monthKey >= KARTE_MIN_MONTH);
 
-    if (startMonth && endMonth) {
+    const activeStartMonth = lifestyleOnly ? lifestyleEffectiveStartMonth : startMonth;
+    const activeEndMonth = lifestyleOnly ? lifestyleEffectiveEndMonth : endMonth;
+
+    if (activeStartMonth && activeEndMonth) {
       filtered = filtered.filter(
-        (record) => record.monthKey >= startMonth && record.monthKey <= endMonth,
+        (record) => record.monthKey >= activeStartMonth && record.monthKey <= activeEndMonth,
       );
-    } else if (startMonth) {
-      filtered = filtered.filter((record) => record.monthKey >= startMonth);
-    } else if (endMonth) {
-      filtered = filtered.filter((record) => record.monthKey <= endMonth);
+    } else if (activeStartMonth) {
+      filtered = filtered.filter((record) => record.monthKey >= activeStartMonth);
+    } else if (activeEndMonth) {
+      filtered = filtered.filter((record) => record.monthKey <= activeEndMonth);
     }
 
     return filtered;
-  }, [classifiedRecords, endMonth, startMonth]);
+  }, [
+    classifiedRecords,
+    lifestyleOnly,
+    lifestyleEffectiveEndMonth,
+    lifestyleEffectiveStartMonth,
+    endMonth,
+    startMonth,
+  ]);
 
   const filteredClassified = useMemo(() => {
     return periodFilteredRecords;
@@ -1848,7 +1909,13 @@ function PatientAnalysisPageContent() {
       return null;
     }
 
-    const sourceRecords = classifiedRecords.filter((record) => record.monthKey >= KARTE_MIN_MONTH);
+    const rangeStartMonth = lifestyleEffectiveStartMonth ?? KARTE_MIN_MONTH;
+    const rangeEndMonth = lifestyleEffectiveEndMonth ?? "9999-12";
+    const sourceRecords = classifiedRecords.filter(
+      (record) =>
+        record.monthKey >= rangeStartMonth &&
+        record.monthKey <= rangeEndMonth,
+    );
     if (sourceRecords.length === 0) {
       return null;
     }
@@ -2160,19 +2227,33 @@ function PatientAnalysisPageContent() {
       delayedPatients,
       atRiskPatients,
     };
-  }, [lifestyleOnly, diagnosisRecords, classifiedRecords]);
+  }, [
+    lifestyleOnly,
+    diagnosisRecords,
+    classifiedRecords,
+    lifestyleEffectiveStartMonth,
+    lifestyleEffectiveEndMonth,
+  ]);
 
   const filteredDiagnosisRecords = useMemo(() => {
     if (diagnosisRecords.length === 0) {
       return [];
     }
-    if (lifestyleOnly) {
-      return diagnosisRecords;
-    }
-    const start = startMonth || undefined;
-    const end = endMonth || undefined;
+    const start = lifestyleOnly
+      ? lifestyleEffectiveStartMonth || undefined
+      : startMonth || undefined;
+    const end = lifestyleOnly
+      ? lifestyleEffectiveEndMonth || undefined
+      : endMonth || undefined;
     return filterDiagnosisByMonthRange(diagnosisRecords, start, end);
-  }, [diagnosisRecords, lifestyleOnly, startMonth, endMonth]);
+  }, [
+    diagnosisRecords,
+    lifestyleOnly,
+    lifestyleEffectiveStartMonth,
+    lifestyleEffectiveEndMonth,
+    startMonth,
+    endMonth,
+  ]);
 
   const diagnosisMonthlyInRange = useMemo(
     () => aggregateDiagnosisMonthly(filteredDiagnosisRecords),
