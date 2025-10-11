@@ -1,0 +1,11 @@
+timestamp: 2025-10-11 16:56:38 JST
+branch: main
+commit: a30ad36b46177d125e6efaf8619c786d0b2da1fd
+summary: refine lifestyle windows and period badge styling
+changes:
+  - src/app/patients/page.tsx (enforce minimum six-month range only when shorter than six months and adjust lifestyle status thresholds to 150日)
+  - src/components/Navigation.tsx (render period badge as bordered pill with calendar icon on all breakpoints)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (success)
