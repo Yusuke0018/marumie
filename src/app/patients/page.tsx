@@ -3,6 +3,7 @@
 import {
   Fragment,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useState,
@@ -11,6 +12,7 @@ import {
   type ChangeEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import {
   RefreshCw,
   Share2,
@@ -95,6 +97,7 @@ import {
   DIAGNOSIS_TIMESTAMP_KEY,
 } from "@/lib/diagnosisData";
 import type { SharedDataBundle } from "@/lib/sharedBundle";
+import { LifestyleViewContext } from "./LifestyleViewContext";
 
 const MonthlySummaryChart = lazy(() =>
   import("@/components/patients/MonthlySummaryChart").then((m) => ({
@@ -1042,7 +1045,8 @@ const normalizeDepartmentLabel = (value: string) =>
 const formatTimestampLabel = (value: string | null) =>
   value ? new Date(value).toLocaleString("ja-JP") : "未登録";
 
-export default function PatientAnalysisPage() {
+export function PatientAnalysisPageContent() {
+  const lifestyleOnly = useContext(LifestyleViewContext);
   const [records, setRecords] = useState<KarteRecord[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -2034,6 +2038,9 @@ export default function PatientAnalysisPage() {
       : [];
 
   const lifestyleAnalysis = useMemo<LifestyleAnalysisResult | null>(() => {
+    if (!lifestyleOnly) {
+      return null;
+    }
     if (diagnosisRecords.length === 0 || classifiedRecords.length === 0) {
       return null;
     }
@@ -2453,7 +2460,7 @@ export default function PatientAnalysisPage() {
       delayedPatients,
       atRiskPatients,
     };
-  }, [diagnosisRecords, classifiedRecords]);
+  }, [lifestyleOnly, diagnosisRecords, classifiedRecords]);
 
   const filteredDiagnosisRecords = useMemo(() => {
     if (diagnosisRecords.length === 0) {
@@ -3566,173 +3573,61 @@ export default function PatientAnalysisPage() {
           )}
         </SectionCard>
 
-        <SectionCard
-          title="生活習慣病 継続性分析"
-          description="傷病名CSV（主病）とカルテ集計CSVを突合し、生活習慣病患者の受診継続性を評価しています。"
-        >
-          {lifestyleAnalysis ? (
-            <div className="space-y-6">
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                  <p className="text-xs font-semibold text-emerald-700">生活習慣病患者数</p>
-                  <p className="mt-2 text-2xl font-bold text-emerald-900">
-                    {lifestyleAnalysis.totalPatients.toLocaleString("ja-JP")}名
-                  </p>
-                  <p className="mt-2 text-xs text-emerald-700">
-                    継続受診率 {formatPercentage(lifestyleAnalysis.continuationRate)}
-                  </p>
-                </div>
-                {LIFESTYLE_STATUS_ORDER.map((status) => {
-                  const config = LIFESTYLE_STATUS_CONFIG[status];
-                  const count = lifestyleAnalysis.statusCounts[status];
-                  const percentage =
-                    lifestyleAnalysis.totalPatients > 0
-                      ? roundTo1Decimal((count / lifestyleAnalysis.totalPatients) * 100)
-                      : 0;
-                  return (
-                    <div
-                      key={status}
-                      className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft"
-                    >
-                      <span
-                        className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${config.badge}`}
-                      >
-                        {config.label}
-                      </span>
-                      <p className="mt-3 text-2xl font-bold text-slate-900">
-                        {count.toLocaleString("ja-JP")}名
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {config.description}（{formatPercentage(percentage)}）
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-                データ期間: {formatDateLabel(lifestyleAnalysis.rangeStartIso)}〜
-                {formatDateLabel(lifestyleAnalysis.baselineDateIso)}（基準日:
-                {formatDateLabel(lifestyleAnalysis.baselineDateIso)}）。最終来院からの経過日数は基準日までの差分で計算しています。
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
-                  <h3 className="text-sm font-semibold text-slate-800">最終来院からの経過日数</h3>
-                  <table className="mt-3 w-full border-collapse text-sm">
-                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-semibold">区分</th>
-                        <th className="px-3 py-2 text-right font-semibold">人数</th>
-                        <th className="px-3 py-2 text-right font-semibold">構成比</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {lifestyleAnalysis.daysDistribution.map((item) => (
-                        <tr key={item.id} className="bg-white">
-                          <td className="px-3 py-2 text-slate-700">{item.label}</td>
-                          <td className="px-3 py-2 text-right text-slate-600">
-                            {item.count.toLocaleString("ja-JP")}名
-                          </td>
-                          <td className="px-3 py-2 text-right text-slate-600">
-                            {formatPercentage(item.percentage)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
-                  <h3 className="text-sm font-semibold text-slate-800">来院回数の分布</h3>
-                  <table className="mt-3 w-full border-collapse text-sm">
-                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-semibold">回数</th>
-                        <th className="px-3 py-2 text-right font-semibold">人数</th>
-                        <th className="px-3 py-2 text-right font-semibold">構成比</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {lifestyleAnalysis.visitDistribution.map((item) => (
-                        <tr key={item.id} className="bg-white">
-                          <td className="px-3 py-2 text-slate-700">{item.label}</td>
-                          <td className="px-3 py-2 text-right text-slate-600">
-                            {item.count.toLocaleString("ja-JP")}名
-                          </td>
-                          <td className="px-3 py-2 text-right text-slate-600">
-                            {formatPercentage(item.percentage)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
-                <h3 className="text-sm font-semibold text-slate-800">疾患別の継続状況</h3>
-                <table className="mt-3 w-full border-collapse text-sm">
-                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-semibold">疾患カテゴリ</th>
-                      <th className="px-3 py-2 text-right font-semibold">患者数</th>
-                      <th className="px-3 py-2 text-right font-semibold">定期受診中</th>
-                      <th className="px-3 py-2 text-right font-semibold">受診遅延</th>
-                      <th className="px-3 py-2 text-right font-semibold">離脱リスク</th>
-                      <th className="px-3 py-2 text-right font-semibold">平均来院回数</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {lifestyleAnalysis.diseaseStats.map((item) => (
-                      <tr key={item.id} className="bg-white">
-                        <td className="px-3 py-2 text-slate-700">{item.label}</td>
-                        <td className="px-3 py-2 text-right text-slate-600">
-                          {item.total.toLocaleString("ja-JP")}名
-                        </td>
-                        <td className="px-3 py-2 text-right text-emerald-600">
-                          {item.statusCounts.regular.toLocaleString("ja-JP")}名（
-                          {formatPercentage(item.rates.regular)}）
-                        </td>
-                        <td className="px-3 py-2 text-right text-amber-600">
-                          {item.statusCounts.delayed.toLocaleString("ja-JP")}名（
-                          {formatPercentage(item.rates.delayed)}）
-                        </td>
-                        <td className="px-3 py-2 text-right text-rose-600">
-                          {item.statusCounts.atRisk.toLocaleString("ja-JP")}名（
-                          {formatPercentage(item.rates.atRisk)}）
-                        </td>
-                        <td className="px-3 py-2 text-right text-slate-600">
-                          {item.averageVisits !== null
-                            ? `${item.averageVisits.toLocaleString("ja-JP", {
-                                minimumFractionDigits: 1,
-                                maximumFractionDigits: 1,
-                              })}回`
-                            : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <p className="mt-2 text-[11px] text-slate-500">
-                  ※ 「複数疾患/その他」には複合疾患および上記3疾患以外の生活習慣病が含まれます。
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-slate-800">初診患者の継続状況</h3>
-                  <div className="text-xs text-slate-500">
-                    初診患者 {lifestyleAnalysis.initialStats.total.toLocaleString("ja-JP")}名 /
-                    継続受診率 {formatPercentage(lifestyleAnalysis.initialStats.continuationRate)} /
-                    初診後1回のみ {lifestyleAnalysis.initialStats.singleVisit.total.toLocaleString("ja-JP")}名
+        {lifestyleOnly ? (
+          <SectionCard
+            title="生活習慣病 継続性分析"
+            description="傷病名CSV（主病）とカルテ集計CSVを突合し、生活習慣病患者の受診継続性を評価しています。"
+          >
+            {lifestyleAnalysis ? (
+              <div className="space-y-6">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                    <p className="text-xs font-semibold text-emerald-700">生活習慣病患者数</p>
+                    <p className="mt-2 text-2xl font-bold text-emerald-900">
+                      {lifestyleAnalysis.totalPatients.toLocaleString("ja-JP")}名
+                    </p>
+                    <p className="mt-2 text-xs text-emerald-700">
+                      継続受診率 {formatPercentage(lifestyleAnalysis.continuationRate)}
+                    </p>
                   </div>
+                  {LIFESTYLE_STATUS_ORDER.map((status) => {
+                    const config = LIFESTYLE_STATUS_CONFIG[status];
+                    const count = lifestyleAnalysis.statusCounts[status];
+                    const percentage =
+                      lifestyleAnalysis.totalPatients > 0
+                        ? roundTo1Decimal((count / lifestyleAnalysis.totalPatients) * 100)
+                        : 0;
+                    return (
+                      <div
+                        key={status}
+                        className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft"
+                      >
+                        <span
+                          className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${config.badge}`}
+                        >
+                          {config.label}
+                        </span>
+                        <p className="mt-3 text-2xl font-bold text-slate-900">
+                          {count.toLocaleString("ja-JP")}名
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {config.description}（{formatPercentage(percentage)}）
+                        </p>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                  <div>
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      来院回数別
-                    </h4>
-                    <table className="mt-2 w-full border-collapse text-sm">
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+                  データ期間: {formatDateLabel(lifestyleAnalysis.rangeStartIso)}〜
+                  {formatDateLabel(lifestyleAnalysis.baselineDateIso)}（基準日:
+                  {formatDateLabel(lifestyleAnalysis.baselineDateIso)}）。最終来院からの経過日数は基準日までの差分で計算しています。
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
+                    <h3 className="text-sm font-semibold text-slate-800">最終来院からの経過日数</h3>
+                    <table className="mt-3 w-full border-collapse text-sm">
                       <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                         <tr>
                           <th className="px-3 py-2 text-left font-semibold">区分</th>
@@ -3741,8 +3636,8 @@ export default function PatientAnalysisPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {lifestyleAnalysis.initialStats.visitBands.map((item) => (
-                          <tr key={item.id}>
+                        {lifestyleAnalysis.daysDistribution.map((item) => (
+                          <tr key={item.id} className="bg-white">
                             <td className="px-3 py-2 text-slate-700">{item.label}</td>
                             <td className="px-3 py-2 text-right text-slate-600">
                               {item.count.toLocaleString("ja-JP")}名
@@ -3755,32 +3650,25 @@ export default function PatientAnalysisPage() {
                       </tbody>
                     </table>
                   </div>
-                  <div>
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      初診月別
-                    </h4>
-                    <table className="mt-2 w-full border-collapse text-sm">
+                  <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
+                    <h3 className="text-sm font-semibold text-slate-800">来院回数の分布</h3>
+                    <table className="mt-3 w-full border-collapse text-sm">
                       <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                         <tr>
-                          <th className="px-3 py-2 text-left font-semibold">月</th>
-                          <th className="px-3 py-2 text-right font-semibold">患者数</th>
-                          <th className="px-3 py-2 text-right font-semibold">平均来院回数</th>
+                          <th className="px-3 py-2 text-left font-semibold">回数</th>
+                          <th className="px-3 py-2 text-right font-semibold">人数</th>
+                          <th className="px-3 py-2 text-right font-semibold">構成比</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {lifestyleAnalysis.initialStats.monthly.map((item) => (
-                          <tr key={item.month}>
+                        {lifestyleAnalysis.visitDistribution.map((item) => (
+                          <tr key={item.id} className="bg-white">
                             <td className="px-3 py-2 text-slate-700">{item.label}</td>
                             <td className="px-3 py-2 text-right text-slate-600">
                               {item.count.toLocaleString("ja-JP")}名
                             </td>
                             <td className="px-3 py-2 text-right text-slate-600">
-                              {item.averageVisits !== null
-                                ? `${item.averageVisits.toLocaleString("ja-JP", {
-                                    minimumFractionDigits: 1,
-                                    maximumFractionDigits: 1,
-                                  })}回`
-                                : "—"}
+                              {formatPercentage(item.percentage)}
                             </td>
                           </tr>
                         ))}
@@ -3788,209 +3676,240 @@ export default function PatientAnalysisPage() {
                     </table>
                   </div>
                 </div>
-                {lifestyleAnalysis.initialStats.singleVisit.list.length > 0 && (
-                  <div className="mt-4">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-rose-600">
-                      初診後1回のみで離脱したケース（最新10件）
-                    </h4>
-                    <div className="mt-2 overflow-x-auto">
-                      <table className="w-full min-w-[520px] border-collapse text-sm">
-                        <thead className="bg-rose-50 text-xs uppercase tracking-wide text-rose-600">
-                          <tr>
-                            <th className="px-3 py-2 text-left font-semibold">ケースID</th>
-                            <th className="px-3 py-2 text-left font-semibold">初診日</th>
-                            <th className="px-3 py-2 text-left font-semibold">疾患カテゴリ</th>
-                            <th className="px-3 py-2 text-left font-semibold">最終来院</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-rose-100">
-                          {lifestyleAnalysis.initialStats.singleVisit.list.map((patient) => (
-                            <tr key={`single-${patient.key}`} className="bg-white">
-                              <td className="px-3 py-2 text-slate-700">{patient.anonymizedId}</td>
-                              <td className="px-3 py-2 text-slate-600">
-                                {formatDateLabel(patient.firstVisitDate)}
-                              </td>
-                              <td className="px-3 py-2 text-slate-600">
-                                {patient.diseaseLabels.join(" / ")}
-                              </td>
-                              <td className="px-3 py-2 text-slate-600">
-                                {formatDateLabel(patient.lastVisitDate)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-              </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-slate-800">年齢別の離脱率</h3>
-                  {lifestyleAnalysis.ageStats.ranking.length > 0 && (
-                    <div className="text-xs text-slate-500">
-                      継続受診率トップ:
-                      {lifestyleAnalysis.ageStats.ranking
-                        .slice(0, 3)
-                        .map(
-                          (item) =>
-                            ` ${item.label}（${formatPercentage(item.continuationRate)}）`,
-                        )}
-                    </div>
-                  )}
-                </div>
-                <table className="mt-3 w-full border-collapse text-sm">
-                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-semibold">年齢層</th>
-                      <th className="px-3 py-2 text-right font-semibold">患者数</th>
-                      <th className="px-3 py-2 text-right font-semibold">継続受診率</th>
-                      <th className="px-3 py-2 text-right font-semibold">受診遅延率</th>
-                      <th className="px-3 py-2 text-right font-semibold">離脱リスク率</th>
-                      <th className="px-3 py-2 text-right font-semibold">平均来院回数</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {lifestyleAnalysis.ageStats.groups.map((group) => (
-                      <tr key={group.id} className="bg-white">
-                        <td className="px-3 py-2 text-slate-700">{group.label}</td>
-                        <td className="px-3 py-2 text-right text-slate-600">
-                          {group.count.toLocaleString("ja-JP")}名
-                        </td>
-                        <td className="px-3 py-2 text-right text-emerald-600">
-                          {formatPercentage(group.rates.regular)}
-                        </td>
-                        <td className="px-3 py-2 text-right text-amber-600">
-                          {formatPercentage(group.rates.delayed)}
-                        </td>
-                        <td className="px-3 py-2 text-right text-rose-600">
-                          {formatPercentage(group.rates.atRisk)}
-                        </td>
-                        <td className="px-3 py-2 text-right text-slate-600">
-                          {group.averageVisits !== null
-                            ? `${group.averageVisits.toLocaleString("ja-JP", {
-                                minimumFractionDigits: 1,
-                                maximumFractionDigits: 1,
-                              })}回`
-                            : "—"}
-                        </td>
+                <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
+                  <h3 className="text-sm font-semibold text-slate-800">疾患別の継続状況</h3>
+                  <table className="mt-3 w-full border-collapse text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold">疾患カテゴリ</th>
+                        <th className="px-3 py-2 text-right font-semibold">患者数</th>
+                        <th className="px-3 py-2 text-right font-semibold">定期受診中</th>
+                        <th className="px-3 py-2 text-right font-semibold">受診遅延</th>
+                        <th className="px-3 py-2 text-right font-semibold">離脱リスク</th>
+                        <th className="px-3 py-2 text-right font-semibold">平均来院回数</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {lifestyleAnalysis.diseaseStats.map((item) => (
+                        <tr key={item.id} className="bg-white">
+                          <td className="px-3 py-2 text-slate-700">{item.label}</td>
+                          <td className="px-3 py-2 text-right text-slate-600">
+                            {item.total.toLocaleString("ja-JP")}名
+                          </td>
+                          <td className="px-3 py-2 text-right text-emerald-600">
+                            {item.statusCounts.regular.toLocaleString("ja-JP")}名（
+                            {formatPercentage(item.rates.regular)}）
+                          </td>
+                          <td className="px-3 py-2 text-right text-amber-600">
+                            {item.statusCounts.delayed.toLocaleString("ja-JP")}名（
+                            {formatPercentage(item.rates.delayed)}）
+                          </td>
+                          <td className="px-3 py-2 text-right text-rose-600">
+                            {item.statusCounts.atRisk.toLocaleString("ja-JP")}名（
+                            {formatPercentage(item.rates.atRisk)}）
+                          </td>
+                          <td className="px-3 py-2 text-right text-slate-600">
+                            {item.averageVisits !== null
+                              ? `${item.averageVisits.toLocaleString("ja-JP", {
+                                  minimumFractionDigits: 1,
+                                  maximumFractionDigits: 1,
+                                })}回`
+                              : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="mt-2 text-[11px] text-slate-500">
+                    ※ 「複数疾患/その他」には複合疾患および上記3疾患以外の生活習慣病が含まれます。
+                  </p>
+                </div>
 
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-2xl border border-amber-200 bg-white/90 p-4 shadow-soft">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-amber-700">受診遅延患者（91〜180日）</h3>
-                    <span className="text-xs text-amber-600">
-                      {lifestyleAnalysis.delayedPatients.total.toLocaleString("ja-JP")}名
-                    </span>
+                <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-slate-800">初診患者の継続状況</h3>
+                    <div className="text-xs text-slate-500">
+                      初診患者 {lifestyleAnalysis.initialStats.total.toLocaleString("ja-JP")}名 /
+                      継続受診率 {formatPercentage(lifestyleAnalysis.initialStats.continuationRate)} /
+                      初診後1回のみ {lifestyleAnalysis.initialStats.singleVisit.total.toLocaleString("ja-JP")}名
+                    </div>
                   </div>
-                  {lifestyleAnalysis.delayedPatients.list.length > 0 ? (
-                    <div className="mt-3 overflow-x-auto">
-                      <table className="w-full min-w-[480px] border-collapse text-sm">
-                        <thead className="bg-amber-50 text-xs uppercase tracking-wide text-amber-600">
+                  <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                    <div>
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        来院回数別
+                      </h4>
+                      <table className="mt-2 w-full border-collapse text-sm">
+                        <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                           <tr>
-                            <th className="px-3 py-2 text-left font-semibold">ケースID</th>
-                            <th className="px-3 py-2 text-left font-semibold">最終来院</th>
-                            <th className="px-3 py-2 text-right font-semibold">経過日数</th>
-                            <th className="px-3 py-2 text-right font-semibold">来院回数</th>
-                            <th className="px-3 py-2 text-left font-semibold">疾患</th>
+                            <th className="px-3 py-2 text-left font-semibold">区分</th>
+                            <th className="px-3 py-2 text-right font-semibold">人数</th>
+                            <th className="px-3 py-2 text-right font-semibold">構成比</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-amber-100">
-                          {lifestyleAnalysis.delayedPatients.list.map((patient) => (
-                            <tr key={`delayed-${patient.key}`} className="bg-white">
-                              <td className="px-3 py-2 text-slate-700">{patient.anonymizedId}</td>
-                              <td className="px-3 py-2 text-slate-600">
-                                {formatDateLabel(patient.lastVisitDate)}
+                        <tbody className="divide-y divide-slate-100">
+                          {lifestyleAnalysis.initialStats.visitBands.map((item) => (
+                            <tr key={item.id}>
+                              <td className="px-3 py-2 text-slate-700">{item.label}</td>
+                              <td className="px-3 py-2 text-right text-slate-600">
+                                {item.count.toLocaleString("ja-JP")}名
                               </td>
                               <td className="px-3 py-2 text-right text-slate-600">
-                                {patient.daysSinceLast.toLocaleString("ja-JP")}日
-                              </td>
-                              <td className="px-3 py-2 text-right text-slate-600">
-                                {patient.visitCount.toLocaleString("ja-JP")}回
-                              </td>
-                              <td className="px-3 py-2 text-slate-600">
-                                {patient.diseaseLabels.join(" / ")}
+                                {formatPercentage(item.percentage)}
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
-                  ) : (
-                    <p className="mt-3 text-xs text-slate-500">該当患者はいません。</p>
-                  )}
-                  <p className="mt-2 text-[11px] text-amber-600">
-                    ※ リストは直近の最終来院が新しい順に最大30名まで表示しています。
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-rose-200 bg-white/90 p-4 shadow-soft">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-rose-700">離脱リスク患者（181日以上）</h3>
-                    <span className="text-xs text-rose-600">
-                      {lifestyleAnalysis.atRiskPatients.total.toLocaleString("ja-JP")}名（うち過去4回以上通院:
-                      {lifestyleAnalysis.atRiskPatients.highEngagement.toLocaleString("ja-JP")}名）
-                    </span>
-                  </div>
-                  {lifestyleAnalysis.atRiskPatients.list.length > 0 ? (
-                    <div className="mt-3 overflow-x-auto">
-                      <table className="w-full min-w-[520px] border-collapse text-sm">
-                        <thead className="bg-rose-50 text-xs uppercase tracking-wide text-rose-600">
+                    <div>
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        初診月別
+                      </h4>
+                      <table className="mt-2 w-full border-collapse text-sm">
+                        <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                           <tr>
-                            <th className="px-3 py-2 text-left font-semibold">ケースID</th>
-                            <th className="px-3 py-2 text-left font-semibold">最終来院</th>
-                            <th className="px-3 py-2 text-right font-semibold">経過日数</th>
-                            <th className="px-3 py-2 text-right font-semibold">来院回数</th>
-                            <th className="px-3 py-2 text-left font-semibold">疾患</th>
+                            <th className="px-3 py-2 text-left font-semibold">月</th>
+                            <th className="px-3 py-2 text-right font-semibold">患者数</th>
+                            <th className="px-3 py-2 text-right font-semibold">平均来院回数</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-rose-100">
-                          {lifestyleAnalysis.atRiskPatients.list.map((patient) => (
-                            <tr key={`risk-${patient.key}`} className="bg-white">
-                              <td className="px-3 py-2 text-slate-700">{patient.anonymizedId}</td>
-                              <td className="px-3 py-2 text-slate-600">
-                                {formatDateLabel(patient.lastVisitDate)}
+                        <tbody className="divide-y divide-slate-100">
+                          {lifestyleAnalysis.initialStats.monthly.map((item) => (
+                            <tr key={item.month}>
+                              <td className="px-3 py-2 text-slate-700">{item.label}</td>
+                              <td className="px-3 py-2 text-right text-slate-600">
+                                {item.count.toLocaleString("ja-JP")}名
                               </td>
                               <td className="px-3 py-2 text-right text-slate-600">
-                                {patient.daysSinceLast.toLocaleString("ja-JP")}日
-                              </td>
-                              <td className="px-3 py-2 text-right text-slate-600">
-                                {patient.visitCount.toLocaleString("ja-JP")}回
-                              </td>
-                              <td className="px-3 py-2 text-slate-600">
-                                {patient.diseaseLabels.join(" / ")}
-                                {patient.diseaseNames.length > 0 && (
-                                  <span className="ml-1 text-[11px] text-slate-500">
-                                    ({patient.diseaseNames.join("・")})
-                                  </span>
-                                )}
+                                {item.averageVisits !== null
+                                  ? `${item.averageVisits.toLocaleString("ja-JP", {
+                                      minimumFractionDigits: 1,
+                                      maximumFractionDigits: 1,
+                                    })}回`
+                                  : "—"}
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
-                  ) : (
-                    <p className="mt-3 text-xs text-slate-500">該当患者はいません。</p>
-                  )}
-                  <p className="mt-2 text-[11px] text-rose-600">
-                    ※ 離脱リスク患者は最終来院が半年以上前の患者です。過去の来院回数が多い患者を優先的にフォローしてください。
-                  </p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-slate-800">年齢別の離脱率</h3>
+                    {lifestyleAnalysis.ageStats.ranking.length >= 2 && (
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-semibold text-emerald-600">
+                          ベスト: {lifestyleAnalysis.ageStats.ranking[0].label}
+                          （{formatPercentage(lifestyleAnalysis.ageStats.ranking[0].continuationRate)}）
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 font-semibold text-rose-600">
+                          ワースト: {
+                            lifestyleAnalysis.ageStats.ranking[
+                              lifestyleAnalysis.ageStats.ranking.length - 1
+                            ].label
+                          }
+                          （
+                          {formatPercentage(
+                            lifestyleAnalysis.ageStats.ranking[
+                              lifestyleAnalysis.ageStats.ranking.length - 1
+                            ].continuationRate,
+                          )}
+                          ）
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <table className="mt-3 w-full border-collapse text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold">年齢層</th>
+                        <th className="px-3 py-2 text-right font-semibold">患者数</th>
+                        <th className="px-3 py-2 text-right font-semibold">継続受診率</th>
+                        <th className="px-3 py-2 text-right font-semibold">受診遅延率</th>
+                        <th className="px-3 py-2 text-right font-semibold">離脱リスク率</th>
+                        <th className="px-3 py-2 text-right font-semibold">平均来院回数</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {lifestyleAnalysis.ageStats.groups.map((group) => (
+                        <tr key={group.id} className="bg-white">
+                          <td className="px-3 py-2 text-slate-700">{group.label}</td>
+                          <td className="px-3 py-2 text-right text-slate-600">
+                            {group.count.toLocaleString("ja-JP")}名
+                          </td>
+                          <td className="px-3 py-2 text-right text-emerald-600">
+                            {formatPercentage(group.rates.regular)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-amber-600">
+                            {formatPercentage(group.rates.delayed)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-rose-600">
+                            {formatPercentage(group.rates.atRisk)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-slate-600">
+                            {group.averageVisits !== null
+                              ? `${group.averageVisits.toLocaleString("ja-JP", {
+                                  minimumFractionDigits: 1,
+                                  maximumFractionDigits: 1,
+                                })}回`
+                              : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-700">
+                    <p className="font-semibold text-amber-800">受診遅延（91〜180日）</p>
+                    <p className="mt-1">
+                      対象: {lifestyleAnalysis.delayedPatients.total.toLocaleString("ja-JP")}名
+                    </p>
+                    <p className="mt-1">
+                      受診間隔が開き始めているため、電話やSMSで早めの受診を促すと効果的です。
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-700">
+                    <p className="font-semibold text-rose-800">離脱リスク（181日以上）</p>
+                    <p className="mt-1">
+                      対象: {lifestyleAnalysis.atRiskPatients.total.toLocaleString("ja-JP")}名（うち過去4回以上: {lifestyleAnalysis.atRiskPatients.highEngagement.toLocaleString("ja-JP")}名）
+                    </p>
+                    <p className="mt-1">
+                      半年以上受診が無いため、健診・投薬タイミングのリマインドなど重点フォローが必要です。
+                    </p>
+                  </div>
                 </div>
               </div>
+            ) : (
+              <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                生活習慣病の主病データとカルテ集計を取り込むと、継続状況が表示されます。
+              </p>
+            )}
+          </SectionCard>
+        ) : (
+          <SectionCard
+            title="生活習慣病 継続性分析"
+            description="生活習慣病患者の継続状況は専用ページで確認できます。"
+          >
+            <div className="flex flex-col items-start gap-3 rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft">
+              <p className="text-sm text-slate-600">
+                生活習慣病患者の継続受診率や年齢別傾向、疾患別の離脱状況を詳細に確認したい場合は、以下のボタンから専用ページをご覧ください。
+              </p>
+              <Link
+                href="/patients/lifestyle"
+                className="inline-flex items-center gap-2 rounded-full bg-brand-500 px-5 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-brand-600"
+              >
+                生活習慣病 継続分析ページを開く
+              </Link>
             </div>
-          ) : (
-            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-              生活習慣病の主病データとカルテ集計を取り込むと、受診継続性の分析結果が表示されます。
-            </p>
-          )}
-        </SectionCard>
+          </SectionCard>
+        )}
 
         <SectionCard
           title="視点別インサイト"
@@ -4910,5 +4829,13 @@ export default function PatientAnalysisPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function PatientAnalysisPage() {
+  return (
+    <LifestyleViewContext.Provider value={false}>
+      <PatientAnalysisPageContent />
+    </LifestyleViewContext.Provider>
   );
 }
