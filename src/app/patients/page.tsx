@@ -22,8 +22,6 @@ import {
   RotateCcw,
   Undo2,
   Clock,
-  PieChart,
-  Repeat,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Papa from "papaparse";
@@ -577,53 +575,18 @@ const SectionCard = ({ title, description, action, children }: SectionCardProps)
   </section>
 );
 
-const STAT_TONE_STYLES: Record<
-  "brand" | "accent" | "muted" | "emerald",
-  {
-    container: string;
-    label: string;
-    value: string;
-    positive: string;
-    negative: string;
-    glow: string;
-  }
-> = {
-  brand: {
-    container:
-      "border border-transparent bg-gradient-to-br from-brand-500 via-brand-400 to-brand-600 text-white shadow-xl shadow-brand-600/30",
-    label: "text-white/80",
-    value: "text-white drop-shadow-sm",
-    positive: "text-emerald-100",
-    negative: "text-rose-100",
-    glow: "bg-white/20",
-  },
-  accent: {
-    container:
-      "border border-transparent bg-gradient-to-br from-accent-400 via-rose-400 to-accent-600 text-white shadow-xl shadow-accent-500/35",
-    label: "text-white/85",
-    value: "text-white drop-shadow-sm",
-    positive: "text-emerald-100",
-    negative: "text-rose-100",
-    glow: "bg-white/25",
-  },
-  emerald: {
-    container:
-      "border border-transparent bg-gradient-to-br from-emerald-400 via-emerald-500 to-brand-500 text-white shadow-xl shadow-emerald-500/30",
-    label: "text-white/80",
-    value: "text-white drop-shadow-sm",
-    positive: "text-emerald-100",
-    negative: "text-rose-100",
-    glow: "bg-white/20",
-  },
-  muted: {
-    container:
-      "border border-transparent bg-gradient-to-br from-slate-900 via-blue-600 to-slate-800 text-white shadow-xl shadow-slate-900/35",
-    label: "text-slate-100/80",
-    value: "text-white drop-shadow-sm",
-    positive: "text-emerald-200",
-    negative: "text-rose-200",
-    glow: "bg-blue-400/30",
-  },
+const STAT_TONE_TEXT: Record<"brand" | "accent" | "muted" | "emerald", string> = {
+  brand: "text-brand-600",
+  accent: "text-accent-600",
+  emerald: "text-emerald-600",
+  muted: "text-slate-600",
+};
+
+const STAT_TONE_BADGE: Record<"brand" | "accent" | "muted" | "emerald", string> = {
+  brand: "bg-brand-50 text-brand-600",
+  accent: "bg-accent-50 text-accent-600",
+  emerald: "bg-emerald-50 text-emerald-600",
+  muted: "bg-slate-100 text-slate-600",
 };
 
 const StatCard = ({
@@ -632,34 +595,40 @@ const StatCard = ({
   tone,
   monthOverMonth,
   isSingleMonth,
+  secondaryLabel,
+  secondaryValue,
 }: {
   label: string;
   value: string;
   tone: "brand" | "accent" | "muted" | "emerald";
   monthOverMonth?: { value: number; percentage: number } | null;
   isSingleMonth: boolean;
+  secondaryLabel?: string;
+  secondaryValue?: string | null;
 }) => {
-  const styles = STAT_TONE_STYLES[tone];
+  const toneText = STAT_TONE_TEXT[tone];
+  const badgeClass = STAT_TONE_BADGE[tone];
 
   return (
-    <div
-      className={`group relative overflow-hidden rounded-[22px] p-4 transition-transform duration-300 ease-out hover:-translate-y-1 hover:shadow-2xl sm:p-5 ${styles.container}`}
-    >
-      <div
-        className={`pointer-events-none absolute -right-8 -top-12 h-32 w-32 rounded-full blur-3xl transition-all duration-500 group-hover:scale-110 ${styles.glow}`}
-      />
-      <dt
-        className={`text-[10px] font-semibold uppercase tracking-[0.18em] sm:text-xs ${styles.label}`}
-      >
+    <div className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow duration-200 hover:shadow-lg sm:p-5">
+      <dt className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 sm:text-xs">
         {label}
       </dt>
-      <dd className={`mt-2 text-2xl font-bold leading-tight sm:text-3xl ${styles.value}`}>
+      <dd className={`mt-2 text-2xl font-bold leading-tight sm:text-3xl ${toneText}`}>
         {value}
       </dd>
+      {secondaryLabel && secondaryValue && (
+        <p className="mt-3 inline-flex items-center gap-2 text-xs">
+          <span className={`rounded-full px-2 py-1 font-semibold ${badgeClass}`}>
+            {secondaryLabel}
+          </span>
+          <span className="font-semibold text-slate-600">{secondaryValue}</span>
+        </p>
+      )}
       {monthOverMonth && (
         <p
           className={`mt-3 text-xs font-semibold ${
-            monthOverMonth.value >= 0 ? styles.positive : styles.negative
+            monthOverMonth.value >= 0 ? "text-emerald-600" : "text-rose-600"
           }`}
         >
           {isSingleMonth ? "前月比" : "期間比"}: {monthOverMonth.value >= 0 ? "+" : ""}
@@ -669,114 +638,6 @@ const StatCard = ({
       )}
     </div>
   );
-};
-
-type SummaryHighlight = {
-  id: string;
-  label: string;
-  value: string;
-  tone: "brand" | "accent" | "muted" | "emerald";
-  icon: LucideIcon;
-  tooltip: string;
-  deltaLabel?: string;
-  deltaStatus?: "up" | "down" | "neutral";
-  footnote?: string | null;
-};
-
-const SummaryHighlightCard = ({
-  label,
-  value,
-  tone,
-  icon: Icon,
-  tooltip,
-  deltaLabel,
-  deltaStatus,
-  footnote,
-}: SummaryHighlight) => {
-  const badgeClass =
-    tone === "brand"
-      ? "bg-brand-50 text-brand-600"
-      : tone === "emerald"
-        ? "bg-emerald-50 text-emerald-600"
-        : tone === "accent"
-          ? "bg-accent-50 text-accent-600"
-          : "bg-slate-100 text-slate-600";
-
-  const valueClass =
-    tone === "brand"
-      ? "text-brand-700"
-      : tone === "emerald"
-        ? "text-emerald-700"
-        : tone === "accent"
-          ? "text-accent-700"
-          : "text-slate-900";
-
-  const deltaClass =
-    deltaStatus === "up"
-      ? "text-emerald-600"
-      : deltaStatus === "down"
-        ? "text-red-600"
-        : "text-slate-500";
-
-  return (
-    <article
-      className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-card"
-      title={tooltip}
-    >
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          {label}
-        </span>
-        <span className={`flex h-8 w-8 items-center justify-center rounded-full ${badgeClass}`}>
-          <Icon className="h-4 w-4" />
-        </span>
-      </div>
-      <p className={`mt-3 text-2xl font-bold sm:text-3xl ${valueClass}`}>{value}</p>
-      {deltaLabel && (
-        <p className={`mt-1 text-xs font-medium ${deltaClass}`}>{deltaLabel}</p>
-      )}
-      {footnote && (
-        <p className="mt-2 text-[11px] text-slate-400">{footnote}</p>
-      )}
-    </article>
-  );
-};
-
-const formatSignedInteger = (value: number) => {
-  if (value > 0) {
-    return `+${value.toLocaleString("ja-JP")}`;
-  }
-  if (value < 0) {
-    return `-${Math.abs(value).toLocaleString("ja-JP")}`;
-  }
-  return "±0";
-};
-
-const formatSignedDecimal = (value: number) => {
-  const formatted = Math.abs(value).toLocaleString("ja-JP", {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  });
-  if (value > 0) {
-    return `+${formatted}`;
-  }
-  if (value < 0) {
-    return `-${formatted}`;
-  }
-  return `±${formatted}`;
-};
-
-const determineDeltaStatus = (value: number | null | undefined): SummaryHighlight["deltaStatus"] => {
-  if (value === null || value === undefined) {
-    return undefined;
-  }
-  if (value > 0) {
-    return "up";
-  }
-  if (value < 0) {
-    return "down";
-  }
-  return "neutral";
 };
 
 type UnitPriceGroupId = "general" | "internal" | "endoscopy" | "fever";
@@ -1481,6 +1342,19 @@ function PatientAnalysisPageContent() {
     return { value: diff, percentage };
   };
 
+  const latestPureRate =
+    latestStat && latestStat.totalPatients > 0
+      ? roundTo1Decimal((latestStat.pureFirstVisits / latestStat.totalPatients) * 100)
+      : null;
+  const latestReturningRate =
+    latestStat && latestStat.totalPatients > 0
+      ? roundTo1Decimal((latestStat.returningFirstVisits / latestStat.totalPatients) * 100)
+      : null;
+  const latestContinuationRate =
+    latestStat && latestStat.totalPatients > 0
+      ? roundTo1Decimal((latestStat.revisitCount / latestStat.totalPatients) * 100)
+      : null;
+
   const previousPeriodRecords = useMemo(() => {
     if (classifiedRecords.length === 0 || !startMonth || !endMonth) {
       return [];
@@ -1503,106 +1377,6 @@ function PatientAnalysisPageContent() {
       );
     }
   }, [classifiedRecords, startMonth, endMonth, isSingleMonthPeriod]);
-
-  const periodSummary = useMemo(() => {
-    if (periodFilteredRecords.length === 0) {
-      return null;
-    }
-
-    let total = 0;
-    let pure = 0;
-    let returning = 0;
-    let revisit = 0;
-    let ageSum = 0;
-    let ageCount = 0;
-
-    for (const record of periodFilteredRecords) {
-      total += 1;
-      if (record.category === "pureFirst") {
-        pure += 1;
-      } else if (record.category === "returningFirst") {
-        returning += 1;
-      } else if (record.category === "revisit") {
-        revisit += 1;
-      }
-
-      const age = calculateAge(record.birthDateIso ?? null, record.dateIso);
-      if (age !== null) {
-        ageSum += age;
-        ageCount += 1;
-      }
-    }
-
-    const averageAge =
-      ageCount > 0 ? roundTo1Decimal(ageSum / ageCount) : null;
-
-    const pureRate = total > 0 ? roundTo1Decimal((pure / total) * 100) : null;
-    const returningRate =
-      total > 0 ? roundTo1Decimal((returning / total) * 100) : null;
-    const revisitRate =
-      total > 0 ? roundTo1Decimal((revisit / total) * 100) : null;
-
-    return {
-      total,
-      pure,
-      returning,
-      revisit,
-      pureRate,
-      returningRate,
-      revisitRate,
-      averageAge,
-    };
-  }, [periodFilteredRecords]);
-
-  const previousPeriodSummary = useMemo(() => {
-    if (previousPeriodRecords.length === 0) {
-      return null;
-    }
-
-    let total = 0;
-    let pure = 0;
-    let returning = 0;
-    let revisit = 0;
-    let ageSum = 0;
-    let ageCount = 0;
-
-    for (const record of previousPeriodRecords) {
-      total += 1;
-      if (record.category === "pureFirst") {
-        pure += 1;
-      } else if (record.category === "returningFirst") {
-        returning += 1;
-      } else if (record.category === "revisit") {
-        revisit += 1;
-      }
-
-      const age = calculateAge(record.birthDateIso ?? null, record.dateIso);
-      if (age !== null) {
-        ageSum += age;
-        ageCount += 1;
-      }
-    }
-
-    const averageAge =
-      ageCount > 0 ? roundTo1Decimal(ageSum / ageCount) : null;
-
-    const pureRate = total > 0 ? roundTo1Decimal((pure / total) * 100) : null;
-    const returningRate =
-      total > 0 ? roundTo1Decimal((returning / total) * 100) : null;
-    const revisitRate =
-      total > 0 ? roundTo1Decimal((revisit / total) * 100) : null;
-
-    return {
-      total,
-      pure,
-      returning,
-      revisit,
-      pureRate,
-      returningRate,
-      revisitRate,
-      averageAge,
-    };
-  }, [previousPeriodRecords]);
 
   const departmentStats = useMemo<DepartmentStat[]>(() => {
     if (filteredClassified.length === 0) {
@@ -2676,138 +2450,6 @@ function PatientAnalysisPageContent() {
     return `${formatMonthLabel(start)}〜${formatMonthLabel(end)}`;
   }, [previousDiagnosisRange]);
 
-  const summaryHighlights = useMemo<SummaryHighlight[]>(() => {
-    if (!periodSummary) {
-      return [];
-    }
-
-    const periodLabel = diagnosisRangeLabel;
-    const highlights: SummaryHighlight[] = [];
-
-    const totalDelta =
-      previousPeriodSummary !== null
-        ? periodSummary.total - previousPeriodSummary.total
-        : null;
-    const totalDeltaPct =
-      previousPeriodSummary !== null && previousPeriodSummary.total > 0 && totalDelta !== null
-        ? roundTo1Decimal((totalDelta / previousPeriodSummary.total) * 100)
-        : null;
-
-    highlights.push({
-      id: "total",
-      label: "期間総患者数",
-      value: `${periodSummary.total.toLocaleString("ja-JP")}名`,
-      tone: "brand",
-      icon: Users,
-      tooltip: "選択期間内に受診した患者数の合計です。",
-      deltaLabel:
-        totalDelta !== null && totalDeltaPct !== null
-          ? `前期間比 ${formatSignedInteger(totalDelta)}名 (${formatSignedDecimal(totalDeltaPct)}%)`
-          : undefined,
-      deltaStatus: determineDeltaStatus(totalDelta ?? undefined),
-      footnote: periodLabel,
-    });
-
-    if (periodSummary.pureRate !== null) {
-      const prevPureRate =
-        previousPeriodSummary && previousPeriodSummary.pureRate !== null
-          ? previousPeriodSummary.pureRate
-          : null;
-      const pureDiff =
-        prevPureRate !== null ? roundTo1Decimal(periodSummary.pureRate - prevPureRate) : null;
-      highlights.push({
-        id: "pure-rate",
-        label: "純初診率",
-        value: `${periodSummary.pureRate.toFixed(1)}%`,
-        tone: "emerald",
-        icon: PieChart,
-        tooltip: "純初診（初診かつ新患）が総患者に占める割合です。",
-        deltaLabel:
-          pureDiff !== null ? `前期間比 ${formatSignedDecimal(pureDiff)}pt` : undefined,
-        deltaStatus: determineDeltaStatus(pureDiff ?? undefined),
-      });
-    }
-
-    const pureDelta =
-      previousPeriodSummary !== null
-        ? periodSummary.pure - previousPeriodSummary.pure
-        : null;
-    highlights.push({
-      id: "pure-count",
-      label: "純初診数",
-      value: `${periodSummary.pure.toLocaleString("ja-JP")}名`,
-      tone: "emerald",
-      icon: UserPlus,
-      tooltip: "選択期間内に来院した純初診患者数です。",
-      deltaLabel:
-        pureDelta !== null ? `前期間比 ${formatSignedInteger(pureDelta)}名` : undefined,
-      deltaStatus: determineDeltaStatus(pureDelta ?? undefined),
-    });
-
-    if (periodSummary.revisitRate !== null) {
-      const prevRevisitRate =
-        previousPeriodSummary && previousPeriodSummary.revisitRate !== null
-          ? previousPeriodSummary.revisitRate
-          : null;
-      const revisitRateDiff =
-        prevRevisitRate !== null
-          ? roundTo1Decimal(periodSummary.revisitRate - prevRevisitRate)
-          : null;
-      highlights.push({
-        id: "revisit-rate",
-        label: "継続率（再診）",
-        value: `${periodSummary.revisitRate.toFixed(1)}%`,
-        tone: "accent",
-        icon: Repeat,
-        tooltip: "再診患者が総患者に占める割合です。",
-        deltaLabel:
-          revisitRateDiff !== null
-            ? `前期間比 ${formatSignedDecimal(revisitRateDiff)}pt`
-            : undefined,
-        deltaStatus: determineDeltaStatus(revisitRateDiff ?? undefined),
-      });
-    }
-
-    const revisitDelta =
-      previousPeriodSummary !== null
-        ? periodSummary.revisit - previousPeriodSummary.revisit
-        : null;
-    highlights.push({
-      id: "revisit-count",
-      label: "再診数",
-      value: `${periodSummary.revisit.toLocaleString("ja-JP")}名`,
-      tone: "muted",
-      icon: RotateCcw,
-      tooltip: "選択期間内に来院した再診患者数です。",
-      deltaLabel:
-        revisitDelta !== null ? `前期間比 ${formatSignedInteger(revisitDelta)}名` : undefined,
-      deltaStatus: determineDeltaStatus(revisitDelta ?? undefined),
-    });
-
-    const averageAgeDiff =
-      periodSummary.averageAge !== null &&
-      previousPeriodSummary &&
-      previousPeriodSummary.averageAge !== null
-        ? roundTo1Decimal(periodSummary.averageAge - previousPeriodSummary.averageAge)
-        : null;
-    highlights.push({
-      id: "average-age",
-      label: "平均年齢",
-      value:
-        periodSummary.averageAge !== null
-          ? `${periodSummary.averageAge.toFixed(1)}歳`
-          : "—",
-      tone: "muted",
-      icon: Clock,
-      tooltip: "選択期間内の患者平均年齢です（年齢情報がある患者のみで算出）。",
-      deltaLabel:
-        averageAgeDiff !== null ? `前期間比 ${formatSignedDecimal(averageAgeDiff)}歳` : undefined,
-      deltaStatus: determineDeltaStatus(averageAgeDiff ?? undefined),
-    });
-
-    return highlights;
-  }, [periodSummary, previousPeriodSummary, diagnosisRangeLabel]);
-
   const channelSummaryCards = useMemo(() => {
     const listingTotal = Object.values(listingStatus.totals).reduce(
       (accumulator, value) => accumulator + value,
@@ -3277,22 +2919,6 @@ function PatientAnalysisPageContent() {
             )}
           </section>
         )}
-        {!lifestyleOnly && (
-          <section className="rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-soft">
-            {summaryHighlights.length > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-                {summaryHighlights.map((highlight) => (
-                  <SummaryHighlightCard key={highlight.id} {...highlight} />
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
-                CSVをアップロードすると期間サマリーが表示されます。
-              </div>
-            )}
-          </section>
-        )}
-
         <PatientsFilterPortal
           allMonths={allAvailableMonths}
           startMonth={startMonth}
@@ -3310,340 +2936,446 @@ function PatientAnalysisPageContent() {
 
         {!lifestyleOnly && (
           <>
-        {stats.length > 0 ? (
-          <>
-            {latestStat && (
-              <SectionCard 
-                title={startMonth && endMonth && startMonth === endMonth 
-                  ? `${formatMonthLabel(startMonth)} サマリー`
-                  : startMonth && endMonth
-                    ? `期間内最新月サマリー（${formatMonthLabel(latestStat.month)}）`
-                    : "最新月サマリー"
-                }
-                description={startMonth && endMonth && startMonth !== endMonth 
-                  ? `選択期間：${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}`
-                  : undefined
-                }
-              >
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                  <StatCard
-                    label={`${formatMonthLabel(latestStat.month)} 総患者`}
-                    value={`${latestStat.totalPatients.toLocaleString("ja-JP")}名`}
-                    tone="brand"
-                    monthOverMonth={
-                      isSingleMonthPeriod && previousMonthStat
-                        ? calculateMonthOverMonth(latestStat.totalPatients, previousMonthStat.totalPatients)
-                        : !isSingleMonthPeriod && firstStat
-                          ? calculateMonthOverMonth(latestStat.totalPatients, firstStat.totalPatients)
-                          : null
+            {stats.length > 0 ? (
+              <>
+                {latestStat && (
+                  <SectionCard
+                    title={
+                      startMonth && endMonth && startMonth === endMonth
+                        ? `${formatMonthLabel(startMonth)} サマリー`
+                        : startMonth && endMonth
+                          ? `期間内最新月サマリー（${formatMonthLabel(latestStat.month)}）`
+                          : "最新月サマリー"
                     }
-                    isSingleMonth={isSingleMonthPeriod}
-                  />
-                  <StatCard
-                    label={`${formatMonthLabel(latestStat.month)} 純初診`}
-                    value={`${latestStat.pureFirstVisits.toLocaleString("ja-JP")}名`}
-                    tone="emerald"
-                    monthOverMonth={
-                      isSingleMonthPeriod && previousMonthStat
-                        ? calculateMonthOverMonth(latestStat.pureFirstVisits, previousMonthStat.pureFirstVisits)
-                        : !isSingleMonthPeriod && firstStat
-                          ? calculateMonthOverMonth(latestStat.pureFirstVisits, firstStat.pureFirstVisits)
-                          : null
+                    description={
+                      startMonth && endMonth && startMonth !== endMonth
+                        ? `選択期間：${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}`
+                        : undefined
                     }
-                    isSingleMonth={isSingleMonthPeriod}
-                  />
-                  <StatCard
-                    label={`${formatMonthLabel(latestStat.month)} 再初診`}
-                    value={`${latestStat.returningFirstVisits.toLocaleString("ja-JP")}名`}
-                    tone="muted"
-                    monthOverMonth={
-                      isSingleMonthPeriod && previousMonthStat
-                        ? calculateMonthOverMonth(latestStat.returningFirstVisits, previousMonthStat.returningFirstVisits)
-                        : !isSingleMonthPeriod && firstStat
-                          ? calculateMonthOverMonth(latestStat.returningFirstVisits, firstStat.returningFirstVisits)
-                          : null
-                    }
-                    isSingleMonth={isSingleMonthPeriod}
-                  />
-                  <StatCard
-                    label={`${formatMonthLabel(latestStat.month)} 再診`}
-                    value={`${latestStat.revisitCount.toLocaleString("ja-JP")}名`}
-                    tone="accent"
-                    monthOverMonth={
-                      isSingleMonthPeriod && previousMonthStat
-                        ? calculateMonthOverMonth(latestStat.revisitCount, previousMonthStat.revisitCount)
-                        : !isSingleMonthPeriod && firstStat
-                          ? calculateMonthOverMonth(latestStat.revisitCount, firstStat.revisitCount)
-                          : null
-                    }
-                    isSingleMonth={isSingleMonthPeriod}
-                  />
-                  <StatCard
-                    label={`${formatMonthLabel(latestStat.month)} 平均年齢`}
-                    value={
-                      latestStat.averageAge !== null
-                        ? `${roundTo1Decimal(latestStat.averageAge)}歳`
-                        : "データなし"
-                    }
-                    tone="muted"
-                    monthOverMonth={
-                      isSingleMonthPeriod && previousMonthStat && latestStat.averageAge !== null && previousMonthStat.averageAge !== null
-                        ? { value: roundTo1Decimal(latestStat.averageAge - previousMonthStat.averageAge), percentage: roundTo1Decimal(((latestStat.averageAge - previousMonthStat.averageAge) / previousMonthStat.averageAge) * 100) }
-                        : !isSingleMonthPeriod && firstStat && latestStat.averageAge !== null && firstStat.averageAge !== null
-                          ? { value: roundTo1Decimal(latestStat.averageAge - firstStat.averageAge), percentage: roundTo1Decimal(((latestStat.averageAge - firstStat.averageAge) / firstStat.averageAge) * 100) }
-                          : null
-                    }
-                    isSingleMonth={isSingleMonthPeriod}
-                  />
-                </div>
-                <button
-                  onClick={() => setShowSummaryChart(!showSummaryChart)}
-                  className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                >
-                  {showSummaryChart ? "グラフを非表示" : "グラフを表示"}
-                </button>
-                {showSummaryChart && (
-                  <div className="mt-4 space-y-2">
-                    <p className="text-[11px] text-slate-500">
-                      ※ 凡例をクリックすると系列を切り替え、ホバーで月次値の詳細を確認できます。
-                    </p>
-                    <MonthlySummaryChart stats={stats} />
-                  </div>
+                  >
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                      <StatCard
+                        label={`${formatMonthLabel(latestStat.month)} 総患者`}
+                        value={`${latestStat.totalPatients.toLocaleString("ja-JP")}名`}
+                        tone="brand"
+                        monthOverMonth={
+                          isSingleMonthPeriod && previousMonthStat
+                            ? calculateMonthOverMonth(
+                                latestStat.totalPatients,
+                                previousMonthStat.totalPatients,
+                              )
+                            : !isSingleMonthPeriod && firstStat
+                              ? calculateMonthOverMonth(
+                                  latestStat.totalPatients,
+                                  firstStat.totalPatients,
+                                )
+                              : null
+                        }
+                        isSingleMonth={isSingleMonthPeriod}
+                      />
+                      <StatCard
+                        label={`${formatMonthLabel(latestStat.month)} 純初診`}
+                        value={`${latestStat.pureFirstVisits.toLocaleString("ja-JP")}名`}
+                        tone="emerald"
+                        secondaryLabel="純初診率"
+                        secondaryValue={formatPercentage(latestPureRate)}
+                        monthOverMonth={
+                          isSingleMonthPeriod && previousMonthStat
+                            ? calculateMonthOverMonth(
+                                latestStat.pureFirstVisits,
+                                previousMonthStat.pureFirstVisits,
+                              )
+                            : !isSingleMonthPeriod && firstStat
+                              ? calculateMonthOverMonth(
+                                  latestStat.pureFirstVisits,
+                                  firstStat.pureFirstVisits,
+                                )
+                              : null
+                        }
+                        isSingleMonth={isSingleMonthPeriod}
+                      />
+                      <StatCard
+                        label={`${formatMonthLabel(latestStat.month)} 再初診`}
+                        value={`${latestStat.returningFirstVisits.toLocaleString("ja-JP")}名`}
+                        tone="accent"
+                        secondaryLabel="再初診率"
+                        secondaryValue={formatPercentage(latestReturningRate)}
+                        monthOverMonth={
+                          isSingleMonthPeriod && previousMonthStat
+                            ? calculateMonthOverMonth(
+                                latestStat.returningFirstVisits,
+                                previousMonthStat.returningFirstVisits,
+                              )
+                            : !isSingleMonthPeriod && firstStat
+                              ? calculateMonthOverMonth(
+                                  latestStat.returningFirstVisits,
+                                  firstStat.returningFirstVisits,
+                                )
+                              : null
+                        }
+                        isSingleMonth={isSingleMonthPeriod}
+                      />
+                      <StatCard
+                        label={`${formatMonthLabel(latestStat.month)} 再診`}
+                        value={`${latestStat.revisitCount.toLocaleString("ja-JP")}名`}
+                        tone="muted"
+                        secondaryLabel="継続率"
+                        secondaryValue={formatPercentage(latestContinuationRate)}
+                        monthOverMonth={
+                          isSingleMonthPeriod && previousMonthStat
+                            ? calculateMonthOverMonth(
+                                latestStat.revisitCount,
+                                previousMonthStat.revisitCount,
+                              )
+                            : !isSingleMonthPeriod && firstStat
+                              ? calculateMonthOverMonth(
+                                  latestStat.revisitCount,
+                                  firstStat.revisitCount,
+                                )
+                              : null
+                        }
+                        isSingleMonth={isSingleMonthPeriod}
+                      />
+                      <StatCard
+                        label={`${formatMonthLabel(latestStat.month)} 平均年齢`}
+                        value={
+                          latestStat.averageAge !== null
+                            ? `${roundTo1Decimal(latestStat.averageAge)}歳`
+                            : "データなし"
+                        }
+                        tone="muted"
+                        monthOverMonth={
+                          isSingleMonthPeriod &&
+                          previousMonthStat &&
+                          latestStat.averageAge !== null &&
+                          previousMonthStat.averageAge !== null
+                            ? {
+                                value: roundTo1Decimal(
+                                  latestStat.averageAge - previousMonthStat.averageAge,
+                                ),
+                                percentage: roundTo1Decimal(
+                                  ((latestStat.averageAge - previousMonthStat.averageAge) /
+                                    previousMonthStat.averageAge) *
+                                    100,
+                                ),
+                              }
+                            : !isSingleMonthPeriod &&
+                                firstStat &&
+                                latestStat.averageAge !== null &&
+                                firstStat.averageAge !== null
+                              ? {
+                                  value: roundTo1Decimal(
+                                    latestStat.averageAge - firstStat.averageAge,
+                                  ),
+                                  percentage: roundTo1Decimal(
+                                    ((latestStat.averageAge - firstStat.averageAge) /
+                                      firstStat.averageAge) *
+                                      100,
+                                  ),
+                                }
+                              : null
+                        }
+                        isSingleMonth={isSingleMonthPeriod}
+                      />
+                    </div>
+                    <button
+                      onClick={() => setShowSummaryChart(!showSummaryChart)}
+                      className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                      {showSummaryChart ? "グラフを非表示" : "グラフを表示"}
+                    </button>
+                    {showSummaryChart && (
+                      <div className="mt-4 space-y-2">
+                        <p className="text-[11px] text-slate-500">
+                          ※ 凡例をクリックすると系列を切り替え、ホバーで月次値の詳細を確認できます。
+                        </p>
+                        <MonthlySummaryChart stats={stats} />
+                      </div>
+                    )}
+                  </SectionCard>
                 )}
+
+                {stats.length > 1 && (
+                  <SectionCard
+                    title={
+                      startMonth && endMonth && startMonth !== endMonth
+                        ? `月次推移（${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}）`
+                        : "月次推移"
+                    }
+                    description="選択期間のカルテ集計を月別に一覧しています。"
+                  >
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead>
+                          <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
+                            <th className="px-3 py-2">月</th>
+                            <th className="px-3 py-2">総患者</th>
+                            <th className="px-3 py-2">純初診</th>
+                            <th className="px-3 py-2">再初診</th>
+                            <th className="px-3 py-2">再診</th>
+                            <th className="px-3 py-2">平均年齢</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-slate-700">
+                          {stats
+                            .slice()
+                            .reverse()
+                            .map((stat, index, arr) => {
+                              const prevStat = arr[index + 1];
+                              const totalMoM = prevStat
+                                ? calculateMonthOverMonth(stat.totalPatients, prevStat.totalPatients)
+                                : null;
+                              const pureMoM = prevStat
+                                ? calculateMonthOverMonth(
+                                    stat.pureFirstVisits,
+                                    prevStat.pureFirstVisits,
+                                  )
+                                : null;
+                              const returningMoM = prevStat
+                                ? calculateMonthOverMonth(
+                                    stat.returningFirstVisits,
+                                    prevStat.returningFirstVisits,
+                                  )
+                                : null;
+                              const revisitMoM = prevStat
+                                ? calculateMonthOverMonth(stat.revisitCount, prevStat.revisitCount)
+                                : null;
+                              const ageMoM =
+                                prevStat && stat.averageAge !== null && prevStat.averageAge !== null
+                                  ? {
+                                      value: roundTo1Decimal(stat.averageAge - prevStat.averageAge),
+                                      percentage: roundTo1Decimal(
+                                        ((stat.averageAge - prevStat.averageAge) /
+                                          prevStat.averageAge) *
+                                          100,
+                                      ),
+                                    }
+                                  : null;
+
+                              return (
+                                <tr key={stat.month} className="hover:bg-slate-50">
+                                  <td className="px-3 py-2 font-medium text-slate-900">
+                                    {formatMonthLabel(stat.month)}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {stat.totalPatients.toLocaleString("ja-JP")}
+                                    {totalMoM && (
+                                      <span
+                                        className={`ml-2 text-xs ${
+                                          totalMoM.value >= 0 ? "text-emerald-600" : "text-rose-600"
+                                        }`}
+                                      >
+                                        ({totalMoM.value >= 0 ? "+" : ""}
+                                        {totalMoM.percentage}%)
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {stat.pureFirstVisits.toLocaleString("ja-JP")}
+                                    {pureMoM && (
+                                      <span
+                                        className={`ml-2 text-xs ${
+                                          pureMoM.value >= 0 ? "text-emerald-600" : "text-rose-600"
+                                        }`}
+                                      >
+                                        ({pureMoM.value >= 0 ? "+" : ""}
+                                        {pureMoM.percentage}%)
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {stat.returningFirstVisits.toLocaleString("ja-JP")}
+                                    {returningMoM && (
+                                      <span
+                                        className={`ml-2 text-xs ${
+                                          returningMoM.value >= 0
+                                            ? "text-emerald-600"
+                                            : "text-rose-600"
+                                        }`}
+                                      >
+                                        ({returningMoM.value >= 0 ? "+" : ""}
+                                        {returningMoM.percentage}%)
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {stat.revisitCount.toLocaleString("ja-JP")}
+                                    {revisitMoM && (
+                                      <span
+                                        className={`ml-2 text-xs ${
+                                          revisitMoM.value >= 0 ? "text-emerald-600" : "text-rose-600"
+                                        }`}
+                                      >
+                                        ({revisitMoM.value >= 0 ? "+" : ""}
+                                        {revisitMoM.percentage}%)
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {stat.averageAge !== null
+                                      ? `${roundTo1Decimal(stat.averageAge)}歳`
+                                      : "—"}
+                                    {ageMoM && (
+                                      <span
+                                        className={`ml-2 text-xs ${
+                                          ageMoM.value >= 0 ? "text-emerald-600" : "text-rose-600"
+                                        }`}
+                                      >
+                                        ({ageMoM.value >= 0 ? "+" : ""}
+                                        {roundTo1Decimal(ageMoM.percentage)}%)
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <button
+                      onClick={() => setShowTrendChart(!showTrendChart)}
+                      className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                      {showTrendChart ? "グラフを非表示" : "グラフを表示"}
+                    </button>
+                    {showTrendChart && (
+                      <div className="mt-4 space-y-2">
+                        <p className="text-[11px] text-slate-500">
+                          ※ 各系列は患者区分別の件数推移です。ポイントにカーソルを合わせると該当月の数値が表示されます。
+                        </p>
+                        <MonthlyTrendChart stats={stats} />
+                      </div>
+                    )}
+                  </SectionCard>
+                )}
+              </>
+            ) : (
+              <SectionCard title="集計データがありません">
+                <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                  {!hasAnyRecords
+                    ? "カルテ集計CSVをアップロードすると、月次指標が表示されます。"
+                    : !hasPeriodRecords
+                      ? "選択した期間に該当するデータがありません。期間を変更して再度ご確認ください。"
+                      : "選択された月に該当するデータがありません。条件を変更して再度ご確認ください。"}
+                </p>
               </SectionCard>
             )}
 
-            {stats.length > 1 && (
-            <SectionCard 
-              title={startMonth && endMonth && startMonth !== endMonth
-                ? `月次推移（${formatMonthLabel(startMonth)}〜${formatMonthLabel(endMonth)}）`
-                : "月次推移"
-              }
-              description="選択期間のカルテ集計を月別に一覧しています。"
+            <SectionCard
+              title="診療科別 平均単価（保険点数換算）"
+              description="カルテ集計CSVの点数列を基に、指定科目の平均点数と保険点数×10円による概算単価を算出しています。"
             >
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200 text-sm">
-                  <thead>
-                    <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                      <th className="px-3 py-2">月</th>
-                      <th className="px-3 py-2">総患者</th>
-                      <th className="px-3 py-2">純初診</th>
-                      <th className="px-3 py-2">再初診</th>
-                      <th className="px-3 py-2">再診</th>
-                      <th className="px-3 py-2">平均年齢</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {stats
-                      .slice()
-                      .reverse()
-                      .map((stat, index, arr) => {
-                        const prevStat = arr[index + 1];
-                        const totalMoM = prevStat ? calculateMonthOverMonth(stat.totalPatients, prevStat.totalPatients) : null;
-                        const pureMoM = prevStat ? calculateMonthOverMonth(stat.pureFirstVisits, prevStat.pureFirstVisits) : null;
-                        const returningMoM = prevStat ? calculateMonthOverMonth(stat.returningFirstVisits, prevStat.returningFirstVisits) : null;
-                        const revisitMoM = prevStat ? calculateMonthOverMonth(stat.revisitCount, prevStat.revisitCount) : null;
-                        const ageMoM = prevStat && stat.averageAge !== null && prevStat.averageAge !== null
-                          ? { value: roundTo1Decimal(stat.averageAge - prevStat.averageAge), percentage: roundTo1Decimal(((stat.averageAge - prevStat.averageAge) / prevStat.averageAge) * 100) }
-                          : null;
-                        
-                        return (
-                        <tr key={stat.month} className="hover:bg-slate-50">
-                          <td className="px-3 py-2 font-medium text-slate-900">
-                            {formatMonthLabel(stat.month)}
-                          </td>
-                          <td className="px-3 py-2">
-                            {stat.totalPatients.toLocaleString("ja-JP")}
-                            {totalMoM && (
-                              <span className={`ml-2 text-xs ${totalMoM.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                ({totalMoM.value >= 0 ? '+' : ''}{totalMoM.percentage}%)
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2">
-                            {stat.pureFirstVisits.toLocaleString("ja-JP")}
-                            {pureMoM && (
-                              <span className={`ml-2 text-xs ${pureMoM.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                ({pureMoM.value >= 0 ? '+' : ''}{pureMoM.percentage}%)
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2">
-                            {stat.returningFirstVisits.toLocaleString("ja-JP")}
-                            {returningMoM && (
-                              <span className={`ml-2 text-xs ${returningMoM.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                ({returningMoM.value >= 0 ? '+' : ''}{returningMoM.percentage}%)
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2">
-                            {stat.revisitCount.toLocaleString("ja-JP")}
-                            {revisitMoM && (
-                              <span className={`ml-2 text-xs ${revisitMoM.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                ({revisitMoM.value >= 0 ? '+' : ''}{revisitMoM.percentage}%)
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2">
-                            {stat.averageAge !== null ? `${roundTo1Decimal(stat.averageAge)}歳` : "—"}
-                            {ageMoM && (
-                              <span className={`ml-2 text-xs ${ageMoM.value >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                ({ageMoM.value >= 0 ? '+' : ''}{roundTo1Decimal(ageMoM.percentage)}%)
-                              </span>
-                            )}
-                          </td>
+              {hasUnitPriceData ? (
+                <div className="space-y-4">
+                  <button
+                    onClick={() => setShowUnitPriceChart((value) => !value)}
+                    className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    type="button"
+                  >
+                    {showUnitPriceChart ? "グラフを非表示" : "グラフを表示"}
+                  </button>
+                  {showUnitPriceChart && (
+                    <Suspense
+                      fallback={
+                        <div className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white/60 py-10">
+                          <RefreshCw className="h-6 w-6 animate-spin text-brand-600" />
+                        </div>
+                      }
+                    >
+                      <UnitPriceWeekdayChart
+                        rows={unitPriceWeekdayRows.map((row) => {
+                          const stats: Record<string, { averageAmount: number | null }> = {};
+                          UNIT_PRICE_GROUPS.forEach((group) => {
+                            stats[group.id] = {
+                              averageAmount: row.stats[group.id]?.averageAmount ?? null,
+                            };
+                          });
+                          return {
+                            label: row.label,
+                            stats,
+                          };
+                        })}
+                        groups={UNIT_PRICE_GROUPS.map(({ id, label }) => ({ id, label }))}
+                      />
+                    </Suspense>
+                  )}
+                  <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                    <table className="w-full min-w-[920px] border-collapse text-sm">
+                      <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold" rowSpan={2}>
+                            曜日
+                          </th>
+                          {UNIT_PRICE_GROUPS.map((group) => (
+                            <th
+                              key={`${group.id}-header`}
+                              className="px-4 py-3 text-center font-semibold"
+                              colSpan={2}
+                            >
+                              {group.label}
+                            </th>
+                          ))}
                         </tr>
-                        );
-                      })}
-                  </tbody>
-                </table>
-              </div>
-              <button
-                onClick={() => setShowTrendChart(!showTrendChart)}
-                className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                {showTrendChart ? "グラフを非表示" : "グラフを表示"}
-              </button>
-              {showTrendChart && (
-                <div className="mt-4 space-y-2">
+                        <tr>
+                          {UNIT_PRICE_GROUPS.map((group) => (
+                            <Fragment key={`${group.id}-subheader`}>
+                              <th className="px-4 py-2 text-center font-semibold">患者数</th>
+                              <th className="px-4 py-2 text-center font-semibold">平均単価（円）</th>
+                            </Fragment>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {unitPriceWeekdayRows.map((row) => (
+                          <tr key={row.key}>
+                            <td className="px-4 py-3 text-slate-700">{row.label}</td>
+                            {UNIT_PRICE_GROUPS.map((group) => {
+                              const stat = row.stats[group.id];
+                              return (
+                                <Fragment key={`${row.key}-${group.id}`}>
+                                  <td className="px-4 py-3 text-center">
+                                    {stat.patientCount > 0 ? (
+                                      <span className="inline-flex items-center justify-center rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 shadow-sm">
+                                        {stat.patientCount.toLocaleString("ja-JP")}名
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400">—</span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    {stat.averageAmount !== null ? (
+                                      <span
+                                        className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-sm font-bold shadow-sm ${
+                                          row.maxAverageAmount !== null &&
+                                          stat.averageAmount === row.maxAverageAmount
+                                            ? "bg-gradient-to-r from-accent-500 via-rose-400 to-accent-600 text-white shadow-md shadow-rose-400/50"
+                                            : "bg-blue-50 text-blue-700"
+                                        }`}
+                                      >
+                                        ¥{stat.averageAmount.toLocaleString("ja-JP")}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400">—</span>
+                                    )}
+                                  </td>
+                                </Fragment>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                   <p className="text-[11px] text-slate-500">
-                    ※ 各系列は患者区分別の件数推移です。ポイントにカーソルを合わせると該当月の数値が表示されます。
+                    ※ 各平均単価は保険点数を 10 円換算した概算額です。祝日は国民の祝日および振替休日を含みます。
                   </p>
-                  <MonthlyTrendChart stats={stats} />
                 </div>
+              ) : (
+                <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                  該当期間に保険点数が登録された診療データがありません。カルテ集計CSVの点数列をご確認ください。
+                </p>
               )}
             </SectionCard>
-            )}
-          </>
-        ) : (
-          <SectionCard title="集計データがありません">
-            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-              {!hasAnyRecords
-                ? "カルテ集計CSVをアップロードすると、月次指標が表示されます。"
-                : !hasPeriodRecords
-                  ? "選択した期間に該当するデータがありません。期間を変更して再度ご確認ください。"
-                  : "選択された月に該当するデータがありません。条件を変更して再度ご確認ください。"}
-            </p>
-          </SectionCard>
-        )}
-
-        {!lifestyleOnly && (
-          <>
-        <SectionCard
-          title="診療科別 平均単価（保険点数換算）"
-          description="カルテ集計CSVの点数列を基に、指定科目の平均点数と保険点数×10円による概算単価を算出しています。"
-        >
-          {hasUnitPriceData ? (
-            <div className="space-y-4">
-              <button
-                onClick={() => setShowUnitPriceChart((value) => !value)}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                type="button"
-              >
-                {showUnitPriceChart ? "グラフを非表示" : "グラフを表示"}
-              </button>
-              {showUnitPriceChart && (
-                <Suspense
-                  fallback={
-                    <div className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white/60 py-10">
-                      <RefreshCw className="h-6 w-6 animate-spin text-brand-600" />
-                    </div>
-                  }
-                >
-                  <UnitPriceWeekdayChart
-                    rows={unitPriceWeekdayRows.map((row) => {
-                      const stats: Record<string, { averageAmount: number | null }> = {};
-                      UNIT_PRICE_GROUPS.forEach((group) => {
-                        stats[group.id] = {
-                          averageAmount: row.stats[group.id]?.averageAmount ?? null,
-                        };
-                      });
-                      return {
-                        label: row.label,
-                        stats,
-                      };
-                    })}
-                    groups={UNIT_PRICE_GROUPS.map(({ id, label }) => ({ id, label }))}
-                  />
-                </Suspense>
-              )}
-              <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                <table className="w-full min-w-[920px] border-collapse text-sm">
-                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th className="px-4 py-3 text-left font-semibold" rowSpan={2}>
-                        曜日
-                      </th>
-                      {UNIT_PRICE_GROUPS.map((group) => (
-                        <th
-                          key={`${group.id}-header`}
-                          className="px-4 py-3 text-center font-semibold"
-                          colSpan={2}
-                        >
-                          {group.label}
-                        </th>
-                      ))}
-                    </tr>
-                    <tr>
-                      {UNIT_PRICE_GROUPS.map((group) => (
-                        <Fragment key={`${group.id}-subheader`}>
-                          <th className="px-4 py-2 text-center font-semibold">患者数</th>
-                          <th className="px-4 py-2 text-center font-semibold">平均単価（円）</th>
-                        </Fragment>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
-                    {unitPriceWeekdayRows.map((row) => (
-                      <tr key={row.key}>
-                        <td className="px-4 py-3 text-slate-700">{row.label}</td>
-                        {UNIT_PRICE_GROUPS.map((group) => {
-                          const stat = row.stats[group.id];
-                          return (
-                            <Fragment key={`${row.key}-${group.id}`}>
-                              <td className="px-4 py-3 text-center">
-                                {stat.patientCount > 0 ? (
-                                  <span className="inline-flex items-center justify-center rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 shadow-sm">
-                                    {stat.patientCount.toLocaleString("ja-JP")}名
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-400">—</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-center">
-                                {stat.averageAmount !== null ? (
-                                  <span
-                                    className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-sm font-bold shadow-sm ${
-                                      row.maxAverageAmount !== null &&
-                                      stat.averageAmount === row.maxAverageAmount
-                                        ? "bg-gradient-to-r from-accent-500 via-rose-400 to-accent-600 text-white shadow-md shadow-rose-400/50"
-                                        : "bg-blue-50 text-blue-700"
-                                    }`}
-                                  >
-                                    ¥{stat.averageAmount.toLocaleString("ja-JP")}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-400">—</span>
-                                )}
-                              </td>
-                            </Fragment>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-[11px] text-slate-500">
-                ※ 各平均単価は保険点数を 10 円換算した概算額です。祝日は国民の祝日および振替休日を含みます。
-              </p>
-            </div>
-          ) : (
-            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-              該当期間に保険点数が登録された診療データがありません。カルテ集計CSVの点数列をご確認ください。
-            </p>
-          )}
-        </SectionCard>
           </>
         )}
 
@@ -3896,6 +3628,7 @@ function PatientAnalysisPageContent() {
           </SectionCard>
         )}
 
+        {!lifestyleOnly && (
         <SectionCard
           title="視点別インサイト"
           description="チャネル・診療科・時間帯を切り替えて主要指標とグラフを比較します。"
@@ -4256,6 +3989,7 @@ function PatientAnalysisPageContent() {
             )}
           </div>
         </SectionCard>
+        )}
 
         <SectionCard
           title="新規主病トレンド分析"
@@ -4513,8 +4247,6 @@ function PatientAnalysisPageContent() {
             </>
           )}
         </SectionCard>
-          </>
-        )}
 
           </div>
           {isManagementOpen && (
