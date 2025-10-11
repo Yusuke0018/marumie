@@ -1,0 +1,8 @@
+timestamp: 2025-10-11 18:48:59 JST
+branch: main
+commit: 7b15d99c61ab62916d6cd825f1a3a03fd1d5babc
+summary: allow large karte datasets by chunking compressed storage
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (pending)
