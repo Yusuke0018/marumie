@@ -1045,7 +1045,7 @@ const normalizeDepartmentLabel = (value: string) =>
 const formatTimestampLabel = (value: string | null) =>
   value ? new Date(value).toLocaleString("ja-JP") : "未登録";
 
-export function PatientAnalysisPageContent() {
+function PatientAnalysisPageContent() {
   const lifestyleOnly = useContext(LifestyleViewContext);
   const [records, setRecords] = useState<KarteRecord[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -4833,9 +4833,5 @@ export function PatientAnalysisPageContent() {
 }
 
 export default function PatientAnalysisPage() {
-  return (
-    <LifestyleViewContext.Provider value={false}>
-      <PatientAnalysisPageContent />
-    </LifestyleViewContext.Provider>
-  );
+  return <PatientAnalysisPageContent />;
 }

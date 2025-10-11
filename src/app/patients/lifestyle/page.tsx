@@ -1,12 +1,12 @@
 "use client";
 
 import { LifestyleViewContext } from "../LifestyleViewContext";
-import { PatientAnalysisPageContent } from "../page";
+import PatientAnalysisPage from "../page";
 
 export default function LifestyleAnalysisPage() {
   return (
     <LifestyleViewContext.Provider value={true}>
-      <PatientAnalysisPageContent />
+      <PatientAnalysisPage />
     </LifestyleViewContext.Provider>
   );
 }
