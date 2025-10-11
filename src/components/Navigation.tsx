@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Menu, X } from "lucide-react";
+import { CalendarRange, Menu, X } from "lucide-react";
 import {
   ANALYSIS_FILTER_SLOT_ID,
   ANALYSIS_PERIOD_EVENT,
@@ -66,18 +66,23 @@ export default function Navigation() {
     <>
       <nav className="sticky top-0 z-50 border-b border-brand-100/70 bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/70">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 sm:px-6">
-          <div className="flex items-center justify-between gap-6">
-            <div className="flex items-center gap-3 py-4">
+          <div className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
               <h1 className="text-lg sm:text-xl font-bold tracking-wide text-brand-600">
                 マルミエ
               </h1>
-              {showPeriodBadge && (
-                <span className="hidden sm:inline-flex items-center rounded-full border border-brand-200 bg-white px-3 py-1 text-xs font-semibold text-brand-600 shadow-sm">
-                  {analysisPeriodLabel}
-                </span>
-              )}
             </div>
+            {showPeriodBadge && (
+              <div className="flex justify-start sm:justify-end">
+                <span className="inline-flex items-center gap-2 rounded-3xl bg-gradient-to-r from-brand-600 via-accent-500 to-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-xl shadow-brand-600/40 sm:text-base">
+                  <CalendarRange className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <span>表示期間 {analysisPeriodLabel}</span>
+                </span>
+              </div>
+            )}
+          </div>
 
+          <div className="flex items-center justify-between gap-6 pb-2">
             <div className="hidden md:flex gap-2 py-2">
               {links.map((link) => {
                 const isActive =
@@ -139,11 +144,11 @@ export default function Navigation() {
             </div>
             <div className="flex-1 flex flex-col p-6">
               <nav className="flex flex-col flex-1 justify-around gap-3">
-                {links.map((link) => {
-                  const isActive =
-                    link.href === "/"
-                      ? pathname === "/"
-                      : link.href === "/patients"
+              {links.map((link) => {
+                const isActive =
+                  link.href === "/"
+                    ? pathname === "/"
+                    : link.href === "/patients"
                         ? pathname === "/patients" ||
                           (pathname.startsWith("/patients/") && !pathname.startsWith("/patients/lifestyle"))
                         : pathname === link.href || pathname.startsWith(`${link.href}/`);

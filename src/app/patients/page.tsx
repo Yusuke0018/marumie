@@ -617,7 +617,7 @@ const LIFESTYLE_STATUS_CONFIG: Record<
   },
   delayed: {
     label: "受診遅延",
-    description: "最終来院から91〜180日",
+    description: "最終来院から91〜150日",
     badge: "bg-amber-50 text-amber-600",
     card: "border-amber-200 bg-gradient-to-br from-amber-50/80 via-white to-white",
     percentText: "text-amber-700",
@@ -625,7 +625,7 @@ const LIFESTYLE_STATUS_CONFIG: Record<
   },
   atRisk: {
     label: "離脱リスク",
-    description: "最終来院から181日以上",
+    description: "最終来院から151日以上",
     badge: "bg-rose-50 text-rose-600",
     card: "border-rose-200 bg-gradient-to-br from-rose-50/80 via-white to-white",
     percentText: "text-rose-700",
@@ -751,7 +751,7 @@ const selectLifestyleStatus = (daysSinceLast: number | null): LifestyleStatus | 
   if (daysSinceLast <= 90) {
     return "regular";
   }
-  if (daysSinceLast <= 180) {
+  if (daysSinceLast <= 150) {
     return "delayed";
   }
   return "atRisk";
@@ -880,18 +880,6 @@ const formatHourLabel = (hour: number) => `${hour.toString().padStart(2, "0")}:0
 
 const normalizeDepartmentLabel = (value: string) =>
   value.replace(/\s+/g, "").replace(/[()（）]/g, "");
-
-const getSixMonthRangeStart = (endMonth: string, months: string[]): string => {
-  if (!endMonth || months.length === 0) {
-    return endMonth;
-  }
-  const endIndex = months.indexOf(endMonth);
-  if (endIndex === -1) {
-    return months[0];
-  }
-  const startIndex = Math.max(0, endIndex - 5);
-  return months[startIndex];
-};
 
 const formatTimestampLabel = (value: string | null) =>
   value ? new Date(value).toLocaleString("ja-JP") : "未登録";
@@ -1210,16 +1198,36 @@ function PatientAnalysisPageContent() {
     if (!lifestyleOnly) {
       return;
     }
-    if (!latestAvailableMonth) {
+    if (!latestAvailableMonth || allAvailableMonths.length === 0) {
       return;
     }
+
+    const effectiveEnd = endMonth || latestAvailableMonth;
     if (!endMonth) {
-      setEndMonth(latestAvailableMonth);
+      setEndMonth(effectiveEnd);
+    }
+
+    const endIndex = allAvailableMonths.indexOf(effectiveEnd);
+    if (endIndex === -1) {
       return;
     }
-    const expectedStart = getSixMonthRangeStart(endMonth, allAvailableMonths);
-    if (startMonth !== expectedStart) {
-      setStartMonth(expectedStart);
+
+    const desiredStartIndex = Math.max(0, endIndex - 5);
+    const desiredStart = allAvailableMonths[desiredStartIndex];
+
+    if (!startMonth) {
+      setStartMonth(desiredStart);
+      return;
+    }
+
+    const startIndex = allAvailableMonths.indexOf(startMonth);
+    if (startIndex === -1) {
+      setStartMonth(desiredStart);
+      return;
+    }
+
+    if (endIndex - startIndex < 5 && startMonth !== desiredStart) {
+      setStartMonth(desiredStart);
     }
   }, [
     lifestyleOnly,
@@ -1234,11 +1242,31 @@ function PatientAnalysisPageContent() {
   const lifestyleEffectiveEndMonth = lifestyleOnly
     ? endMonth || latestAvailableMonth
     : endMonth;
-  const lifestyleEffectiveStartMonth = lifestyleOnly
-    ? lifestyleEffectiveEndMonth
-      ? getSixMonthRangeStart(lifestyleEffectiveEndMonth, allAvailableMonths)
-      : startMonth
-    : startMonth;
+
+  const lifestyleEffectiveStartMonth = useMemo(() => {
+    if (!lifestyleOnly) {
+      return startMonth;
+    }
+    if (!lifestyleEffectiveEndMonth || allAvailableMonths.length === 0) {
+      return startMonth;
+    }
+    const endIndex = allAvailableMonths.indexOf(lifestyleEffectiveEndMonth);
+    if (endIndex === -1) {
+      return startMonth;
+    }
+    if (startMonth) {
+      const startIndex = allAvailableMonths.indexOf(startMonth);
+      if (startIndex !== -1 && endIndex - startIndex >= 5) {
+        return startMonth;
+      }
+    }
+    return allAvailableMonths[Math.max(0, endIndex - 5)] ?? startMonth;
+  }, [
+    lifestyleOnly,
+    startMonth,
+    lifestyleEffectiveEndMonth,
+    allAvailableMonths,
+  ]);
 
   const periodFilteredRecords = useMemo(() => {
     if (classifiedRecords.length === 0) {
