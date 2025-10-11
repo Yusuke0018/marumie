@@ -1,0 +1,12 @@
+timestamp: 2025-10-11T09-11-47+0900
+branch: main
+commit: 81d68c68d5b0a1b3ba5ce677101cead746f73044
+diffstat:
+  src/app/patients/page.tsx                         | 275 ++++++++++++++++------
+  src/components/patients/UnitPriceWeekdayChart.tsx | 119 ++++++++++
+commands:
+  - npm run lint (success)
+push: origin/main にプッシュ完了
+notes:
+  - 診療科別平均単価セクションを曜日・祝日別のテーブルとグラフに刷新し、可視性を向上
+  - Chart.js を用いた曜日別単価グラフコンポーネントを追加し、患者単価の傾向を直感的に把握できるようにしました
