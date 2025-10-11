@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -72,6 +73,7 @@ import {
   LISTING_STORAGE_KEY,
   LISTING_TIMESTAMP_KEY,
 } from "@/lib/listingData";
+import { isHoliday } from "@/lib/dateUtils";
 import {
   type DiagnosisRecord,
   type DiagnosisDepartment,
@@ -112,6 +114,11 @@ const DepartmentChart = lazy(() =>
 const WeekdayAverageChart = lazy(() =>
   import("@/components/patients/WeekdayAverageChart").then((m) => ({
     default: m.WeekdayAverageChart,
+  })),
+);
+const UnitPriceWeekdayChart = lazy(() =>
+  import("@/components/patients/UnitPriceWeekdayChart").then((m) => ({
+    default: m.UnitPriceWeekdayChart,
   })),
 );
 const DiagnosisMonthlyChart = lazy(() =>
@@ -747,6 +754,43 @@ const UNIT_PRICE_GROUPS: Array<{
   },
 ];
 
+const UNIT_PRICE_WEEKDAY_DEFINITIONS = [
+  { key: "mon", label: "月曜", weekdayIndex: 1 },
+  { key: "tue", label: "火曜", weekdayIndex: 2 },
+  { key: "wed", label: "水曜", weekdayIndex: 3 },
+  { key: "thu", label: "木曜", weekdayIndex: 4 },
+  { key: "fri", label: "金曜", weekdayIndex: 5 },
+  { key: "sat", label: "土曜", weekdayIndex: 6 },
+  { key: "sun", label: "日曜", weekdayIndex: 0 },
+  { key: "holiday", label: "祝日" },
+] as const;
+
+type UnitPriceWeekdayKey = (typeof UNIT_PRICE_WEEKDAY_DEFINITIONS)[number]["key"];
+
+const getWeekdayKeyFromDate = (dateIso: string): UnitPriceWeekdayKey => {
+  if (isHoliday(dateIso)) {
+    return "holiday";
+  }
+  const weekday = new Date(`${dateIso}T00:00:00`);
+  switch (weekday.getDay()) {
+    case 0:
+      return "sun";
+    case 1:
+      return "mon";
+    case 2:
+      return "tue";
+    case 3:
+      return "wed";
+    case 4:
+      return "thu";
+    case 5:
+      return "fri";
+    case 6:
+    default:
+      return "sat";
+  }
+};
+
 const normalizePatientName = (value: string | null | undefined): string | null => {
   if (!value) {
     return null;
@@ -782,6 +826,7 @@ export default function PatientAnalysisPage() {
   const [showTrendChart, setShowTrendChart] = useState(false);
   const [showDepartmentChart, setShowDepartmentChart] = useState(false);
   const [showWeekdayChart, setShowWeekdayChart] = useState(false);
+  const [showUnitPriceChart, setShowUnitPriceChart] = useState(false);
   const [insightTab, setInsightTab] = useState<"channel" | "department" | "time">("department");
   const [isManagementOpen, setIsManagementOpen] = useState(false);
   const [reservationsRecords, setReservationsRecords] = useState<Reservation[]>([]);
@@ -1460,63 +1505,112 @@ export default function PatientAnalysisPage() {
     return resultMap;
   }, [previousPeriodRecords]);
 
-  const unitPriceSummaries = useMemo(() => {
-    const accumulator = new Map<UnitPriceGroupId, { patients: number; points: number }>();
-    UNIT_PRICE_GROUPS.forEach((group) =>
-      accumulator.set(group.id, {
-        patients: 0,
-        points: 0,
-      }),
-    );
+  const unitPriceWeekdaySummaries = useMemo(() => {
+    const groupMap = new Map<
+      UnitPriceGroupId,
+      {
+        label: string;
+        totals: { patientCount: number; totalPoints: number };
+        byDay: Record<UnitPriceWeekdayKey, { patientCount: number; totalPoints: number }>;
+      }
+    >();
 
-    for (const record of filteredClassified) {
+    UNIT_PRICE_GROUPS.forEach((group) => {
+      const byDay = {} as Record<UnitPriceWeekdayKey, { patientCount: number; totalPoints: number }>;
+      UNIT_PRICE_WEEKDAY_DEFINITIONS.forEach(({ key }) => {
+        byDay[key] = { patientCount: 0, totalPoints: 0 };
+      });
+      groupMap.set(group.id, {
+        label: group.label,
+        totals: { patientCount: 0, totalPoints: 0 },
+        byDay,
+      });
+    });
+
+    filteredClassified.forEach((record) => {
       const departmentRaw = record.department?.trim() ?? "";
       if (!departmentRaw || departmentRaw.includes("自費")) {
-        continue;
+        return;
       }
       const normalized = normalizeUnitPriceDepartment(departmentRaw);
       const matched = UNIT_PRICE_GROUPS.find((group) => group.matcher(normalized));
       if (!matched) {
-        continue;
+        return;
       }
-      const bucket = accumulator.get(matched.id);
-      if (!bucket) {
-        continue;
+      const summary = groupMap.get(matched.id);
+      if (!summary) {
+        return;
       }
-      bucket.patients += 1;
-      const points = record.points ?? 0;
-      if (Number.isFinite(points)) {
-        bucket.points += points;
+
+      summary.totals.patientCount += 1;
+      const points = record.points;
+      if (typeof points === "number" && Number.isFinite(points)) {
+        summary.totals.totalPoints += points;
       }
-    }
+
+      const dayKey = getWeekdayKeyFromDate(record.dateIso);
+      const dayBucket = summary.byDay[dayKey];
+      dayBucket.patientCount += 1;
+      if (typeof points === "number" && Number.isFinite(points)) {
+        dayBucket.totalPoints += points;
+      }
+    });
 
     return UNIT_PRICE_GROUPS.map((group) => {
-      const bucket = accumulator.get(group.id)!;
-      const averagePoints =
-        bucket.patients > 0 && bucket.points > 0
-          ? roundTo1Decimal(bucket.points / bucket.patients)
-          : null;
-      const averageAmount =
-        averagePoints !== null ? Math.round(averagePoints * 10) : null;
-
+      const summary = groupMap.get(group.id)!;
       return {
         id: group.id,
-        label: group.label,
-        patientCount: bucket.patients,
-        totalPoints: Math.round(bucket.points),
-        totalAmount: Math.round(bucket.points * 10),
-        averagePoints,
-        averageAmount,
+        label: summary.label,
+        totals: summary.totals,
+        byDay: summary.byDay,
       };
     });
   }, [filteredClassified]);
 
+  const unitPriceWeekdayRows = useMemo(() => {
+    const summaryMap = new Map(unitPriceWeekdaySummaries.map((summary) => [summary.id, summary]));
+    return UNIT_PRICE_WEEKDAY_DEFINITIONS.map(({ key, label }) => {
+      const stats = {} as Record<
+        UnitPriceGroupId,
+        {
+          patientCount: number;
+          totalPoints: number;
+          averagePoints: number | null;
+          averageAmount: number | null;
+        }
+      >;
+
+      UNIT_PRICE_GROUPS.forEach((group) => {
+        const summary = summaryMap.get(group.id);
+        const dayStats = summary?.byDay[key];
+        const patientCount = dayStats?.patientCount ?? 0;
+        const totalPoints = dayStats?.totalPoints ?? 0;
+        const averagePoints =
+          patientCount > 0 && totalPoints > 0 ? roundTo1Decimal(totalPoints / patientCount) : null;
+        const averageAmount = averagePoints !== null ? Math.round(averagePoints * 10) : null;
+
+        stats[group.id] = {
+          patientCount,
+          totalPoints: Math.round(totalPoints),
+          averagePoints,
+          averageAmount,
+        };
+      });
+
+      return {
+        key,
+        label,
+        stats,
+      };
+    });
+  }, [unitPriceWeekdaySummaries]);
+
   const hasUnitPriceData = useMemo(
     () =>
-      unitPriceSummaries.some(
-        (item) => item.patientCount > 0 && (item.totalPoints > 0 || item.averagePoints !== null),
+      unitPriceWeekdayRows.some((row) =>
+        UNIT_PRICE_GROUPS.some((group) => row.stats[group.id]?.patientCount > 0),
       ),
-    [unitPriceSummaries],
+    [unitPriceWeekdayRows],
   );
 
   const shiftAnalysis = useMemo<ShiftAnalysisResult>(() => {
@@ -2724,50 +2818,95 @@ export default function PatientAnalysisPage() {
           description="カルテ集計CSVの点数列を基に、指定科目の平均点数と保険点数×10円による概算単価を算出しています。"
         >
           {hasUnitPriceData ? (
-            <>
+            <div className="space-y-4">
+              <button
+                onClick={() => setShowUnitPriceChart((value) => !value)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                type="button"
+              >
+                {showUnitPriceChart ? "グラフを非表示" : "グラフを表示"}
+              </button>
+              {showUnitPriceChart && (
+                <Suspense
+                  fallback={
+                    <div className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white/60 py-10">
+                      <RefreshCw className="h-6 w-6 animate-spin text-brand-600" />
+                    </div>
+                  }
+                >
+                  <UnitPriceWeekdayChart
+                    rows={unitPriceWeekdayRows.map((row) => {
+                      const stats: Record<string, { averageAmount: number | null }> = {};
+                      UNIT_PRICE_GROUPS.forEach((group) => {
+                        stats[group.id] = {
+                          averageAmount: row.stats[group.id]?.averageAmount ?? null,
+                        };
+                      });
+                      return {
+                        label: row.label,
+                        stats,
+                      };
+                    })}
+                    groups={UNIT_PRICE_GROUPS.map(({ id, label }) => ({ id, label }))}
+                  />
+                </Suspense>
+              )}
               <div className="overflow-x-auto rounded-2xl border border-slate-200">
-                <table className="w-full min-w-[560px] border-collapse text-sm">
+                <table className="w-full min-w-[920px] border-collapse text-sm">
                   <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                     <tr>
-                      <th className="px-4 py-3 text-left font-semibold">科目</th>
-                      <th className="px-4 py-3 text-right font-semibold">患者数</th>
-                      <th className="px-4 py-3 text-right font-semibold">保険点数 合計</th>
-                      <th className="px-4 py-3 text-right font-semibold">平均点数</th>
-                      <th className="px-4 py-3 text-right font-semibold">平均単価（円）</th>
+                      <th className="px-4 py-3 text-left font-semibold" rowSpan={2}>
+                        曜日
+                      </th>
+                      {UNIT_PRICE_GROUPS.map((group) => (
+                        <th
+                          key={`${group.id}-header`}
+                          className="px-4 py-3 text-center font-semibold"
+                          colSpan={2}
+                        >
+                          {group.label}
+                        </th>
+                      ))}
+                    </tr>
+                    <tr>
+                      {UNIT_PRICE_GROUPS.map((group) => (
+                        <Fragment key={`${group.id}-subheader`}>
+                          <th className="px-4 py-2 text-center font-semibold">患者数</th>
+                          <th className="px-4 py-2 text-center font-semibold">平均単価（円）</th>
+                        </Fragment>
+                      ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
-                    {unitPriceSummaries.map((item) => (
-                      <tr key={item.id}>
-                        <td className="px-4 py-3 text-slate-700">{item.label}</td>
-                        <td className="px-4 py-3 text-right text-slate-600">
-                          {item.patientCount.toLocaleString("ja-JP")}名
-                        </td>
-                        <td className="px-4 py-3 text-right text-slate-600">
-                          {item.totalPoints.toLocaleString("ja-JP")}点
-                        </td>
-                        <td className="px-4 py-3 text-right text-slate-600">
-                          {item.averagePoints !== null
-                            ? item.averagePoints.toLocaleString("ja-JP", {
-                                minimumFractionDigits: 1,
-                                maximumFractionDigits: 1,
-                              }) + "点"
-                            : "—"}
-                        </td>
-                        <td className="px-4 py-3 text-right text-slate-600">
-                          {item.averageAmount !== null
-                            ? `¥${item.averageAmount.toLocaleString("ja-JP")}`
-                            : "—"}
-                        </td>
+                    {unitPriceWeekdayRows.map((row) => (
+                      <tr key={row.key}>
+                        <td className="px-4 py-3 text-slate-700">{row.label}</td>
+                        {UNIT_PRICE_GROUPS.map((group) => {
+                          const stat = row.stats[group.id];
+                          return (
+                            <Fragment key={`${row.key}-${group.id}`}>
+                              <td className="px-4 py-3 text-center text-slate-600">
+                                {stat.patientCount > 0
+                                  ? `${stat.patientCount.toLocaleString("ja-JP")}名`
+                                  : "—"}
+                              </td>
+                              <td className="px-4 py-3 text-center text-slate-600">
+                                {stat.averageAmount !== null
+                                  ? `¥${stat.averageAmount.toLocaleString("ja-JP")}`
+                                  : "—"}
+                              </td>
+                            </Fragment>
+                          );
+                        })}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <p className="mt-2 text-[11px] text-slate-500">
-                ※ 平均単価は保険点数を 10 円換算した概算額です。点数が未記入の診療は集計に含まれません。
+              <p className="text-[11px] text-slate-500">
+                ※ 各平均単価は保険点数を 10 円換算した概算額です。祝日は国民の祝日および振替休日を含みます。
               </p>
-            </>
+            </div>
           ) : (
             <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
               該当期間に保険点数が登録された診療データがありません。カルテ集計CSVの点数列をご確認ください。
