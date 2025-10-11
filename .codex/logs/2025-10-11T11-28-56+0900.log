@@ -1,0 +1,14 @@
+timestamp: 2025-10-11T11-28-56+0900
+branch: main
+commit: 8ccceb951c4c9c6d7e7a48f686459738dab4ffdb
+diffstat:
+  src/app/page.tsx                | 322 +++++++++++++++++++++++++++++++++++++++
+  src/app/patients/page.tsx       |  35 +++---
+  src/components/Navigation.tsx   |  33 +++--
+  src/lib/storageKeys.ts          |   2 +
+commands:
+  - npm run lint (success)
+push: origin/main にプッシュ完了
+notes:
+  - ホームダッシュボードを新設し、主要KPIと各分析ページへのカードを追加
+  - ナビゲーションをホーム中心の構成に変更し、カルテ保存キーを共通定義化
