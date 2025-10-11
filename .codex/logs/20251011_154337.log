@@ -1,0 +1,10 @@
+timestamp: 2025-10-11 15:43:37 JST
+branch: main
+commit: 29e29568cff0312e50c6e0be808432dac624d7ce
+summary: limit survey analytics to months with actual responses
+changes:
+  - src/app/survey/page.tsx (trim survey data to latest active month and update month selectors)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (success)
