@@ -23,7 +23,6 @@ import {
   Clock,
   Megaphone,
   TrendingUp,
-  TrendingDown,
   Globe,
   Building,
   Sparkles,
