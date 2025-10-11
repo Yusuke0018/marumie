@@ -1,0 +1,10 @@
+timestamp: 2025-10-11 17:17:20 JST
+branch: main
+commit: 71ec8cbd5cf4245267964d44a6e296fffd3ad33f
+summary: refine reservation hero copy and metric cards
+changes:
+  - src/app/reservations/page.tsx (rename hero heading, adjust gradient palette, convert stats to gradient cards with consistent labels)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (success)
