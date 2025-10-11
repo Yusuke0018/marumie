@@ -1,0 +1,10 @@
+timestamp: 2025-10-11T11-16-47+0900
+branch: main
+commit: 921a7b7ad505afbc81cbc27885ff13bfbdc9e45f
+diffstat:
+  src/app/patients/page.tsx | 3 +--
+commands:
+  - npm run lint (skipped)
+push: origin/main にプッシュ完了
+notes:
+  - 主病トレンドの名称を「新規主病トレンド分析」に変更し、UIとデータ管理の表記を統一しました
