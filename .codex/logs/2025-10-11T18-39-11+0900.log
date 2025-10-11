@@ -1,0 +1,8 @@
+timestamp: 2025-10-11 18:39:11 JST
+branch: main
+commit: 2ca394632412de917742fb89f55b21ef6713b9d9
+summary: force share links to reuse the active host
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (pending)
