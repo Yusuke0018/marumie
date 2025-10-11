@@ -153,10 +153,6 @@ const MULTIVARIATE_AGE_BANDS = [
 
 type MultivariateAgeBand = (typeof MULTIVARIATE_AGE_BANDS)[number];
 
-const MULTIVARIATE_AGE_BAND_MAP = new Map<string, MultivariateAgeBand>(
-  MULTIVARIATE_AGE_BANDS.map((band) => [band.id, band]),
-);
-
 type MultivariateAgeBreakdown = {
   ageBandId: string;
   label: string;
