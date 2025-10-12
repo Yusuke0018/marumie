@@ -134,6 +134,8 @@ const lightenColor = (hex: string, amount: number): string => {
   return `#${toHexComponent(blend(rgb.r))}${toHexComponent(blend(rgb.g))}${toHexComponent(blend(rgb.b))}`;
 };
 
+const formatPercent = (value: number): string => `${(value * 100).toFixed(1)}%`;
+
 type DerivedSegments = {
   prefecture: string | null;
   city: string;
@@ -158,6 +160,15 @@ type MapPoint = LocationAggregation & {
   matchLevel: "town" | "city";
   dominantAgeBandId: AgeBandId;
   radius: number;
+};
+
+type PieSegment = {
+  id: AgeBandId;
+  label: string;
+  color: string;
+  share: number;
+  start: number;
+  end: number;
 };
 
 const toHalfWidthDigits = (value: string): string =>
@@ -430,22 +441,11 @@ const createAgeBreakdown = (): Record<AgeBandId, number> =>
   );
 
 const computeRadius = (count: number): number => {
-  if (count <= 1) {
-    return 9;
+  if (count <= 0) {
+    return 8;
   }
-  if (count <= 3) {
-    return 11;
-  }
-  if (count <= 5) {
-    return 13;
-  }
-  if (count <= 10) {
-    return 16;
-  }
-  if (count <= 20) {
-    return 20;
-  }
-  return Math.min(34, 12 + Math.sqrt(count) * 3);
+  const scaled = Math.sqrt(count);
+  return Math.min(42, 10 + scaled * 4.5);
 };
 
 const formatMonthLabel = (value: string): string => {
@@ -469,6 +469,64 @@ const formatTopDepartments = (point: LocationAggregation): string => {
     .slice(0, 3)
     .map(([department, count]) => `${department}(${count})`)
     .join(" / ");
+};
+
+const buildAgePie = (
+  ageBreakdown: Record<AgeBandId, number>,
+): { gradient: string; segments: PieSegment[]; total: number } | null => {
+  const totals = AGE_BANDS.map((band) => ({
+    band,
+    value: ageBreakdown[band.id] ?? 0,
+  })).filter((entry) => entry.value > 0 && entry.band.id !== "unknown");
+  const unknown = ageBreakdown.unknown ?? 0;
+  const total = totals.reduce((sum, entry) => sum + entry.value, 0) + unknown;
+  if (total === 0) {
+    return null;
+  }
+
+  const segments: PieSegment[] = [];
+  let cursor = 0;
+  const pushSegment = (id: AgeBandId, label: string, color: string, value: number) => {
+    if (value <= 0) {
+      return;
+    }
+    const share = value / total;
+    const start = cursor * 360;
+    cursor += share;
+    const end = cursor * 360;
+    segments.push({
+      id,
+      label,
+      color,
+      share,
+      start,
+      end,
+    });
+  };
+
+  totals.forEach((entry) => {
+    pushSegment(
+      entry.band.id,
+      entry.band.label,
+      AGE_BAND_COLOR_MAP[entry.band.id],
+      entry.value,
+    );
+  });
+  pushSegment("unknown", "年齢不明", AGE_BAND_COLOR_MAP.unknown, unknown);
+
+  if (segments.length === 0) {
+    return null;
+  }
+
+  const gradient = `conic-gradient(${segments
+    .map((segment) => {
+      const start = segment.start.toFixed(2);
+      const end = segment.end.toFixed(2);
+      return `${segment.color} ${start}deg ${end}deg`;
+    })
+    .join(", ")})`;
+
+  return { gradient, segments, total };
 };
 
 export const GeoDistributionMap = ({
@@ -1039,6 +1097,7 @@ export const GeoDistributionMap = ({
               const strokeColor = markerColor;
               const fillColor = lightenColor(markerColor, 0.35);
               const fillOpacity = colorMode === "age" ? 0.55 : 0.7;
+              const pie = buildAgePie(point.ageBreakdown);
 
               const ageDetails = AGE_BANDS.filter(
                 (band) => point.ageBreakdown[band.id] > 0,
@@ -1081,6 +1140,32 @@ export const GeoDistributionMap = ({
                         <p className="text-[11px] leading-4 text-slate-500">
                           年代内訳: {ageDetails}
                         </p>
+                      )}
+                      {pie && (
+                        <div className="mt-2 flex items-center gap-3">
+                          <div
+                            className="relative flex h-16 w-16 items-center justify-center rounded-full border border-white/80 shadow-lg"
+                            style={{ background: pie.gradient }}
+                          >
+                            <span className="rounded-full bg-white/85 px-2 py-[2px] text-[11px] font-semibold text-slate-700 shadow">
+                              {point.total.toLocaleString("ja-JP")}
+                            </span>
+                          </div>
+                          <div className="space-y-[2px] text-[11px] text-slate-600">
+                            {pie.segments.map((segment) => (
+                              <div key={`${point.id}-${segment.id}`} className="flex items-center gap-2">
+                                <span
+                                  className="inline-flex h-2.5 w-2.5 rounded-full"
+                                  style={{ backgroundColor: segment.color }}
+                                />
+                                <span>{segment.label}</span>
+                                <span className="ml-auto font-semibold text-slate-700">
+                                  {formatPercent(segment.share)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
                       <p className="text-xs text-slate-600">
                         上位診療科: {formatTopDepartments(point)}
