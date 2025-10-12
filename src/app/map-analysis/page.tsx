@@ -16,6 +16,9 @@ import {
   YAxis,
   Tooltip as RechartsTooltip,
   Legend,
+  Sankey,
+  type SankeyNode,
+  type SankeyLink,
 } from "recharts";
 
 const KANJI_DIGITS = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"] as const;
@@ -617,6 +620,58 @@ const MapAnalysisPage = () => {
     }));
   }, [topDiffRows, validComparison]);
 
+  const sankeyData = useMemo(() => {
+    if (!validComparison || topDiffRows.length === 0) {
+      return null;
+    }
+    const nodes: SankeyNode<number, { label: string; side: "A" | "B" }>[] = [];
+    const links: SankeyLink<number, number>[] = [];
+    topDiffRows.forEach((row) => {
+      nodes.push({ name: `${row.label} (期間A)`, label: row.label, side: "A" });
+    });
+    topDiffRows.forEach((row) => {
+      nodes.push({ name: `${row.label} (期間B)`, label: row.label, side: "B" });
+    });
+    const totalRows = topDiffRows.length;
+    topDiffRows.forEach((row, index) => {
+      const avgShare = ((row.shareA + row.shareB) / 2) * 100;
+      links.push({
+        source: index,
+        target: index + totalRows,
+        value: Math.max(avgShare, 0.1),
+        payload: row,
+      });
+    });
+    return { nodes, links };
+  }, [topDiffRows, validComparison]);
+
+  const SankeyTooltipContent = ({
+    active,
+    payload,
+  }: {
+    active?: boolean;
+    payload?: Array<{ payload?: { payload?: typeof topDiffRows[number] } }>;
+  }) => {
+    if (!active || !payload || payload.length === 0) {
+      return null;
+    }
+    const row = payload[0]?.payload?.payload;
+    if (!row) {
+      return null;
+    }
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
+        <p className="font-semibold text-slate-800">{row.label}</p>
+        <p className="text-slate-600">期間A: {formatPercent(row.shareA)}</p>
+        <p className="text-slate-600">期間B: {formatPercent(row.shareB)}</p>
+        <p className="text-slate-500">
+          差分: {row.diffShare >= 0 ? "+" : ""}
+          {formatPercent(row.diffShare)}
+        </p>
+      </div>
+    );
+  };
+
   const invalidRange = useMemo(() => Boolean(comparisonData?.invalid), [comparisonData]);
 
   const leadingDiff = useMemo(() => {
@@ -877,52 +932,75 @@ const MapAnalysisPage = () => {
                         </div>
                       </div>
                     )}
-
-                    {topDiffRows.length > 0 && (
+                    {sankeyData && (
                       <div className="rounded-2xl border border-slate-100 bg-white p-4">
                         <h3 className="text-sm font-semibold text-slate-800">期間別エリアシェアのフロー</h3>
-                        <p className="text-[11px] text-slate-500">左が期間A、右が期間B。帯の太さが来院割合を表します。</p>
-                        <div className="mt-4 space-y-3">
-                          {topDiffRows.map((row) => {
-                            const leftPercent = Math.max(6, row.shareA * 100);
-                            const rightPercent = Math.max(6, row.shareB * 100);
-                            const connectorStart = Math.min(leftPercent + 6, 100);
-                            const connectorEnd = Math.max(100 - rightPercent - 6, connectorStart);
-                            const gradient = `linear-gradient(90deg,
-                              rgba(99,102,241,0.7) 0%,
-                              rgba(99,102,241,0.7) ${leftPercent}%,
-                              rgba(99,102,241,0.2) ${connectorStart}%,
-                              rgba(34,197,94,0.2) ${connectorEnd}%,
-                              rgba(34,197,94,0.7) ${100 - rightPercent}%,
-                              rgba(34,197,94,0.7) 100%)`;
-                            return (
-                              <div
-                                key={`flow-${row.id}`}
-                                className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 shadow-sm"
-                              >
-                                <div
-                                  className="pointer-events-none absolute inset-0 -mx-4 -my-3 opacity-90"
-                                  style={{ background: gradient }}
-                                />
-                                <div className="relative flex items-center justify-between text-xs font-semibold text-slate-700">
-                                  <div className="flex items-center gap-3">
-                                    <span className="rounded-full bg-indigo-500/90 px-3 py-1 text-[11px] text-white">
-                                      {formatPercent(row.shareA)}
-                                    </span>
-                                    <span className="text-sm font-semibold text-slate-800">{row.label}</span>
-                                  </div>
-                                  <div className="flex items-center gap-3">
-                                    <span className="text-[11px] font-medium text-slate-500">
-                                      {row.diffShare >= 0 ? "増加" : "減少"} {formatPercent(Math.abs(row.diffShare))}
-                                    </span>
-                                    <span className="rounded-full bg-emerald-500/90 px-3 py-1 text-[11px] text-white">
-                                      {formatPercent(row.shareB)}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
+                        <p className="text-[11px] text-slate-500">
+                          左列が期間A、右列が期間B。帯の太さが来院割合を表します。
+                        </p>
+                        <div className="mt-4 h-80">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <Sankey
+                              data={sankeyData}
+                              nodePadding={40}
+                              nodeWidth={12}
+                              linkCurvature={0.45}
+                              iterations={32}
+                              node={(nodeProps) => {
+                                const { x, y, width, height, index } = nodeProps;
+                                const isLeft = index < topDiffRows.length;
+                                const fill = isLeft ? "#6366f1" : "#22c55e";
+                                const label = sankeyData.nodes[index]?.label ?? nodeProps.name;
+                                if (typeof x !== "number" || typeof y !== "number" || typeof width !== "number" || typeof height !== "number") {
+                                  return null;
+                                }
+                                return (
+                                  <g>
+                                    <rect
+                                      x={x}
+                                      y={y}
+                                      width={width}
+                                      height={height}
+                                      rx={6}
+                                      fill={fill}
+                                      stroke="#ffffff"
+                                      strokeWidth={1}
+                                      opacity={0.9}
+                                    />
+                                    <text
+                                      x={isLeft ? x - 10 : x + width + 10}
+                                      y={y + height / 2}
+                                      textAnchor={isLeft ? "end" : "start"}
+                                      alignmentBaseline="middle"
+                                      fill="#1e293b"
+                                      fontSize={12}
+                                      fontWeight={600}
+                                    >
+                                      {label}
+                                    </text>
+                                  </g>
+                                );
+                              }}
+                              link={(linkProps) => {
+                                const { link, path } = linkProps;
+                                const diffShare = link.payload?.diffShare ?? 0;
+                                const positive = diffShare >= 0;
+                                const color = positive ? "rgba(34,197,94,0.35)" : "rgba(239,68,68,0.35)";
+                                const strokeColor = positive ? "rgba(34,197,94,0.65)" : "rgba(239,68,68,0.65)";
+                                return (
+                                  <path
+                                    d={path}
+                                    fill={color}
+                                    stroke={strokeColor}
+                                    strokeWidth={2}
+                                    opacity={0.9}
+                                  />
+                                );
+                              }}
+                            >
+                              <RechartsTooltip content={<SankeyTooltipContent />} />
+                            </Sankey>
+                          </ResponsiveContainer>
                         </div>
                       </div>
                     )}
