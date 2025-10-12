@@ -74,12 +74,12 @@ const COLOR_MODES = [
 type ColorMode = (typeof COLOR_MODES)[number]["value"];
 
 const CLINIC_LOCATION: { lat: number; lng: number } = {
-  lat: 34.676631,
-  lng: 135.497941,
+  lat: 34.67646,
+  lng: 135.49737,
 };
 
 const CLINIC_NAME = "リベ大総合クリニック大阪院";
-const CLINIC_ADDRESS = "大阪府大阪市西区北堀江2丁目1-11 久我ビルヂング北館";
+const CLINIC_ADDRESS = "大阪府大阪市西区北堀江2丁目1-11 久我ビルヂング 北館";
 
 const KANJI_DIGITS = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"] as const;
 const DASH_REGEX = /[－―ーｰ‐]/g;
@@ -523,12 +523,15 @@ export const GeoDistributionMap = ({
       divIcon({
         className: "clinic-marker",
         html: `
-          <div class="rounded-full bg-rose-500 text-white text-[10px] font-semibold shadow-lg px-3 py-1 border border-white">
-            クリニック
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;">
+            <div style="width:18px;height:18px;border-radius:9999px;background:#ef4444;color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 15px rgba(239,68,68,0.45);border:2px solid #ffffff;">+</div>
+            <div style="padding:4px 12px;border-radius:9999px;background:#ffffff;color:#ef4444;font-weight:600;font-size:11px;box-shadow:0 10px 25px rgba(15,23,42,0.18);border:1px solid rgba(239,68,68,0.35);white-space:nowrap;">
+              リベ大総合クリニック
+            </div>
           </div>
         `,
-        iconSize: [64, 24],
-        iconAnchor: [32, 12],
+        iconSize: [120, 60],
+        iconAnchor: [18, 24],
       }),
     [],
   );
@@ -996,12 +999,10 @@ export const GeoDistributionMap = ({
               attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
             />
             <Marker position={[CLINIC_LOCATION.lat, CLINIC_LOCATION.lng]} icon={clinicIcon}>
-              <Tooltip direction="top" offset={[0, -12]} opacity={1} permanent>
-                <div className="text-xs font-semibold text-rose-600">
-                  {CLINIC_NAME}
-                  <div className="mt-0.5 text-[11px] font-normal text-rose-500">
-                    {CLINIC_ADDRESS}
-                  </div>
+              <Tooltip direction="top" offset={[0, -12]} opacity={1}>
+                <div className="space-y-1 text-xs">
+                  <p className="font-semibold text-rose-600">{CLINIC_NAME}</p>
+                  <p className="text-[11px] text-slate-600">{CLINIC_ADDRESS}</p>
                 </div>
               </Tooltip>
             </Marker>
