@@ -74,8 +74,8 @@ const COLOR_MODES = [
 type ColorMode = (typeof COLOR_MODES)[number]["value"];
 
 const CLINIC_LOCATION: { lat: number; lng: number } = {
-  lat: 34.67646,
-  lng: 135.49737,
+  lat: 34.67692,
+  lng: 135.49798,
 };
 
 const CLINIC_NAME = "リベ大総合クリニック大阪院";
@@ -524,14 +524,14 @@ export const GeoDistributionMap = ({
         className: "clinic-marker",
         html: `
           <div style="display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;">
-            <div style="width:18px;height:18px;border-radius:9999px;background:#ef4444;color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 15px rgba(239,68,68,0.45);border:2px solid #ffffff;">+</div>
-            <div style="padding:4px 12px;border-radius:9999px;background:#ffffff;color:#ef4444;font-weight:600;font-size:11px;box-shadow:0 10px 25px rgba(15,23,42,0.18);border:1px solid rgba(239,68,68,0.35);white-space:nowrap;">
-              リベ大総合クリニック
+            <div style="width:18px;height:18px;border-radius:9999px;background:#ef4444;color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(239,68,68,0.45);border:2px solid #ffffff;">+</div>
+            <div style="padding:6px 14px;border-radius:12px;background:#ffffff;color:#d92c2c;font-weight:600;font-size:11px;box-shadow:0 12px 28px rgba(15,23,42,0.18);border:1px solid rgba(239,68,68,0.25);white-space:nowrap;letter-spacing:0.01em;">
+              リベ大総合クリニック大阪院
             </div>
           </div>
         `,
-        iconSize: [120, 60],
-        iconAnchor: [18, 24],
+        iconSize: [160, 68],
+        iconAnchor: [20, 28],
       }),
     [],
   );
