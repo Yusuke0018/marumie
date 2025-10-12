@@ -878,6 +878,55 @@ const MapAnalysisPage = () => {
                       </div>
                     )}
 
+                    {topDiffRows.length > 0 && (
+                      <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                        <h3 className="text-sm font-semibold text-slate-800">期間別エリアシェアのフロー</h3>
+                        <p className="text-[11px] text-slate-500">左が期間A、右が期間B。帯の太さが来院割合を表します。</p>
+                        <div className="mt-4 space-y-3">
+                          {topDiffRows.map((row) => {
+                            const leftPercent = Math.max(6, row.shareA * 100);
+                            const rightPercent = Math.max(6, row.shareB * 100);
+                            const connectorStart = Math.min(leftPercent + 6, 100);
+                            const connectorEnd = Math.max(100 - rightPercent - 6, connectorStart);
+                            const gradient = `linear-gradient(90deg,
+                              rgba(99,102,241,0.7) 0%,
+                              rgba(99,102,241,0.7) ${leftPercent}%,
+                              rgba(99,102,241,0.2) ${connectorStart}%,
+                              rgba(34,197,94,0.2) ${connectorEnd}%,
+                              rgba(34,197,94,0.7) ${100 - rightPercent}%,
+                              rgba(34,197,94,0.7) 100%)`;
+                            return (
+                              <div
+                                key={`flow-${row.id}`}
+                                className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 shadow-sm"
+                              >
+                                <div
+                                  className="pointer-events-none absolute inset-0 -mx-4 -my-3 opacity-90"
+                                  style={{ background: gradient }}
+                                />
+                                <div className="relative flex items-center justify-between text-xs font-semibold text-slate-700">
+                                  <div className="flex items-center gap-3">
+                                    <span className="rounded-full bg-indigo-500/90 px-3 py-1 text-[11px] text-white">
+                                      {formatPercent(row.shareA)}
+                                    </span>
+                                    <span className="text-sm font-semibold text-slate-800">{row.label}</span>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-[11px] font-medium text-slate-500">
+                                      {row.diffShare >= 0 ? "増加" : "減少"} {formatPercent(Math.abs(row.diffShare))}
+                                    </span>
+                                    <span className="rounded-full bg-emerald-500/90 px-3 py-1 text-[11px] text-white">
+                                      {formatPercent(row.shareB)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid gap-4 lg:grid-cols-2">
                       <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
                         <h3 className="text-sm font-semibold text-emerald-700">増加したエリア</h3>

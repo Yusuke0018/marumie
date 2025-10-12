@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, Tooltip, Marker } from "react-leaflet";
 import { divIcon, type LatLngExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -72,6 +72,41 @@ const COLOR_MODES = [
 ] as const;
 
 type ColorMode = (typeof COLOR_MODES)[number]["value"];
+
+const normalizeDepartmentLabel = (value: string) =>
+  value
+    .replace(/[（）()●★・\s]/g, "")
+    .replace(/[‐―ーｰ-]/g, "-")
+    .trim();
+
+const DEPARTMENT_PRIORITY_KEYWORDS = [
+  "総合診療",
+  "内科外科外来",
+  "内科外来",
+  "発熱",
+  "予防接種",
+  "ワクチン",
+  "胃カメラ",
+  "大腸カメラ",
+  "内視鏡",
+  "人間ドック",
+  "健康診断",
+  "オンライン診療",
+];
+
+const getDepartmentPriority = (name: string): number => {
+  const normalized = normalizeDepartmentLabel(name);
+  for (let index = 0; index < DEPARTMENT_PRIORITY_KEYWORDS.length; index += 1) {
+    const keyword = normalizeDepartmentLabel(DEPARTMENT_PRIORITY_KEYWORDS[index] ?? "");
+    if (!keyword) {
+      continue;
+    }
+    if (normalized.includes(keyword) || keyword.includes(normalized)) {
+      return index;
+    }
+  }
+  return DEPARTMENT_PRIORITY_KEYWORDS.length;
+};
 
 const CLINIC_LOCATION: { lat: number; lng: number } = {
   lat: 34.67518,
@@ -540,7 +575,14 @@ export const GeoDistributionMap = ({
         unique.add(reservation.department);
       }
     });
-    const sorted = Array.from(unique).sort((a, b) => a.localeCompare(b, "ja"));
+    const sorted = Array.from(unique).sort((a, b) => {
+      const priorityA = getDepartmentPriority(a);
+      const priorityB = getDepartmentPriority(b);
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+      return a.localeCompare(b, "ja");
+    });
     return [
       { value: ALL_DEPARTMENT, label: "すべての診療科" },
       ...sorted.map((department) => ({ value: department, label: department })),
@@ -575,6 +617,8 @@ export const GeoDistributionMap = ({
   const [selectedAgeBand, setSelectedAgeBand] =
     useState<AgeFilterValue>(ALL_AGE_BAND);
   const [colorMode, setColorMode] = useState<ColorMode>("age");
+
+  const departmentInitializedRef = useRef(false);
 
   const latestMonth = useMemo(() => {
     const months = reservations
@@ -611,6 +655,28 @@ export const GeoDistributionMap = ({
       setSelectedDepartment(ALL_DEPARTMENT);
     }
   }, [departmentOptions, selectedDepartment]);
+
+  useEffect(() => {
+    if (departmentInitializedRef.current) {
+      return;
+    }
+    const preferred = departmentOptions.find((option) => {
+      if (option.value === ALL_DEPARTMENT) {
+        return false;
+      }
+      return normalizeDepartmentLabel(option.value).includes(normalizeDepartmentLabel("総合診療"));
+    });
+    if (preferred) {
+      setSelectedDepartment(preferred.value);
+      departmentInitializedRef.current = true;
+    } else {
+      const fallback = departmentOptions.find((option) => option.value !== ALL_DEPARTMENT);
+      if (fallback) {
+        setSelectedDepartment(fallback.value);
+        departmentInitializedRef.current = true;
+      }
+    }
+  }, [departmentOptions]);
 
   useEffect(() => {
     if (!periodOptions.some((option) => option.value === selectedPeriod)) {
