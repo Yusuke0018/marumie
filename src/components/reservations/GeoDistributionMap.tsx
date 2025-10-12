@@ -493,21 +493,23 @@ const computeRadius = (count: number, zoom: number): number => {
   if (count <= 0) {
     return 5;
   }
-  
-  // ズームレベル12を基準とした係数
-  // zoom < 12（縮小時）: 小さい円をより小さく
-  // zoom >= 12（拡大時）: 現在のサイズ感を維持
+
   const baseZoom = 12;
-  const zoomFactor = zoom >= baseZoom 
-    ? 1.0 + (zoom - baseZoom) * 0.1  // 拡大時: 緩やかに大きく
-    : 0.5 + (zoom / baseZoom) * 0.5;  // 縮小時: 大幅に小さく
-  
+  const zoomDelta = zoom - baseZoom;
+
+  // 拡大時はズームレベル差1あたりおよそ1.55倍まで拡大（ズーム14で約2倍）
+  // 縮小時はズームレベル差1あたりおよそ0.45倍まで縮小（ズーム10で約半分以下）
+  const zoomFactor =
+    zoomDelta >= 0
+      ? 1 + zoomDelta * 0.55
+      : 1 / (1 + Math.abs(zoomDelta) * 1.2);
+
   const scaled = Math.sqrt(count);
   const baseRadius = 5 + scaled * 10;
   const adjustedRadius = baseRadius * zoomFactor;
-  
-  return Math.min(70, adjustedRadius);
-};;;
+
+  return Math.min(70, Math.max(6, adjustedRadius));
+};
 
 const formatMonthLabel = (value: string): string => {
   const [yearRaw, monthRaw] = value.split("-");
