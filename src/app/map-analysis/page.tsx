@@ -629,8 +629,8 @@ const MapAnalysisPage = () => {
     }));
   }, [topDiffRows, validComparison]);
 
-  type SankeyNodeDatum = { name: string; label: string; side: "A" | "B" };
-  type SankeyLinkDatum = { source: number; target: number; value: number; payload: ComparisonRow };
+type SankeyNodeDatum = { name: string; fill: string };
+type SankeyLinkDatum = { source: number; target: number; value: number; payload: ComparisonRow };
 
   const sankeyData = useMemo<{ nodes: SankeyNodeDatum[]; links: SankeyLinkDatum[] } | null>(() => {
     if (!validComparison || topDiffRows.length === 0) {
@@ -639,10 +639,10 @@ const MapAnalysisPage = () => {
     const nodes: SankeyNodeDatum[] = [];
     const links: SankeyLinkDatum[] = [];
     topDiffRows.forEach((row) => {
-      nodes.push({ name: `${row.label} (期間A)`, label: row.label, side: "A" });
+      nodes.push({ name: `期間A｜${row.label}`, fill: "#6366f1" });
     });
     topDiffRows.forEach((row) => {
-      nodes.push({ name: `${row.label} (期間B)`, label: row.label, side: "B" });
+      nodes.push({ name: `期間B｜${row.label}`, fill: "#22c55e" });
     });
     const totalRows = topDiffRows.length;
     topDiffRows.forEach((row, index) => {
@@ -954,45 +954,10 @@ const MapAnalysisPage = () => {
                           <ResponsiveContainer width="100%" height="100%">
                             <Sankey
                               data={sankeyData}
-                              nodePadding={40}
+                              nodePadding={36}
                               nodeWidth={12}
                               linkCurvature={0.45}
                               iterations={32}
-                              node={(nodeProps) => {
-                                const { x, y, width, height, index } = nodeProps;
-                                const isLeft = index < topDiffRows.length;
-                                const fill = isLeft ? "#6366f1" : "#22c55e";
-                                const label = sankeyData.nodes[index]?.label ?? nodeProps.name;
-                                if (typeof x !== "number" || typeof y !== "number" || typeof width !== "number" || typeof height !== "number") {
-                                  return null;
-                                }
-                                return (
-                                  <g>
-                                    <rect
-                                      x={x}
-                                      y={y}
-                                      width={width}
-                                      height={height}
-                                      rx={6}
-                                      fill={fill}
-                                      stroke="#ffffff"
-                                      strokeWidth={1}
-                                      opacity={0.9}
-                                    />
-                                    <text
-                                      x={isLeft ? x - 10 : x + width + 10}
-                                      y={y + height / 2}
-                                      textAnchor={isLeft ? "end" : "start"}
-                                      alignmentBaseline="middle"
-                                      fill="#1e293b"
-                                      fontSize={12}
-                                      fontWeight={600}
-                                    >
-                                      {label}
-                                    </text>
-                                  </g>
-                                );
-                              }}
                               link={(linkProps) => {
                                 const { link, path } = linkProps;
                                 const diffShare = link.payload?.diffShare ?? 0;
