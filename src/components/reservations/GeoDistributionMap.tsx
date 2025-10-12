@@ -431,21 +431,21 @@ const createAgeBreakdown = (): Record<AgeBandId, number> =>
 
 const computeRadius = (count: number): number => {
   if (count <= 1) {
-    return 6;
-  }
-  if (count <= 3) {
-    return 7;
-  }
-  if (count <= 5) {
     return 9;
   }
-  if (count <= 10) {
+  if (count <= 3) {
     return 11;
   }
-  if (count <= 20) {
-    return 14;
+  if (count <= 5) {
+    return 13;
   }
-  return Math.min(26, 8 + Math.sqrt(count) * 2.5);
+  if (count <= 10) {
+    return 16;
+  }
+  if (count <= 20) {
+    return 20;
+  }
+  return Math.min(34, 12 + Math.sqrt(count) * 3);
 };
 
 const formatMonthLabel = (value: string): string => {
@@ -518,6 +518,16 @@ export const GeoDistributionMap = ({
     useState<AgeFilterValue>(ALL_AGE_BAND);
   const [colorMode, setColorMode] = useState<ColorMode>("age");
 
+  const latestMonth = useMemo(() => {
+    const months = reservations
+      .map((reservation) => reservation.reservationMonth)
+      .filter((value): value is string => Boolean(value));
+    if (months.length === 0) {
+      return null;
+    }
+    return months.sort((a, b) => b.localeCompare(a))[0] ?? null;
+  }, [reservations]);
+
   const clinicIcon = useMemo(
     () =>
       divIcon({
@@ -546,9 +556,19 @@ export const GeoDistributionMap = ({
 
   useEffect(() => {
     if (!periodOptions.some((option) => option.value === selectedPeriod)) {
-      setSelectedPeriod(ALL_PERIOD);
+      if (latestMonth) {
+        setSelectedPeriod(latestMonth);
+      } else {
+        setSelectedPeriod(ALL_PERIOD);
+      }
     }
-  }, [periodOptions, selectedPeriod]);
+  }, [periodOptions, selectedPeriod, latestMonth]);
+
+  useEffect(() => {
+    if (latestMonth && (selectedPeriod === ALL_PERIOD || selectedPeriod === "")) {
+      setSelectedPeriod(latestMonth);
+    }
+  }, [latestMonth, selectedPeriod]);
 
   const enrichedRecords = useMemo(() => {
     return reservations.map((reservation) => ({
@@ -1016,9 +1036,9 @@ export const GeoDistributionMap = ({
                 colorMode === "age"
                   ? ageColor
                   : interpolateCountColor(point.total, maxPointTotal || point.total);
-              const strokeColor = lightenColor(markerColor, 0.25);
-              const fillColor = lightenColor(markerColor, 0.55);
-              const fillOpacity = colorMode === "age" ? 0.35 : 0.55;
+              const strokeColor = markerColor;
+              const fillColor = lightenColor(markerColor, 0.35);
+              const fillOpacity = colorMode === "age" ? 0.55 : 0.7;
 
               const ageDetails = AGE_BANDS.filter(
                 (band) => point.ageBreakdown[band.id] > 0,
@@ -1036,9 +1056,11 @@ export const GeoDistributionMap = ({
                   radius={point.radius}
                   pathOptions={{
                     color: strokeColor,
-                    weight: 1.5,
+                    weight: 2.5,
                     fillColor,
                     fillOpacity,
+                    lineCap: "round",
+                    lineJoin: "round",
                   }}
                 >
                   <Tooltip direction="top" offset={[0, -point.radius]} opacity={1}>
