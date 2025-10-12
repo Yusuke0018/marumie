@@ -1,0 +1,14 @@
+timestamp: 2025-10-13 08:32:48 JST
+branch: main
+commit: 52b490633c373ef90ddfd602658a35fe27669434
+summary: upgrade Next.js dependencies to 14.2.33 and scope typecheck to the app
+changes:
+  - package.json
+  - package-lock.json
+  - tsconfig.json
+  - docs/70_changelog.md
+tests:
+  - npm run lint (pass)
+  - npm run typecheck (pass)
+  - npm run build (pass)
+push: origin/main (success)
