@@ -1111,15 +1111,20 @@ const AREA_COLORS = [
                                       </g>
                                     );
                                   }}
-                                  link={(linkProps) => {
-                                    const anyProps = linkProps as unknown as {
-                                      path?: string;
-                                      link?: { payload?: ComparisonRow & { fill?: string } };
-                                      payload?: { payload?: ComparisonRow & { fill?: string } };
-                                    };
-                                    const path = typeof anyProps.path === "string" ? anyProps.path : "";
-                                    const linkPayload = anyProps.link?.payload ?? anyProps.payload?.payload;
-                                    const areaColor = linkPayload?.fill ?? "#94a3b8";
+                                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                  link={(linkProps: any) => {
+                                    const {
+                                      sourceX = 0,
+                                      sourceY = 0,
+                                      sourceControlX = 0,
+                                      targetX = 0,
+                                      targetY = 0,
+                                      targetControlX = 0,
+                                      linkWidth = 0,
+                                      payload,
+                                    } = linkProps;
+
+                                    const areaColor = payload?.fill ?? "#94a3b8";
 
                                     // 16進数カラーをrgbaに変換
                                     const hexToRgba = (hex: string, alpha: number) => {
@@ -1129,12 +1134,22 @@ const AREA_COLORS = [
                                       return `rgba(${r},${g},${b},${alpha})`;
                                     };
 
+                                    // サンキー図のリンク（帯）のパスを手動で生成
+                                    const path = `
+                                      M${sourceX},${sourceY}
+                                      C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}
+                                      L${targetX},${targetY + linkWidth}
+                                      C${targetControlX},${targetY + linkWidth} ${sourceControlX},${sourceY + linkWidth} ${sourceX},${sourceY + linkWidth}
+                                      Z
+                                    `;
+
                                     return (
                                       <path
                                         d={path}
                                         fill={hexToRgba(areaColor, 0.6)}
-                                        stroke="none"
-                                        opacity={1}
+                                        stroke={hexToRgba(areaColor, 0.8)}
+                                        strokeWidth={0.5}
+                                        opacity={0.9}
                                       />
                                     );
                                   }}
