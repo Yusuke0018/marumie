@@ -186,6 +186,52 @@ type ComparisonRow = {
   diffShare: number;
 };
 
+type SankeyNodeDatum = {
+  name: string;
+  fill?: string;
+  stroke?: string;
+  shareA?: number;
+  shareB?: number;
+};
+type SankeyLinkDatum = {
+  source: number;
+  target: number;
+  value: number;
+  fill?: string;
+  stroke?: string;
+  payload: ComparisonRow;
+};
+
+type AreaColor = { fill: string; accent: string };
+
+// エリアごとの淡色パレットとアクセント色
+const AREA_COLOR_PALETTE: AreaColor[] = [
+  { fill: "#dbeafe", accent: "#2563eb" }, // blue
+  { fill: "#ccfbf1", accent: "#0f766e" }, // teal
+  { fill: "#fef3c7", accent: "#b45309" }, // amber
+  { fill: "#ffe4e6", accent: "#be123c" }, // rose
+  { fill: "#ede9fe", accent: "#7c3aed" }, // violet
+  { fill: "#fce7f3", accent: "#db2777" }, // pink
+  { fill: "#cffafe", accent: "#0ea5e9" }, // sky
+  { fill: "#ffedd5", accent: "#ea580c" }, // orange
+];
+
+const toTransparentColor = (hex: string, alpha: number) => {
+  const sanitized = hex.replace("#", "");
+  const bigint = parseInt(sanitized, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const scaleLinkValue = (row: ComparisonRow) => {
+  const averageShare = (row.shareA + row.shareB) / 2;
+  const diffWeight = Math.abs(row.diffShare) * 2400;
+  const shareWeight = averageShare * 600;
+  return Math.max(diffWeight, shareWeight, 4);
+};
+
 const computeAgeFromBirth = (
   birthIso: string | null,
   visitIso: string,
@@ -677,22 +723,7 @@ const MapAnalysisPage = () => {
       periodA: Number((row.shareA * 100).toFixed(1)),
       periodB: Number((row.shareB * 100).toFixed(1)),
     }));
-  }, [topDiffRows, validComparison]);
-
-type SankeyNodeDatum = { name: string; fill?: string; shareA?: number; shareB?: number };
-type SankeyLinkDatum = { source: number; target: number; value: number; fill?: string; payload: ComparisonRow };
-
-// エリアごとの色パレット
-const AREA_COLORS = [
-  "#3b82f6", // blue-500
-  "#10b981", // emerald-500
-  "#f59e0b", // amber-500
-  "#ef4444", // red-500
-  "#8b5cf6", // violet-500
-  "#ec4899", // pink-500
-  "#14b8a6", // teal-500
-  "#f97316", // orange-500
-];
+}, [topDiffRows, validComparison]);
 
   const sankeyData = useMemo<{ nodes: SankeyNodeDatum[]; links: SankeyLinkDatum[] } | null>(() => {
     if (!validComparison || topDiffRows.length === 0) {
@@ -701,12 +732,15 @@ const AREA_COLORS = [
     const nodes: SankeyNodeDatum[] = [];
     const links: SankeyLinkDatum[] = [];
 
+    const palette = AREA_COLOR_PALETTE;
+
     // 左側：期間Aの各エリア
     topDiffRows.forEach((row, index) => {
-      const color = AREA_COLORS[index % AREA_COLORS.length];
+      const { fill, accent } = palette[index % palette.length];
       nodes.push({
         name: row.label,
-        fill: color,
+        fill,
+        stroke: accent,
         shareA: row.shareA,
         shareB: row.shareB,
       });
@@ -714,10 +748,11 @@ const AREA_COLORS = [
 
     // 右側：期間Bの各エリア
     topDiffRows.forEach((row, index) => {
-      const color = AREA_COLORS[index % AREA_COLORS.length];
+      const { fill, accent } = palette[index % palette.length];
       nodes.push({
         name: row.label,
-        fill: color,
+        fill,
+        stroke: accent,
         shareA: row.shareA,
         shareB: row.shareB,
       });
@@ -727,14 +762,15 @@ const AREA_COLORS = [
 
     // リンク：期間A → 期間B（同じエリアを結ぶ）
     topDiffRows.forEach((row, index) => {
-      const valueA = Math.max(row.shareA * 100, 0.01);
-      const color = AREA_COLORS[index % AREA_COLORS.length];
+      const { accent } = palette[index % palette.length];
+      const valueA = scaleLinkValue(row);
       links.push({
         source: index,
         target: index + totalRows,
         value: valueA,
-        fill: color,
-        payload: { ...row, fill: color } as ComparisonRow & { fill: string },
+        fill: toTransparentColor(accent, 0.45),
+        stroke: accent,
+        payload: { ...row, fill: accent } as ComparisonRow & { fill: string },
       });
     });
 
@@ -1059,7 +1095,13 @@ const AREA_COLORS = [
                                       width?: number;
                                       height?: number;
                                       index?: number;
-                                      payload?: { name?: string; fill?: string; shareA?: number; shareB?: number };
+                                      payload?: {
+                                        name?: string;
+                                        fill?: string;
+                                        stroke?: string;
+                                        shareA?: number;
+                                        shareB?: number;
+                                      };
                                     };
                                     const x = anyProps.x ?? 0;
                                     const y = anyProps.y ?? 0;
@@ -1067,12 +1109,16 @@ const AREA_COLORS = [
                                     const height = anyProps.height ?? 10;
                                     const name = anyProps.payload?.name ?? "";
                                     const fill = anyProps.payload?.fill ?? "#94a3b8";
+                                    const stroke = anyProps.payload?.stroke ?? fill;
                                     const shareA = anyProps.payload?.shareA ?? 0;
                                     const shareB = anyProps.payload?.shareB ?? 0;
                                     const index = anyProps.index ?? 0;
                                     const isLeft = index < (sankeyData.nodes.length / 2);
                                     const share = isLeft ? shareA : shareB;
                                     const shareText = `${(share * 100).toFixed(1)}%`;
+                                    const diffValue = (shareB - shareA) * 100;
+                                    const diffText = `${diffValue >= 0 ? "+" : ""}${diffValue.toFixed(1)}%`;
+                                    const diffColor = diffValue >= 0 ? stroke : "#991b1b";
 
                                     return (
                                       <g>
@@ -1083,8 +1129,8 @@ const AREA_COLORS = [
                                           height={height}
                                           fill={fill}
                                           rx={4}
-                                          opacity={0.85}
-                                          stroke={fill}
+                                          opacity={0.65}
+                                          stroke={stroke}
                                           strokeWidth={1.5}
                                         />
                                         <text
@@ -1109,7 +1155,44 @@ const AREA_COLORS = [
                                         >
                                           {shareText}
                                         </text>
+                                        <text
+                                          x={isLeft ? x - 10 : x + width + 10}
+                                          y={y + height / 2 + 25}
+                                          textAnchor={isLeft ? "end" : "start"}
+                                          alignmentBaseline="middle"
+                                          fontSize="10"
+                                          fontWeight="600"
+                                          fill={diffColor}
+                                        >
+                                          Δ {diffText}
+                                        </text>
                                       </g>
+                                    );
+                                  }}
+                                  link={(linkProps) => {
+                                    const anyLink = linkProps as {
+                                      linkWidth: number;
+                                      sourceX: number;
+                                      sourceY: number;
+                                      targetX: number;
+                                      targetY: number;
+                                      sourceControlX: number;
+                                      targetControlX: number;
+                                      payload: { stroke?: string; fill?: string };
+                                    };
+                                    const strokeColor = anyLink.payload?.stroke ?? "#64748b";
+                                    const fillColor = anyLink.payload?.fill ?? toTransparentColor(strokeColor, 0.45);
+                                    const width = Math.max(anyLink.linkWidth ?? 1, 6);
+                                    const topPath = `M${anyLink.sourceX},${anyLink.sourceY} C${anyLink.sourceControlX},${anyLink.sourceY} ${anyLink.targetControlX},${anyLink.targetY} ${anyLink.targetX},${anyLink.targetY}`;
+                                    const bottomPath = `C${anyLink.targetControlX},${anyLink.targetY + width} ${anyLink.sourceControlX},${anyLink.sourceY + width} ${anyLink.sourceX},${anyLink.sourceY + width}`;
+                                    return (
+                                      <path
+                                        d={`${topPath} L${anyLink.targetX},${anyLink.targetY + width} ${bottomPath} Z`}
+                                        fill={fillColor}
+                                        stroke={strokeColor}
+                                        strokeWidth={0.8}
+                                        strokeOpacity={0.6}
+                                      />
                                     );
                                   }}
                                 >
