@@ -206,14 +206,14 @@ type AreaColor = { fill: string; accent: string };
 
 // エリアごとの淡色パレットとアクセント色
 const AREA_COLOR_PALETTE: AreaColor[] = [
-  { fill: "#dbeafe", accent: "#2563eb" }, // blue
-  { fill: "#ccfbf1", accent: "#0f766e" }, // teal
-  { fill: "#fef3c7", accent: "#b45309" }, // amber
-  { fill: "#ffe4e6", accent: "#be123c" }, // rose
-  { fill: "#ede9fe", accent: "#7c3aed" }, // violet
-  { fill: "#fce7f3", accent: "#db2777" }, // pink
-  { fill: "#cffafe", accent: "#0ea5e9" }, // sky
-  { fill: "#ffedd5", accent: "#ea580c" }, // orange
+  { fill: "#2563eb", accent: "#1d4ed8" }, // blue
+  { fill: "#0f766e", accent: "#0b5f59" }, // teal
+  { fill: "#b45309", accent: "#92400e" }, // amber
+  { fill: "#be123c", accent: "#9f1239" }, // rose
+  { fill: "#7c3aed", accent: "#6d28d9" }, // violet
+  { fill: "#db2777", accent: "#be185d" }, // pink
+  { fill: "#0ea5e9", accent: "#0284c7" }, // sky
+  { fill: "#ea580c", accent: "#c2410c" }, // orange
 ];
 
 const toTransparentColor = (hex: string, alpha: number) => {
@@ -226,10 +226,10 @@ const toTransparentColor = (hex: string, alpha: number) => {
 };
 
 const scaleLinkValue = (row: ComparisonRow) => {
-  const averageShare = (row.shareA + row.shareB) / 2;
-  const diffWeight = Math.abs(row.diffShare) * 2400;
-  const shareWeight = averageShare * 600;
-  return Math.max(diffWeight, shareWeight, 4);
+  const maxShare = Math.max(row.shareA, row.shareB);
+  const diffWeight = Math.abs(row.diffShare) * 6000;
+  const baseWeight = maxShare * 1200;
+  return Math.max(diffWeight + baseWeight, 6);
 };
 
 const computeAgeFromBirth = (
@@ -768,7 +768,7 @@ const MapAnalysisPage = () => {
         source: index,
         target: index + totalRows,
         value: valueA,
-        fill: toTransparentColor(accent, 0.45),
+        fill: toTransparentColor(accent, 0.22),
         stroke: accent,
         payload: { ...row, fill: accent } as ComparisonRow & { fill: string },
       });
@@ -1171,6 +1171,7 @@ const MapAnalysisPage = () => {
                                   }}
                                   link={(linkProps) => {
                                     const anyLink = linkProps as {
+                                      d?: string;
                                       linkWidth: number;
                                       sourceX: number;
                                       sourceY: number;
@@ -1178,21 +1179,30 @@ const MapAnalysisPage = () => {
                                       targetY: number;
                                       sourceControlX: number;
                                       targetControlX: number;
-                                      payload: { stroke?: string; fill?: string };
+                                      payload: { stroke?: string; fill?: string; payload?: ComparisonRow & { fill?: string } };
                                     };
-                                    const strokeColor = anyLink.payload?.stroke ?? "#64748b";
-                                    const fillColor = anyLink.payload?.fill ?? toTransparentColor(strokeColor, 0.45);
-                                    const width = Math.max(anyLink.linkWidth ?? 1, 6);
-                                    const topPath = `M${anyLink.sourceX},${anyLink.sourceY} C${anyLink.sourceControlX},${anyLink.sourceY} ${anyLink.targetControlX},${anyLink.targetY} ${anyLink.targetX},${anyLink.targetY}`;
-                                    const bottomPath = `C${anyLink.targetControlX},${anyLink.targetY + width} ${anyLink.sourceControlX},${anyLink.sourceY + width} ${anyLink.sourceX},${anyLink.sourceY + width}`;
+                                    const pathD = anyLink.d ?? "";
+                                    const row = anyLink.payload?.payload;
+                                    const accentColor = anyLink.payload?.stroke ?? row?.fill ?? "#64748b";
+                                    const fillColor = anyLink.payload?.fill ?? toTransparentColor(accentColor, 0.22);
+                                    const diffMagnitude = row ? Math.abs(row.diffShare) : 0;
+                                    const highlightWidth = Math.min(
+                                      Math.max(diffMagnitude * 900 + 1.6, 1.8),
+                                      (anyLink.linkWidth ?? 1) * 0.6 + 2.4,
+                                    );
+                                    const strokeOpacity = row && row.diffShare < 0 ? 0.5 : 0.75;
                                     return (
-                                      <path
-                                        d={`${topPath} L${anyLink.targetX},${anyLink.targetY + width} ${bottomPath} Z`}
-                                        fill={fillColor}
-                                        stroke={strokeColor}
-                                        strokeWidth={0.8}
-                                        strokeOpacity={0.6}
-                                      />
+                                      <g>
+                                        <path d={pathD} fill={fillColor} stroke="none" />
+                                        <path
+                                          d={pathD}
+                                          fill="none"
+                                          stroke={accentColor}
+                                          strokeWidth={highlightWidth}
+                                          strokeOpacity={strokeOpacity}
+                                          strokeLinecap="round"
+                                        />
+                                      </g>
                                     );
                                   }}
                                 >
