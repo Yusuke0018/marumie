@@ -629,7 +629,7 @@ const MapAnalysisPage = () => {
     }));
   }, [topDiffRows, validComparison]);
 
-type SankeyNodeDatum = { name: string };
+type SankeyNodeDatum = { name: string; fill?: string };
 type SankeyLinkDatum = { source: number; target: number; value: number; payload: ComparisonRow };
 
   const sankeyData = useMemo<{ nodes: SankeyNodeDatum[]; links: SankeyLinkDatum[] } | null>(() => {
@@ -639,10 +639,10 @@ type SankeyLinkDatum = { source: number; target: number; value: number; payload:
     const nodes: SankeyNodeDatum[] = [];
     const links: SankeyLinkDatum[] = [];
     topDiffRows.forEach((row) => {
-      nodes.push({ name: `期間A｜${row.label}` });
+      nodes.push({ name: `期間A｜${row.label}`, fill: "#6366f1" });
     });
     topDiffRows.forEach((row) => {
-      nodes.push({ name: `期間B｜${row.label}` });
+      nodes.push({ name: `期間B｜${row.label}`, fill: "#22c55e" });
     });
     const totalRows = topDiffRows.length;
     topDiffRows.forEach((row, index) => {
@@ -961,11 +961,17 @@ type SankeyLinkDatum = { source: number; target: number; value: number; payload:
                               linkCurvature={0.45}
                               iterations={32}
                               link={(linkProps) => {
-                                const { link, path } = linkProps as unknown as {
-                                  link: { payload?: ComparisonRow };
-                                  path: string;
+                                const anyProps = linkProps as unknown as {
+                                  path?: string;
+                                  link?: { payload?: ComparisonRow };
+                                  payload?: { payload?: ComparisonRow };
                                 };
-                                const diffShare = link.payload?.diffShare ?? 0;
+                                const path = anyProps.path;
+                                if (typeof path !== "string" || path.length === 0) {
+                                  return null;
+                                }
+                                const linkPayload = anyProps.link?.payload ?? anyProps.payload?.payload;
+                                const diffShare = linkPayload?.diffShare ?? 0;
                                 const positive = diffShare >= 0;
                                 const color = positive ? "rgba(34,197,94,0.35)" : "rgba(239,68,68,0.35)";
                                 const strokeColor = positive ? "rgba(34,197,94,0.65)" : "rgba(239,68,68,0.65)";
