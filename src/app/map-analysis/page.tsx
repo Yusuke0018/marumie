@@ -1113,20 +1113,8 @@ const AREA_COLORS = [
                                   }}
                                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                   link={(linkProps: any) => {
-                                    // Rechartsが提供するlink情報を取得
-                                    const { source, target, dy, index = 0 } = linkProps;
-
-                                    // sourceとtargetノードから座標を計算
-                                    const x0 = source?.x1 ?? 0;
-                                    const x1 = target?.x0 ?? 0;
-                                    const y0 = source?.y0 ?? 0;
-                                    const y1 = target?.y0 ?? 0;
-                                    const linkHeight = dy ?? 10;
-
-                                    // ベジェ曲線の制御点（中間地点）
-                                    const controlX = (x0 + x1) / 2;
-
-                                    // sourceのindexから対応する色を取得
+                                    // linkのindexから対応する色を取得
+                                    const index = linkProps?.index ?? 0;
                                     const areaColor = AREA_COLORS[index % AREA_COLORS.length];
 
                                     // 16進数カラーをrgbaに変換
@@ -1137,14 +1125,8 @@ const AREA_COLORS = [
                                       return `rgba(${r},${g},${b},${alpha})`;
                                     };
 
-                                    // サンキー図のリンク（帯）のパスを生成
-                                    const path = `
-                                      M${x0},${y0}
-                                      C${controlX},${y0} ${controlX},${y1} ${x1},${y1}
-                                      L${x1},${y1 + linkHeight}
-                                      C${controlX},${y1 + linkHeight} ${controlX},${y0 + linkHeight} ${x0},${y0 + linkHeight}
-                                      Z
-                                    `;
+                                    // Rechartsが内部で生成したpathを使用
+                                    const path = linkProps?.path ?? "";
 
                                     return (
                                       <path
