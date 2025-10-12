@@ -12,6 +12,7 @@ import {
 } from "react";
 import { inflate } from "pako";
 import { RefreshCw, Share2, Link as LinkIcon } from "lucide-react";
+import Link from "next/link";
 import { uploadDataToR2, fetchDataFromR2 } from "@/lib/dataShare";
 import { getDayType, getWeekdayName } from "@/lib/dateUtils";
 import type { DayType } from "@/lib/dateUtils";
@@ -33,8 +34,6 @@ import { setCompressedItem } from "@/lib/storageCompression";
 import { AnalysisFilterPortal } from "@/components/AnalysisFilterPortal";
 import { useAnalysisPeriodRange } from "@/hooks/useAnalysisPeriodRange";
 import { setAnalysisPeriodLabel } from "@/lib/analysisPeriod";
-import dynamic from "next/dynamic";
-
 // グラフコンポーネントをReact.lazyで遅延ロード（初期バンドルサイズを削減）
 const WeekdayChartSection = lazy(() =>
   import("@/components/reservations/WeekdayChartSection").then((m) => ({
@@ -55,20 +54,6 @@ const MonthlyTrendChart = lazy(() =>
   import("@/components/reservations/MonthlyTrendChart").then((m) => ({
     default: m.MonthlyTrendChart,
   })),
-);
-const GeoDistributionMap = dynamic(
-  () =>
-    import("@/components/reservations/GeoDistributionMap").then((m) => ({
-      default: m.GeoDistributionMap,
-    })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-[520px] items-center justify-center rounded-3xl border border-slate-200 bg-white text-slate-500">
-        地図コンポーネントを読み込み中です...
-      </div>
-    ),
-  },
 );
 
 type HourlyBucket = {
@@ -1502,13 +1487,27 @@ export default function HomePage() {
         </SectionCard>
 
         <SectionCard
-          title="来院エリアマップ"
-          description="診療科・年代・期間を指定して、町丁目単位の来院元を可視化します。"
+          title="マップ分析"
+          description="地図上で来院エリアを確認するには、専用ページを開いてください。"
         >
-          <GeoDistributionMap
-            reservations={filteredReservations}
-            periodLabel={reservationRangeLabel}
-          />
+          <div className="flex flex-col gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-6 text-sm text-slate-700">
+            <p>
+              最新のフィルター条件（期間: {reservationRangeLabel}）に基づくデータをもとに、
+              診療科・年代別の来院傾向を地図上に表示できます。
+            </p>
+            <div>
+              <Link
+                href="/map-analysis"
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500"
+              >
+                マップ分析を開く
+                <LinkIcon className="h-4 w-4" />
+              </Link>
+            </div>
+            <p className="text-xs text-indigo-700">
+              マップ分析ページはクライアント側で処理されます。通信環境によっては表示まで時間がかかる場合があります。
+            </p>
+          </div>
         </SectionCard>
 
         {diffMonthly && diffMonthly.length > 0 && (
