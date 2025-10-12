@@ -55,6 +55,11 @@ const MonthlyTrendChart = lazy(() =>
     default: m.MonthlyTrendChart,
   })),
 );
+const GeoDistributionMap = lazy(() =>
+  import("@/components/reservations/GeoDistributionMap").then((m) => ({
+    default: m.GeoDistributionMap,
+  })),
+);
 
 type HourlyBucket = {
   hour: string;
@@ -1484,6 +1489,24 @@ export default function HomePage() {
               )}
             </>
           )}
+        </SectionCard>
+
+        <SectionCard
+          title="来院エリアマップ"
+          description="診療科・年代・期間を指定して、町丁目単位の来院元を可視化します。"
+        >
+          <Suspense
+            fallback={
+              <div className="flex h-[520px] items-center justify-center text-slate-500">
+                地図セクションを読み込み中です...
+              </div>
+            }
+          >
+            <GeoDistributionMap
+              reservations={filteredReservations}
+              periodLabel={reservationRangeLabel}
+            />
+          </Suspense>
         </SectionCard>
 
         {diffMonthly && diffMonthly.length > 0 && (
