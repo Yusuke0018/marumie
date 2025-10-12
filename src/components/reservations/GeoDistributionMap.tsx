@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { MapContainer, TileLayer, CircleMarker, Tooltip, Marker } from "react-leaflet";
 import { divIcon, type LatLngExpression, type Map as LeafletMap } from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -579,7 +579,7 @@ const buildAgePie = (
 };
 
 
-export const GeoDistributionMap = ({
+const GeoDistributionMapComponent = ({
   reservations,
   periodLabel,
   selectedAreaIds,
@@ -1526,3 +1526,5 @@ export const GeoDistributionMap = ({
     </div>
   );
 };
+
+export const GeoDistributionMap = memo(GeoDistributionMapComponent);

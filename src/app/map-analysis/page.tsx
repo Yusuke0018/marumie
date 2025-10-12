@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, useCallback, type ChangeEvent } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { RefreshCw, ArrowLeft, MapPin, Target, Plus, X } from "lucide-react";
@@ -839,7 +839,7 @@ const MapAnalysisPage = () => {
     setRangeB((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleRegisterAreas = (areas: AreaSelectionMeta[]) => {
+  const handleRegisterAreas = useCallback((areas: AreaSelectionMeta[]) => {
     setAreaMetadata(() => {
       const registry: Record<string, AreaSelectionMeta> = {};
       areas.forEach((area) => {
@@ -847,7 +847,7 @@ const MapAnalysisPage = () => {
       });
       return registry;
     });
-  };
+  }, []);
 
   const handleAddArea = (areaId: string) => {
     if (!areaId) {
@@ -885,7 +885,7 @@ const MapAnalysisPage = () => {
     setPendingAreaId("");
   };
 
-  const handleToggleAreaFromMap = (area: AreaSelectionMeta) => {
+  const handleToggleAreaFromMap = useCallback((area: AreaSelectionMeta) => {
     setHasCustomSelection(true);
     setSelectedAreaIds((prev) => {
       if (prev.includes(area.id)) {
@@ -898,7 +898,7 @@ const MapAnalysisPage = () => {
       return next;
     });
     setFocusAreaId(area.id);
-  };
+  }, []);
 
   const handleFocusArea = (areaId: string, ensureSelected = false) => {
     if (ensureSelected && !selectedAreaIds.includes(areaId)) {
