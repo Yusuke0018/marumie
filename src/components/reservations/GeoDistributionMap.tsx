@@ -74,8 +74,8 @@ const COLOR_MODES = [
 type ColorMode = (typeof COLOR_MODES)[number]["value"];
 
 const CLINIC_LOCATION: { lat: number; lng: number } = {
-  lat: 34.67692,
-  lng: 135.49798,
+  lat: 34.675424633388666,
+  lng: 135.4927610269883,
 };
 
 const CLINIC_NAME = "リベ大総合クリニック大阪院";
