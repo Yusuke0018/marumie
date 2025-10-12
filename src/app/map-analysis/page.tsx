@@ -966,10 +966,7 @@ type SankeyLinkDatum = { source: number; target: number; value: number; payload:
                                   link?: { payload?: ComparisonRow };
                                   payload?: { payload?: ComparisonRow };
                                 };
-                                const path = anyProps.path;
-                                if (typeof path !== "string" || path.length === 0) {
-                                  return null;
-                                }
+                                const path = typeof anyProps.path === "string" ? anyProps.path : "";
                                 const linkPayload = anyProps.link?.payload ?? anyProps.payload?.payload;
                                 const diffShare = linkPayload?.diffShare ?? 0;
                                 const positive = diffShare >= 0;
