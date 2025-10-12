@@ -1040,17 +1040,17 @@ const AREA_COLORS = [
                               <span>期間A</span>
                               <span>期間B</span>
                             </div>
-                            <div className="h-[600px] overflow-visible">
+                            <div className="h-[700px] overflow-visible">
                               <ResponsiveContainer width="100%" height="100%">
                                 {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
                                 {/* @ts-ignore: Recharts types do not expose custom node/link renderer props */}
                                 <Sankey
                                   data={sankeyData}
-                                  nodePadding={18}
-                                  nodeWidth={24}
+                                  nodePadding={30}
+                                  nodeWidth={30}
                                   linkCurvature={0.5}
                                   iterations={64}
-                                  margin={{ top: 10, right: 150, bottom: 10, left: 150 }}
+                                  margin={{ top: 20, right: 180, bottom: 20, left: 180 }}
                                   node={(nodeProps) => {
                                     const anyProps = nodeProps as unknown as {
                                       x?: number;
@@ -1132,10 +1132,9 @@ const AREA_COLORS = [
                                     return (
                                       <path
                                         d={path}
-                                        fill={hexToRgba(areaColor, 0.3)}
-                                        stroke={hexToRgba(areaColor, 0.6)}
-                                        strokeWidth={0.5}
-                                        opacity={0.85}
+                                        fill={hexToRgba(areaColor, 0.6)}
+                                        stroke="none"
+                                        opacity={1}
                                       />
                                     );
                                   }}
