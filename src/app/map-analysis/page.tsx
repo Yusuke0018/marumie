@@ -529,11 +529,18 @@ const MapAnalysisPage = () => {
     };
   }, [aggregateRange, filterByRange, mapRecords, rangeA, rangeB]);
 
-  const ageComparisonRows = useMemo(() => {
+  const validComparison = useMemo(() => {
     if (!comparisonData || comparisonData.invalid) {
+      return null;
+    }
+    return comparisonData;
+  }, [comparisonData]);
+
+  const ageComparisonRows = useMemo(() => {
+    if (!validComparison) {
       return [];
     }
-    const { ageA, ageB, totalA, totalB } = comparisonData;
+    const { ageA, ageB, totalA, totalB } = validComparison;
     return AGE_BANDS.map((band) => {
       const countA = ageA[band.id];
       const countB = ageB[band.id];
@@ -550,7 +557,7 @@ const MapAnalysisPage = () => {
         diffShare: shareB - shareA,
       };
     });
-  }, [comparisonData]);
+  }, [validComparison]);
 
   const rangeDescription = useMemo(() => {
     const describe = (range: ComparisonRange) => {
@@ -579,28 +586,28 @@ const MapAnalysisPage = () => {
   }, [rangeA, rangeB]);
 
   const topDiffRows = useMemo(() => {
-    if (!comparisonData || comparisonData.invalid) {
+    if (!validComparison) {
       return [];
     }
-    return comparisonData.rows.slice(0, 8);
-  }, [comparisonData]);
+    return validComparison.rows.slice(0, 8);
+  }, [validComparison]);
 
   const topIncrease = useMemo(() => {
-    if (!comparisonData || comparisonData.invalid) {
+    if (!validComparison) {
       return [];
     }
-    return comparisonData.rows.filter((row) => row.diffShare > 0).slice(0, 5);
-  }, [comparisonData]);
+    return validComparison.rows.filter((row) => row.diffShare > 0).slice(0, 5);
+  }, [validComparison]);
 
   const topDecrease = useMemo(() => {
-    if (!comparisonData || comparisonData.invalid) {
+    if (!validComparison) {
       return [];
     }
-    return comparisonData.rows.filter((row) => row.diffShare < 0).slice(0, 5);
-  }, [comparisonData]);
+    return validComparison.rows.filter((row) => row.diffShare < 0).slice(0, 5);
+  }, [validComparison]);
 
   const chartData = useMemo(() => {
-    if (!comparisonData || comparisonData.invalid || topDiffRows.length === 0) {
+    if (!validComparison || topDiffRows.length === 0) {
       return [];
     }
     return topDiffRows.map((row) => ({
@@ -608,16 +615,16 @@ const MapAnalysisPage = () => {
       periodA: Number((row.shareA * 100).toFixed(1)),
       periodB: Number((row.shareB * 100).toFixed(1)),
     }));
-  }, [comparisonData, topDiffRows]);
+  }, [topDiffRows, validComparison]);
 
   const invalidRange = useMemo(() => Boolean(comparisonData?.invalid), [comparisonData]);
 
   const leadingDiff = useMemo(() => {
-    if (!comparisonData || comparisonData.invalid || comparisonData.rows.length === 0) {
+    if (!validComparison || validComparison.rows.length === 0) {
       return null;
     }
-    return comparisonData.rows[0];
-  }, [comparisonData]);
+    return validComparison.rows[0];
+  }, [validComparison]);
 
   const monthOptions = useMemo(
     () => sortedMonths.map((month) => ({ value: month, label: formatMonthLabel(month) })),
@@ -819,7 +826,7 @@ const MapAnalysisPage = () => {
                   <div className="rounded-xl border border-rose-200 bg-rose-50/70 px-4 py-3 text-sm text-rose-700">
                     期間Aまたは期間Bの開始月が終了月より後になっています。範囲を修正してください。
                   </div>
-                ) : !comparisonData ? (
+                ) : !validComparison ? (
                   <p className="text-sm text-slate-500">比較する期間を選択してください。</p>
                 ) : (
                   <div className="space-y-6">
@@ -827,13 +834,13 @@ const MapAnalysisPage = () => {
                       <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
                         <p className="text-xs font-semibold text-indigo-500">期間A 件数</p>
                         <p className="mt-2 text-2xl font-bold text-indigo-700">
-                          {comparisonData.totalA.toLocaleString("ja-JP")}件
+                          {validComparison.totalA.toLocaleString("ja-JP")}件
                         </p>
                       </div>
                       <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
                         <p className="text-xs font-semibold text-emerald-500">期間B 件数</p>
                         <p className="mt-2 text-2xl font-bold text-emerald-700">
-                          {comparisonData.totalB.toLocaleString("ja-JP")}件
+                          {validComparison.totalB.toLocaleString("ja-JP")}件
                         </p>
                       </div>
                       <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
