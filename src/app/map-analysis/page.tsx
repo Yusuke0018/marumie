@@ -8,6 +8,91 @@ import { type KarteRecord } from "@/lib/karteAnalytics";
 import { getCompressedItem } from "@/lib/storageCompression";
 import { KARTE_STORAGE_KEY, KARTE_TIMESTAMP_KEY } from "@/lib/storageKeys";
 
+const KANJI_DIGITS = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"] as const;
+const DASH_REGEX = /[－―ーｰ‐]/g;
+const FULL_WIDTH_DIGITS = /[０-９]/g;
+
+const toHalfWidthDigits = (value: string): string =>
+  value.replace(FULL_WIDTH_DIGITS, (digit) =>
+    String.fromCharCode(digit.charCodeAt(0) - 0xfee0),
+  );
+
+const numberToKanji = (value: number): string => {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "";
+  }
+  if (value < 10) {
+    return KANJI_DIGITS[value] ?? "";
+  }
+  if (value === 10) {
+    return "十";
+  }
+  if (value < 20) {
+    return `十${KANJI_DIGITS[value - 10] ?? ""}`;
+  }
+  if (value < 100) {
+    const tens = Math.floor(value / 10);
+    const ones = value % 10;
+    const tensPart = tens === 1 ? "十" : `${KANJI_DIGITS[tens] ?? ""}十`;
+    return ones === 0 ? tensPart : `${tensPart}${KANJI_DIGITS[ones] ?? ""}`;
+  }
+  return value.toString();
+};
+
+const standardizeTownLabel = (raw: string | null | undefined): string | null => {
+  if (!raw) {
+    return null;
+  }
+  let normalized = raw.trim();
+  if (normalized.length === 0) {
+    return null;
+  }
+  normalized = normalized.replace(/\s+/g, "");
+  normalized = toHalfWidthDigits(normalized);
+  normalized = normalized.replace(DASH_REGEX, "-");
+  normalized = normalized.replace(/(\d+)丁目/gu, (_, digits) => {
+    const parsed = Number.parseInt(digits ?? "", 10);
+    return Number.isFinite(parsed) ? `${numberToKanji(parsed)}丁目` : `${digits}丁目`;
+  });
+  if (!normalized.includes("丁目")) {
+    const hyphenMatch = normalized.match(/^([^\d]+?)(\d+)-/);
+    if (hyphenMatch) {
+      const [, base, digits] = hyphenMatch;
+      const parsed = Number.parseInt(digits ?? "", 10);
+      if (Number.isFinite(parsed)) {
+        normalized = `${base}${numberToKanji(parsed)}丁目`;
+      }
+    }
+  }
+  if (!normalized.includes("丁目")) {
+    const suffixMatch = normalized.match(/^([^\d]+?)(\d+)$/);
+    if (suffixMatch) {
+      const [, base, digits] = suffixMatch;
+      const parsed = Number.parseInt(digits ?? "", 10);
+      if (Number.isFinite(parsed)) {
+        normalized = `${base}${numberToKanji(parsed)}丁目`;
+      }
+    }
+  }
+  if (normalized.includes("丁目")) {
+    const index = normalized.indexOf("丁目");
+    normalized = normalized.slice(0, index + 2);
+  }
+  return normalized.length > 0 ? normalized : null;
+};
+
+const removeChomeSuffix = (value: string | null): string | null => {
+  if (!value) {
+    return null;
+  }
+  const normalized = value.replace(/\s+/g, "");
+  if (normalized.length === 0) {
+    return null;
+  }
+  const removed = normalized.replace(/([〇零一二三四五六七八九十百\d]+丁目)$/u, "");
+  return removed.length > 0 ? removed : null;
+};
+
 const GeoDistributionMap = dynamic(
   () =>
     import("@/components/reservations/GeoDistributionMap").then((m) => ({
@@ -86,18 +171,50 @@ const computeAgeFromBirth = (
   return age >= 0 && age <= 120 ? age : null;
 };
 
-const extractAddressMeta = (
+const parseAddressComponents = (
   address: string | null,
-): { prefecture: string | null; city: string | null } => {
+): {
+  prefecture: string | null;
+  city: string | null;
+  town: string | null;
+  baseTown: string | null;
+} => {
   if (!address) {
-    return { prefecture: null, city: null };
+    return { prefecture: null, city: null, town: null, baseTown: null };
   }
-  const trimmed = address.trim();
-  const prefecture = trimmed.includes("大阪府") ? "大阪府" : null;
-  const cityMatch = trimmed.match(/大阪市[\p{Script=Han}]+区/u);
+  let normalized = address.trim();
+  if (normalized.length === 0) {
+    return { prefecture: null, city: null, town: null, baseTown: null };
+  }
+  normalized = normalized.replace(/\s+/g, "");
+
+  let prefecture = normalized.includes("大阪府") ? "大阪府" : null;
+  const cityMatch = normalized.match(/大阪市[\p{Script=Han}]+区/u);
   const city =
-    cityMatch?.[0] ?? (trimmed.startsWith("大阪市") ? "大阪市" : null);
-  return { prefecture, city };
+    cityMatch?.[0] ?? (normalized.startsWith("大阪市") ? "大阪市" : null);
+
+  if (!prefecture && city && city.startsWith("大阪市")) {
+    prefecture = "大阪府";
+  }
+
+  let working = normalized;
+  if (prefecture) {
+    working = working.replace(prefecture, "");
+  }
+  if (city) {
+    working = working.replace(city, "");
+  }
+  working = working.replace(/^大阪市/, "");
+
+  const town = standardizeTownLabel(working);
+  const baseTown = removeChomeSuffix(town);
+
+  return {
+    prefecture,
+    city,
+    town: town ?? baseTown,
+    baseTown,
+  };
 };
 
 const MapAnalysisPage = () => {
@@ -169,7 +286,7 @@ const MapAnalysisPage = () => {
       .map((record) => {
         const month = record.monthKey ?? record.dateIso.slice(0, 7);
         const address = record.patientAddress ?? null;
-        const { prefecture, city } = extractAddressMeta(address);
+        const { prefecture, city, town } = parseAddressComponents(address);
         return {
           department:
             record.department && record.department.trim().length > 0
@@ -180,7 +297,7 @@ const MapAnalysisPage = () => {
           patientAddress: address,
           patientPrefecture: prefecture,
           patientCity: city,
-          patientTown: null,
+          patientTown: town,
         } satisfies MapRecord;
       })
       .filter((record) => record.reservationMonth.length > 0);
