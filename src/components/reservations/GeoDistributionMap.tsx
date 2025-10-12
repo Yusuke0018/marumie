@@ -74,7 +74,7 @@ const COLOR_MODES = [
 type ColorMode = (typeof COLOR_MODES)[number]["value"];
 
 const CLINIC_LOCATION: { lat: number; lng: number } = {
-  lat: 34.675424633388666,
+  lat: 34.67518,
   lng: 135.4927610269883,
 };
 
