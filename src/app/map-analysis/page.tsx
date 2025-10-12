@@ -680,7 +680,7 @@ const MapAnalysisPage = () => {
   }, [topDiffRows, validComparison]);
 
 type SankeyNodeDatum = { name: string; fill?: string; shareA?: number; shareB?: number };
-type SankeyLinkDatum = { source: number; target: number; value: number; payload: ComparisonRow };
+type SankeyLinkDatum = { source: number; target: number; value: number; fill?: string; payload: ComparisonRow };
 
 // エリアごとの色パレット
 const AREA_COLORS = [
@@ -733,6 +733,7 @@ const AREA_COLORS = [
         source: index,
         target: index + totalRows,
         value: valueA,
+        fill: color,
         payload: { ...row, fill: color } as ComparisonRow & { fill: string },
       });
     });
@@ -1109,32 +1110,6 @@ const AREA_COLORS = [
                                           {shareText}
                                         </text>
                                       </g>
-                                    );
-                                  }}
-                                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                  link={(linkProps: any) => {
-                                    // linkのindexから対応する色を取得
-                                    const index = linkProps?.index ?? 0;
-                                    const areaColor = AREA_COLORS[index % AREA_COLORS.length];
-
-                                    // 16進数カラーをrgbaに変換
-                                    const hexToRgba = (hex: string, alpha: number) => {
-                                      const r = parseInt(hex.slice(1, 3), 16);
-                                      const g = parseInt(hex.slice(3, 5), 16);
-                                      const b = parseInt(hex.slice(5, 7), 16);
-                                      return `rgba(${r},${g},${b},${alpha})`;
-                                    };
-
-                                    // Rechartsが内部で生成したpathを使用
-                                    const path = linkProps?.path ?? "";
-
-                                    return (
-                                      <path
-                                        d={path}
-                                        fill={hexToRgba(areaColor, 0.7)}
-                                        stroke="none"
-                                        opacity={0.95}
-                                      />
                                     );
                                   }}
                                 >
