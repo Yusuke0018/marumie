@@ -629,8 +629,20 @@ const MapAnalysisPage = () => {
     }));
   }, [topDiffRows, validComparison]);
 
-type SankeyNodeDatum = { name: string; fill?: string };
+type SankeyNodeDatum = { name: string; fill?: string; shareA?: number; shareB?: number };
 type SankeyLinkDatum = { source: number; target: number; value: number; payload: ComparisonRow };
+
+// エリアごとの色パレット
+const AREA_COLORS = [
+  "#3b82f6", // blue-500
+  "#10b981", // emerald-500
+  "#f59e0b", // amber-500
+  "#ef4444", // red-500
+  "#8b5cf6", // violet-500
+  "#ec4899", // pink-500
+  "#14b8a6", // teal-500
+  "#f97316", // orange-500
+];
 
   const sankeyData = useMemo<{ nodes: SankeyNodeDatum[]; links: SankeyLinkDatum[] } | null>(() => {
     if (!validComparison || topDiffRows.length === 0) {
@@ -640,32 +652,38 @@ type SankeyLinkDatum = { source: number; target: number; value: number; payload:
     const links: SankeyLinkDatum[] = [];
 
     // 左側：期間Aの各エリア
-    topDiffRows.forEach((row) => {
+    topDiffRows.forEach((row, index) => {
+      const color = AREA_COLORS[index % AREA_COLORS.length];
       nodes.push({
         name: row.label,
-        fill: "#6366f1"
+        fill: color,
+        shareA: row.shareA,
+        shareB: row.shareB,
       });
     });
 
     // 右側：期間Bの各エリア
-    topDiffRows.forEach((row) => {
+    topDiffRows.forEach((row, index) => {
+      const color = AREA_COLORS[index % AREA_COLORS.length];
       nodes.push({
         name: row.label,
-        fill: "#22c55e"
+        fill: color,
+        shareA: row.shareA,
+        shareB: row.shareB,
       });
     });
 
     const totalRows = topDiffRows.length;
 
-    // リンク：期間A → 期間B
+    // リンク：期間A → 期間B（同じエリアを結ぶ）
     topDiffRows.forEach((row, index) => {
-      // 期間Aの割合を使用（0の場合は最小値0.01を設定）
       const valueA = Math.max(row.shareA * 100, 0.01);
+      const color = AREA_COLORS[index % AREA_COLORS.length];
       links.push({
         source: index,
         target: index + totalRows,
         value: valueA,
-        payload: row,
+        payload: { ...row, fill: color } as ComparisonRow & { fill: string },
       });
     });
 
@@ -963,24 +981,24 @@ type SankeyLinkDatum = { source: number; target: number; value: number; payload:
                       <div className="rounded-2xl border border-slate-100 bg-white p-6">
                         <h3 className="mb-1 text-sm font-semibold text-slate-800">期間別エリアシェアのフロー</h3>
                         <p className="mb-4 text-[11px] text-slate-500">
-                          左列が期間A（青）、右列が期間B（緑）。帯の太さが来院割合を表します。
+                          左列が期間A、右列が期間B。同じ色の帯が同じエリアを表します。帯の太さが来院割合（%）を表します。
                         </p>
                         <div className="relative">
-                          <div className="flex justify-between px-4 pb-2 text-xs font-semibold text-slate-600">
-                            <span className="text-indigo-600">期間A</span>
-                            <span className="text-emerald-600">期間B</span>
+                          <div className="flex justify-between px-8 pb-3 text-xs font-bold text-slate-700">
+                            <span>期間A</span>
+                            <span>期間B</span>
                           </div>
-                          <div className="h-[500px] overflow-visible">
+                          <div className="h-[600px] overflow-visible">
                             <ResponsiveContainer width="100%" height="100%">
                               {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
                               {/* @ts-ignore: Recharts types do not expose custom node/link renderer props */}
                               <Sankey
                                 data={sankeyData}
-                                nodePadding={20}
-                                nodeWidth={20}
+                                nodePadding={18}
+                                nodeWidth={24}
                                 linkCurvature={0.5}
                                 iterations={64}
-                                margin={{ top: 10, right: 160, bottom: 10, left: 160 }}
+                                margin={{ top: 10, right: 200, bottom: 10, left: 200 }}
                                 node={(nodeProps) => {
                                   const anyProps = nodeProps as unknown as {
                                     x?: number;
@@ -988,15 +1006,20 @@ type SankeyLinkDatum = { source: number; target: number; value: number; payload:
                                     width?: number;
                                     height?: number;
                                     index?: number;
-                                    payload?: { name?: string; fill?: string };
+                                    payload?: { name?: string; fill?: string; shareA?: number; shareB?: number };
                                   };
                                   const x = anyProps.x ?? 0;
                                   const y = anyProps.y ?? 0;
-                                  const width = anyProps.width ?? 20;
+                                  const width = anyProps.width ?? 24;
                                   const height = anyProps.height ?? 10;
                                   const name = anyProps.payload?.name ?? "";
                                   const fill = anyProps.payload?.fill ?? "#94a3b8";
-                                  const isLeft = (anyProps.index ?? 0) < (sankeyData.nodes.length / 2);
+                                  const shareA = anyProps.payload?.shareA ?? 0;
+                                  const shareB = anyProps.payload?.shareB ?? 0;
+                                  const index = anyProps.index ?? 0;
+                                  const isLeft = index < (sankeyData.nodes.length / 2);
+                                  const share = isLeft ? shareA : shareB;
+                                  const shareText = `${(share * 100).toFixed(1)}%`;
 
                                   return (
                                     <g>
@@ -1007,18 +1030,31 @@ type SankeyLinkDatum = { source: number; target: number; value: number; payload:
                                         height={height}
                                         fill={fill}
                                         rx={4}
-                                        opacity={0.9}
+                                        opacity={0.85}
+                                        stroke={fill}
+                                        strokeWidth={1.5}
                                       />
                                       <text
-                                        x={isLeft ? x - 8 : x + width + 8}
+                                        x={isLeft ? x - 10 : x + width + 10}
                                         y={y + height / 2}
                                         textAnchor={isLeft ? "end" : "start"}
                                         alignmentBaseline="middle"
                                         fontSize="11"
-                                        fontWeight="500"
-                                        fill="#475569"
+                                        fontWeight="600"
+                                        fill="#1e293b"
                                       >
                                         {name}
+                                      </text>
+                                      <text
+                                        x={isLeft ? x - 10 : x + width + 10}
+                                        y={y + height / 2 + 13}
+                                        textAnchor={isLeft ? "end" : "start"}
+                                        alignmentBaseline="middle"
+                                        fontSize="10"
+                                        fontWeight="500"
+                                        fill="#64748b"
+                                      >
+                                        {shareText}
                                       </text>
                                     </g>
                                   );
@@ -1026,22 +1062,28 @@ type SankeyLinkDatum = { source: number; target: number; value: number; payload:
                                 link={(linkProps) => {
                                   const anyProps = linkProps as unknown as {
                                     path?: string;
-                                    link?: { payload?: ComparisonRow };
-                                    payload?: { payload?: ComparisonRow };
+                                    link?: { payload?: ComparisonRow & { fill?: string } };
+                                    payload?: { payload?: ComparisonRow & { fill?: string } };
                                   };
                                   const path = typeof anyProps.path === "string" ? anyProps.path : "";
                                   const linkPayload = anyProps.link?.payload ?? anyProps.payload?.payload;
-                                  const diffShare = linkPayload?.diffShare ?? 0;
-                                  const positive = diffShare >= 0;
-                                  const color = positive ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)";
-                                  const strokeColor = positive ? "rgba(34,197,94,0.5)" : "rgba(239,68,68,0.5)";
+                                  const areaColor = linkPayload?.fill ?? "#94a3b8";
+
+                                  // 16進数カラーをrgbaに変換
+                                  const hexToRgba = (hex: string, alpha: number) => {
+                                    const r = parseInt(hex.slice(1, 3), 16);
+                                    const g = parseInt(hex.slice(3, 5), 16);
+                                    const b = parseInt(hex.slice(5, 7), 16);
+                                    return `rgba(${r},${g},${b},${alpha})`;
+                                  };
+
                                   return (
                                     <path
                                       d={path}
-                                      fill={color}
-                                      stroke={strokeColor}
-                                      strokeWidth={1}
-                                      opacity={0.8}
+                                      fill={hexToRgba(areaColor, 0.3)}
+                                      stroke={hexToRgba(areaColor, 0.6)}
+                                      strokeWidth={0.5}
+                                      opacity={0.85}
                                     />
                                   );
                                 }}
