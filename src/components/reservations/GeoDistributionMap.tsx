@@ -489,13 +489,25 @@ const createAgeBreakdown = (): Record<AgeBandId, number> =>
     {} as Record<AgeBandId, number>,
   );
 
-const computeRadius = (count: number): number => {
+const computeRadius = (count: number, zoom: number): number => {
   if (count <= 0) {
     return 5;
   }
+  
+  // ズームレベル12を基準とした係数
+  // zoom < 12（縮小時）: 小さい円をより小さく
+  // zoom >= 12（拡大時）: 現在のサイズ感を維持
+  const baseZoom = 12;
+  const zoomFactor = zoom >= baseZoom 
+    ? 1.0 + (zoom - baseZoom) * 0.1  // 拡大時: 緩やかに大きく
+    : 0.5 + (zoom / baseZoom) * 0.5;  // 縮小時: 大幅に小さく
+  
   const scaled = Math.sqrt(count);
-  return Math.min(70, 5 + scaled * 10);
-};;
+  const baseRadius = 5 + scaled * 10;
+  const adjustedRadius = baseRadius * zoomFactor;
+  
+  return Math.min(70, adjustedRadius);
+};;;
 
 const formatMonthLabel = (value: string): string => {
   const [yearRaw, monthRaw] = value.split("-");
@@ -636,6 +648,7 @@ const GeoDistributionMapComponent = ({
   const [selectedAgeBand, setSelectedAgeBand] =
     useState<AgeFilterValue>(ALL_AGE_BAND);
   const [colorMode, setColorMode] = useState<ColorMode>("age");
+  const [currentZoom, setCurrentZoom] = useState<number>(12);
 
   const mapRef = useRef<LeafletMap | null>(null);
   const departmentInitializedRef = useRef(false);
@@ -1026,12 +1039,12 @@ const GeoDistributionMapComponent = ({
         matchedTownName: coordinate.town,
         matchLevel,
         dominantAgeBandId,
-        radius: computeRadius(group.total),
+        radius: computeRadius(group.total, currentZoom),
       });
     }
 
     return { mappedPoints: result, unmatchedCount: unmatchedTotals };
-  }, [coordinateIndex, groupedLocations, municipalityIndex, selectedAgeBand]);
+  }, [coordinateIndex, groupedLocations, municipalityIndex, selectedAgeBand, currentZoom]);
 
 
   useEffect(() => {
@@ -1063,6 +1076,24 @@ const GeoDistributionMapComponent = ({
     const nextZoom = Math.max(map.getZoom(), 14);
     map.flyTo([target.latitude, target.longitude], nextZoom, { duration: 0.6 });
   }, [focusAreaId, mappedPoints]);
+
+  useEffect(() => {
+    if (!mapRef.current) {
+      return;
+    }
+    const map = mapRef.current;
+    
+    const handleZoomEnd = () => {
+      setCurrentZoom(map.getZoom());
+    };
+    
+    map.on('zoomend', handleZoomEnd);
+    setCurrentZoom(map.getZoom());
+    
+    return () => {
+      map.off('zoomend', handleZoomEnd);
+    };
+  }, []);
 
   const maxPointTotal = useMemo(
     () => mappedPoints.reduce((max, point) => (point.total > max ? point.total : max), 0),
