@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, CircleMarker, Tooltip, Marker } from "react-leaflet";
-import { divIcon, type LatLngExpression } from "leaflet";
+import { MapContainer, TileLayer, CircleMarker, Tooltip, Marker, useMap } from "react-leaflet";
+import { divIcon, type LatLngExpression, type Map as LeafletMap } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 type GeoDistributionMapProps = {
   reservations: MapVisualizationRecord[];
   periodLabel: string;
+  selectedAreaIds?: string[];
+  onToggleArea?: (area: AreaSelectionPayload) => void;
+  onRegisterAreas?: (areas: AreaSelectionPayload[]) => void;
+  focusAreaId?: string | null;
 };
 
 type MapVisualizationRecord = {
@@ -195,6 +199,16 @@ type MapPoint = LocationAggregation & {
   matchLevel: "town" | "city";
   dominantAgeBandId: AgeBandId;
   radius: number;
+};
+
+type AreaSelectionPayload = {
+  id: string;
+  label: string;
+  latitude: number;
+  longitude: number;
+  city: string | null;
+  town: string | null;
+  prefecture: string | null;
 };
 
 type PieSegment = {
@@ -564,9 +578,22 @@ const buildAgePie = (
   return { gradient, segments, total };
 };
 
+
+const MapReadyBridge = ({ onReady }: { onReady: (map: LeafletMap) => void }) => {
+  const map = useMap();
+  useEffect(() => {
+    onReady(map);
+  }, [map, onReady]);
+  return null;
+};
+
 export const GeoDistributionMap = ({
   reservations,
   periodLabel,
+  selectedAreaIds,
+  onToggleArea,
+  onRegisterAreas,
+  focusAreaId,
 }: GeoDistributionMapProps) => {
   const departmentOptions = useMemo(() => {
     const unique = new Set<string>();
@@ -618,7 +645,14 @@ export const GeoDistributionMap = ({
     useState<AgeFilterValue>(ALL_AGE_BAND);
   const [colorMode, setColorMode] = useState<ColorMode>("age");
 
+  const mapRef = useRef<LeafletMap | null>(null);
   const departmentInitializedRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      mapRef.current = null;
+    };
+  }, []);
 
   const latestMonth = useMemo(() => {
     const months = reservations
@@ -1013,6 +1047,37 @@ export const GeoDistributionMap = ({
     return { mappedPoints: result, unmatchedCount: unmatchedTotals };
   }, [coordinateIndex, groupedLocations, municipalityIndex, selectedAgeBand]);
 
+
+  useEffect(() => {
+    if (!onRegisterAreas) {
+      return;
+    }
+    onRegisterAreas(
+      mappedPoints.map((point) => ({
+        id: point.id,
+        label: point.locationLabel,
+        latitude: point.latitude,
+        longitude: point.longitude,
+        city: point.city,
+        town: point.town,
+        prefecture: point.prefecture,
+      })),
+    );
+  }, [mappedPoints, onRegisterAreas]);
+
+  useEffect(() => {
+    if (!focusAreaId || !mapRef.current) {
+      return;
+    }
+    const target = mappedPoints.find((point) => point.id === focusAreaId);
+    if (!target) {
+      return;
+    }
+    const map = mapRef.current;
+    const nextZoom = Math.max(map.getZoom(), 14);
+    map.flyTo([target.latitude, target.longitude], nextZoom, { duration: 0.6 });
+  }, [focusAreaId, mappedPoints]);
+
   const maxPointTotal = useMemo(
     () => mappedPoints.reduce((max, point) => (point.total > max ? point.total : max), 0),
     [mappedPoints],
@@ -1135,6 +1200,7 @@ export const GeoDistributionMap = ({
             style={{ height: "100%", width: "100%" }}
             attributionControl={false}
           >
+            <MapReadyBridge onReady={(mapInstance) => { mapRef.current = mapInstance; }} />
             <TileLayer
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
@@ -1160,9 +1226,15 @@ export const GeoDistributionMap = ({
                 colorMode === "age"
                   ? ageColor
                   : interpolateCountColor(point.total, maxPointTotal || point.total);
-              const strokeColor = markerColor;
-              const fillColor = lightenColor(markerColor, 0.35);
-              const fillOpacity = colorMode === "age" ? 0.55 : 0.7;
+              const baseStrokeColor = markerColor;
+              const baseFillColor = lightenColor(markerColor, 0.35);
+              const baseFillOpacity = colorMode === "age" ? 0.55 : 0.7;
+              const isSelected = selectedAreaIds?.includes(point.id) ?? false;
+              const isFocused = focusAreaId === point.id;
+              const markerStrokeColor = isFocused ? "#0f172a" : baseStrokeColor;
+              const adjustedFillColor = isSelected ? lightenColor(markerColor, 0.15) : baseFillColor;
+              const adjustedFillOpacity = isSelected ? Math.min(0.95, baseFillOpacity + 0.2) : baseFillOpacity;
+              const markerRadius = point.radius + (isFocused ? 6 : isSelected ? 2 : 0);
               const pie = buildAgePie(point.ageBreakdown);
 
               const ageDetails = AGE_BANDS.filter(
@@ -1178,15 +1250,32 @@ export const GeoDistributionMap = ({
                 <CircleMarker
                   key={point.id}
                   center={[point.latitude, point.longitude]}
-                  radius={point.radius}
+                  radius={markerRadius}
                   pathOptions={{
-                    color: strokeColor,
-                    weight: 2.5,
-                    fillColor,
-                    fillOpacity,
+                    color: markerStrokeColor,
+                    weight: isFocused ? 4.2 : isSelected ? 3.2 : 2.5,
+                    fillColor: adjustedFillColor,
+                    fillOpacity: adjustedFillOpacity,
                     lineCap: "round",
                     lineJoin: "round",
+                    className: onToggleArea ? "cursor-pointer" : undefined,
                   }}
+                  eventHandlers={
+                    onToggleArea
+                      ? {
+                          click: () =>
+                            onToggleArea({
+                              id: point.id,
+                              label: point.locationLabel,
+                              latitude: point.latitude,
+                              longitude: point.longitude,
+                              city: point.city,
+                              town: point.town,
+                              prefecture: point.prefecture,
+                            }),
+                        }
+                      : undefined
+                  }
                 >
                   <Tooltip direction="top" offset={[0, -point.radius]} opacity={1}>
                     <div className="space-y-1">

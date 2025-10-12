@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { RefreshCw, ArrowLeft } from "lucide-react";
+import { RefreshCw, ArrowLeft, MapPin, Target, Plus, X } from "lucide-react";
 import { type KarteRecord } from "@/lib/karteAnalytics";
 import { getCompressedItem } from "@/lib/storageCompression";
 import { KARTE_STORAGE_KEY, KARTE_TIMESTAMP_KEY } from "@/lib/storageKeys";
@@ -186,6 +186,18 @@ type ComparisonRow = {
   diff: number;
   diffShare: number;
 };
+
+type AreaSelectionMeta = {
+  id: string;
+  label: string;
+  latitude: number;
+  longitude: number;
+  city: string | null;
+  town: string | null;
+  prefecture: string | null;
+};
+
+const MAX_SELECTED_AREAS = 8;
 
 type AreaColor = { fill: string; accent: string };
 
@@ -420,6 +432,11 @@ const MapAnalysisPage = () => {
   type ComparisonRange = { start: string | null; end: string | null };
   const [rangeA, setRangeA] = useState<ComparisonRange>({ start: null, end: null });
   const [rangeB, setRangeB] = useState<ComparisonRange>({ start: null, end: null });
+  const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>([]);
+  const [hasCustomSelection, setHasCustomSelection] = useState(false);
+  const [focusAreaId, setFocusAreaId] = useState<string | null>(null);
+  const [pendingAreaId, setPendingAreaId] = useState<string>("");
+  const [areaMetadata, setAreaMetadata] = useState<Record<string, AreaSelectionMeta>>({});
 
   useEffect(() => {
     if (sortedMonths.length === 0) {
@@ -653,6 +670,26 @@ const MapAnalysisPage = () => {
     return validRows.slice(0, 8);
   }, [validComparison]);
 
+  const defaultAreaIds = useMemo(
+    () => topDiffRows.slice(0, MAX_SELECTED_AREAS).map((row) => row.id),
+    [topDiffRows],
+  );
+
+  useEffect(() => {
+    if (hasCustomSelection) {
+      return;
+    }
+    setSelectedAreaIds((prev) => {
+      if (
+        prev.length === defaultAreaIds.length &&
+        prev.every((id, index) => id === defaultAreaIds[index])
+      ) {
+        return prev;
+      }
+      return defaultAreaIds;
+    });
+  }, [defaultAreaIds, hasCustomSelection]);
+
   const topIncrease = useMemo(() => {
     if (!validComparison) {
       return [];
@@ -696,7 +733,7 @@ const MapAnalysisPage = () => {
   }, [validComparison]);
 
   const comparisonBarData = useMemo<
-    Array<{ label: string; periodA: number; periodB: number; diff: number; fill: string; accent: string }>
+    Array<{ id: string; label: string; periodA: number; periodB: number; diff: number; fill: string; accent: string }>
   >(() => {
     if (!validComparison || topDiffRows.length === 0) {
       return [];
@@ -705,6 +742,7 @@ const MapAnalysisPage = () => {
     return topDiffRows.map((row, index) => {
       const { fill, accent } = palette[index % palette.length];
       return {
+        id: row.id,
         label: row.label,
         periodA: Number((row.shareA * 100).toFixed(1)),
         periodB: Number((row.shareB * 100).toFixed(1)),
@@ -714,6 +752,21 @@ const MapAnalysisPage = () => {
       };
     });
   }, [topDiffRows, validComparison]);
+
+  useEffect(() => {
+    if (comparisonBarData.length === 0) {
+      setSelectedAreaIds([]);
+      return;
+    }
+    const available = new Set(comparisonBarData.map((row) => row.id));
+    setSelectedAreaIds((prev) => {
+      const filtered = prev.filter((id) => available.has(id));
+      if (filtered.length === prev.length) {
+        return prev;
+      }
+      return filtered;
+    });
+  }, [comparisonBarData]);
 
   const comparisonShareDomain = useMemo<[number, number]>(() => {
     if (comparisonBarData.length === 0) {
@@ -734,6 +787,33 @@ const MapAnalysisPage = () => {
     const padding = Math.ceil(maxAbs + 1);
     return [-padding, padding];
   }, [comparisonBarData]);
+
+  const selectedComparisonData = useMemo(() => {
+    if (comparisonBarData.length === 0) {
+      return [];
+    }
+    const dataMap = new Map(comparisonBarData.map((row) => [row.id, row]));
+    const sourceIds =
+      selectedAreaIds.length > 0 ? selectedAreaIds : defaultAreaIds;
+    const orderedUnique = sourceIds.filter(
+      (id, index, array) => array.indexOf(id) === index,
+    );
+    return orderedUnique
+      .map((id) => dataMap.get(id))
+      .filter((row): row is (typeof comparisonBarData)[number] => Boolean(row));
+  }, [comparisonBarData, selectedAreaIds, defaultAreaIds]);
+
+  const areaOptions = useMemo(
+    () =>
+      comparisonBarData.map((row) => ({
+        id: row.id,
+        label: row.label,
+      })),
+    [comparisonBarData],
+  );
+
+  const comparisonChartHeight = Math.max(280, selectedComparisonData.length * 68);
+  const diffChartHeight = Math.max(240, selectedComparisonData.length * 60);
 
   const invalidRange = useMemo(() => Boolean(comparisonData?.invalid), [comparisonData]);
 
@@ -757,6 +837,93 @@ const MapAnalysisPage = () => {
   const handleRangeBChange = (field: keyof ComparisonRange) => (event: ChangeEvent<HTMLSelectElement>) => {
     const value = event.target.value || null;
     setRangeB((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleRegisterAreas = (areas: AreaSelectionMeta[]) => {
+    setAreaMetadata(() => {
+      const registry: Record<string, AreaSelectionMeta> = {};
+      areas.forEach((area) => {
+        registry[area.id] = area;
+      });
+      return registry;
+    });
+  };
+
+  const handleAddArea = (areaId: string) => {
+    if (!areaId) {
+      return;
+    }
+    const available = comparisonBarData.find((row) => row.id === areaId);
+    if (!available) {
+      return;
+    }
+    setHasCustomSelection(true);
+    setSelectedAreaIds((prev) => {
+      if (prev.includes(areaId)) {
+        return prev;
+      }
+      const next = [...prev, areaId];
+      if (next.length > MAX_SELECTED_AREAS) {
+        next.shift();
+      }
+      return next;
+    });
+    setFocusAreaId(areaId);
+    setPendingAreaId("");
+  };
+
+  const handleRemoveArea = (areaId: string) => {
+    setHasCustomSelection(true);
+    setSelectedAreaIds((prev) => prev.filter((id) => id !== areaId));
+    setFocusAreaId((current) => (current === areaId ? null : current));
+  };
+
+  const handleResetAreas = () => {
+    setHasCustomSelection(false);
+    setSelectedAreaIds(defaultAreaIds);
+    setFocusAreaId(null);
+    setPendingAreaId("");
+  };
+
+  const handleToggleAreaFromMap = (area: AreaSelectionMeta) => {
+    setHasCustomSelection(true);
+    setSelectedAreaIds((prev) => {
+      if (prev.includes(area.id)) {
+        return prev.filter((id) => id !== area.id);
+      }
+      const next = [...prev, area.id];
+      if (next.length > MAX_SELECTED_AREAS) {
+        next.shift();
+      }
+      return next;
+    });
+    setFocusAreaId(area.id);
+  };
+
+  const handleFocusArea = (areaId: string, ensureSelected = false) => {
+    if (ensureSelected && !selectedAreaIds.includes(areaId)) {
+      handleAddArea(areaId);
+    } else {
+      setFocusAreaId(areaId);
+    }
+  };
+
+  const handlePendingAreaChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    setPendingAreaId(event.target.value);
+  };
+
+  const resolveAreaLocation = (areaId: string): string | null => {
+    const meta = areaMetadata[areaId];
+    if (!meta) {
+      return null;
+    }
+    const parts = [meta.prefecture, meta.city, meta.town].filter(
+      (part): part is string => Boolean(part && part.length > 0),
+    );
+    if (parts.length === 0) {
+      return meta.label;
+    }
+    return parts.join("");
   };
 
   const ComparisonTooltipContent = ({
@@ -784,39 +951,80 @@ const MapAnalysisPage = () => {
     );
   };
 
-  const DiffLabel = ({
-    x,
-    y,
-    width,
-    height,
-    value,
-  }: {
-    x?: number;
-    y?: number;
-    width?: number;
-    height?: number;
-    value?: number;
-  }) => {
-    if (typeof x !== "number" || typeof y !== "number" || typeof width !== "number" || typeof height !== "number" || typeof value !== "number") {
-      return null;
+  type LabelGeometry = {
+    x?: number | string;
+    y?: number | string;
+    width?: number | string;
+    height?: number | string;
+    value?: number | string;
+  };
+
+  const DiffLabel = ({ x, y, width, height, value }: LabelGeometry) => {
+    const toNumber = (input?: number | string) => {
+      if (typeof input === "number") {
+        return input;
+      }
+      if (typeof input === "string") {
+        const parsed = Number.parseFloat(input);
+        return Number.isFinite(parsed) ? parsed : undefined;
+      }
+      return undefined;
+    };
+    const xCoord = toNumber(x);
+    const yCoord = toNumber(y);
+    const barWidth = toNumber(width);
+    const barHeight = toNumber(height);
+    const numericValue = toNumber(value);
+    if (
+      typeof xCoord !== "number" ||
+      typeof yCoord !== "number" ||
+      typeof barWidth !== "number" ||
+      typeof barHeight !== "number" ||
+      typeof numericValue !== "number"
+    ) {
+      return <g />;
     }
-    const isPositive = value >= 0;
-    const endX = isPositive ? x + width : x;
-    const anchorX = endX + (isPositive ? 10 : -10);
-    const textAnchor = isPositive ? "start" : "end";
+    const isPositive = numericValue >= 0;
+    const anchorX = xCoord + barWidth / 2;
+    const anchorY = isPositive ? yCoord - 8 : yCoord + barHeight + 14;
     const textColor = isPositive ? "#047857" : "#b91c1c";
     return (
       <text
         x={anchorX}
-        y={y + height / 2}
+        y={anchorY}
         fill={textColor}
         fontSize={11}
         fontWeight={600}
-        dominantBaseline="middle"
-        textAnchor={textAnchor}
+        textAnchor="middle"
       >
-        {`${isPositive ? "+" : ""}${value.toFixed(1)}%`}
+        {`${isPositive ? "+" : ""}${numericValue.toFixed(1)}%`}
       </text>
+    );
+  };
+
+  const renderCategoryTick = ({
+    x,
+    y,
+    payload,
+  }: {
+    x?: number;
+    y?: number;
+    payload?: { value: string };
+  }) => {
+    if (typeof x !== "number" || typeof y !== "number" || !payload?.value) {
+      return <g />;
+    }
+    const segments = payload.value.match(/.{1,6}/g) ?? [payload.value];
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} fill="#475569" fontSize={10} textAnchor="middle">
+          {segments.map((segment, index) => (
+            <tspan key={`${payload.value}-${index}`} x={0} dy={index === 0 ? 0 : 12}>
+              {segment}
+            </tspan>
+          ))}
+        </text>
+      </g>
     );
   };
 
@@ -902,7 +1110,14 @@ const MapAnalysisPage = () => {
             </div>
 
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
-              <GeoDistributionMap reservations={mapRecords} periodLabel={periodLabel} />
+              <GeoDistributionMap
+                reservations={mapRecords}
+                periodLabel={periodLabel}
+                selectedAreaIds={selectedAreaIds}
+                focusAreaId={focusAreaId}
+                onToggleArea={handleToggleAreaFromMap}
+                onRegisterAreas={handleRegisterAreas}
+              />
             </section>
 
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
@@ -1016,140 +1231,182 @@ const MapAnalysisPage = () => {
                       </div>
                     </div>
 
-                    {comparisonBarData.length > 0 && (
-                      <div className="space-y-4">
-                        <div className="flex flex-col gap-4 lg:flex-row">
-                          <div className="flex-1 rounded-2xl border border-slate-100 bg-white p-5 shadow-inner">
-                            <h3 className="text-sm font-semibold text-slate-800">期間Aの来院割合</h3>
-                            <p className="text-[11px] text-slate-500">棒の長さが期間Aにおける町丁目別の来院割合（%）です。</p>
-                            <div className="mt-4 h-80">
-                              <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={comparisonBarData} layout="vertical" margin={{ top: 12, right: 32, bottom: 12, left: 160 }}>
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                                  <XAxis
-                                    type="number"
-                                    domain={comparisonShareDomain}
-                                    tickFormatter={(value: number) => `${value}%`}
-                                    stroke="#94a3b8"
-                                  />
-                                  <YAxis dataKey="label" type="category" width={160} tick={{ fontSize: 11, fill: "#475569" }} />
-                                  <RechartsTooltip content={<ComparisonTooltipContent />} />
-                                  <Bar dataKey="periodA" name="期間A 割合" radius={[0, 6, 6, 0]}>
-                                    {comparisonBarData.map((row) => (
-                                      <Cell
-                                        key={`periodA-${row.label}`}
-                                        fill={translucentFill(row.fill, 0.45)}
-                                        stroke={row.fill}
-                                        strokeWidth={1.2}
-                                      />
-                                    ))}
-                                    <LabelList
-                                      dataKey="periodA"
-                                      position="right"
-                                      formatter={(value) => `${typeof value === "number" ? value.toFixed(1) : value}%`}
-                                      fill="#1e293b"
-                                      fontSize={11}
-                                      offset={6}
-                                    />
-                                  </Bar>
-                                </BarChart>
-                              </ResponsiveContainer>
-                            </div>
-                          </div>
-                          <div className="flex-1 rounded-2xl border border-slate-100 bg-white p-5 shadow-inner">
-                            <h3 className="text-sm font-semibold text-slate-800">期間Bの来院割合</h3>
-                            <p className="text-[11px] text-slate-500">同じ町丁目の色は期間Aと揃えているため増減を視覚で追跡できます。</p>
-                            <div className="mt-4 h-80">
-                              <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={comparisonBarData} layout="vertical" margin={{ top: 12, right: 32, bottom: 12, left: 160 }}>
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                                  <XAxis
-                                    type="number"
-                                    domain={comparisonShareDomain}
-                                    tickFormatter={(value: number) => `${value}%`}
-                                    stroke="#94a3b8"
-                                  />
-                                  <YAxis dataKey="label" type="category" width={160} tick={{ fontSize: 11, fill: "#475569" }} />
-                                  <RechartsTooltip content={<ComparisonTooltipContent />} />
-                                  <Bar dataKey="periodB" name="期間B 割合" radius={[0, 6, 6, 0]}>
-                                    {comparisonBarData.map((row) => (
-                                      <Cell
-                                        key={`periodB-${row.label}`}
-                                        fill={solidFill(row.fill, 0.85)}
-                                        stroke={row.accent}
-                                        strokeWidth={1.2}
-                                      />
-                                    ))}
-                                    <LabelList
-                                      dataKey="periodB"
-                                      position="right"
-                                      formatter={(value) => `${typeof value === "number" ? value.toFixed(1) : value}%`}
-                                      fill="#1e293b"
-                                      fontSize={11}
-                                      offset={6}
-                                    />
-                                  </Bar>
-                                </BarChart>
-                              </ResponsiveContainer>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-inner">
-                          <h3 className="text-sm font-semibold text-slate-800">増減率（期間B - 期間A）</h3>
+                    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-inner">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-sm font-semibold text-slate-800">比較する地区を選択</h3>
                           <p className="text-[11px] text-slate-500">
-                            破線の左側は減少、右側は増加を示します。値は期間Bの割合から期間Aの割合を引いたものです。
+                            地図をクリックすると地区を追加・削除できます。最大{MAX_SELECTED_AREAS}件まで表示できます。
                           </p>
-                          <div className="mt-4 h-80">
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleResetAreas}
+                          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
+                        >
+                          <Target className="h-3.5 w-3.5" />
+                          増減が大きい順にリセット
+                        </button>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {selectedComparisonData.length > 0 ? (
+                          selectedComparisonData.map((row) => (
+                            <span
+                              key={`selection-${row.id}`}
+                              className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm"
+                              style={{ borderColor: row.fill, backgroundColor: translucentFill(row.fill, 0.25) }}
+                            >
+                              <span>{row.label}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveArea(row.id)}
+                                className="flex h-5 w-5 items-center justify-center rounded-full bg-white/80 text-slate-500 transition hover:bg-white hover:text-slate-700"
+                                aria-label={`${row.label}を削除`}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-slate-500">
+                            地図または下のセレクタから地区を追加してください。
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <select
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                          value={pendingAreaId}
+                          onChange={handlePendingAreaChange}
+                        >
+                          <option value="">地区を選択して追加</option>
+                          {areaOptions.map((option) => (
+                            <option key={`option-${option.id}`} value={option.id}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => handleAddArea(pendingAreaId)}
+                          disabled={!pendingAreaId || selectedAreaIds.includes(pendingAreaId)}
+                          className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-500 px-3 py-2 text-xs font-semibold text-white shadow-sm transition disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-200 disabled:text-slate-500 hover:bg-indigo-600"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          選択に追加
+                        </button>
+                        <p className="text-[11px] text-slate-500">
+                          選択数: {selectedComparisonData.length}/{MAX_SELECTED_AREAS}
+                        </p>
+                      </div>
+                    </div>
+
+                    {selectedComparisonData.length > 0 ? (
+                      <div className="space-y-4">
+                        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-inner">
+                          <h3 className="text-sm font-semibold text-slate-800">期間A/Bの来院割合</h3>
+                          <p className="text-[11px] text-slate-500">同じ町丁目は同色で表示され、淡色が期間A、濃色が期間Bです。</p>
+                          <div className="mt-4" style={{ height: `${comparisonChartHeight}px` }}>
                             <ResponsiveContainer width="100%" height="100%">
-                              <BarChart data={comparisonBarData} layout="vertical" margin={{ top: 12, right: 48, bottom: 12, left: 160 }}>
+                              <BarChart data={selectedComparisonData} margin={{ top: 12, right: 24, bottom: 32, left: 32 }} barCategoryGap="30%" barGap={6}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                                <XAxis
-                                  type="number"
-                                  domain={comparisonDiffDomain}
-                                  tickFormatter={(value: number) => `${value}%`}
-                                  stroke="#94a3b8"
-                                />
-                                <YAxis dataKey="label" type="category" width={160} tick={{ fontSize: 11, fill: "#475569" }} />
+                                <XAxis dataKey="label" interval={0} height={60} tick={renderCategoryTick} />
+                                <YAxis domain={comparisonShareDomain} tickFormatter={(value: number) => `${value}%`} stroke="#94a3b8" />
                                 <RechartsTooltip content={<ComparisonTooltipContent />} />
-                                <ReferenceLine x={0} stroke="#94a3b8" strokeDasharray="4 4" />
-                                <Bar dataKey="diff" name="期間B - 期間A" radius={[6, 6, 6, 6]}>
-                                  {comparisonBarData.map((row) => (
+                                <Bar dataKey="periodA" name="期間A" radius={[6, 6, 0, 0]}>
+                                  {selectedComparisonData.map((row) => (
                                     <Cell
-                                      key={`diff-${row.label}`}
-                                      fill={row.diff >= 0 ? solidFill("#16a34a", 0.75) : solidFill("#dc2626", 0.8)}
-                                      stroke={row.diff >= 0 ? "#15803d" : "#b91c1c"}
-                                      strokeWidth={1.1}
+                                      key={`periodA-${row.id}`}
+                                      fill={translucentFill(row.fill, 0.5)}
+                                      stroke={row.fill}
+                                      strokeWidth={1.2}
                                     />
                                   ))}
                                   <LabelList
-                                    content={({ x, y, width, height, value }) => (
-                                      <DiffLabel
-                                        x={typeof x === "number" ? x : undefined}
-                                        y={typeof y === "number" ? y : undefined}
-                                        width={typeof width === "number" ? width : undefined}
-                                        height={typeof height === "number" ? height : undefined}
-                                        value={typeof value === "number" ? value : undefined}
-                                      />
-                                    )}
+                                    dataKey="periodA"
+                                    position="top"
+                                    formatter={(value) => `${typeof value === "number" ? value.toFixed(1) : value}%`}
+                                    fill="#1e293b"
+                                    fontSize={11}
+                                  />
+                                </Bar>
+                                <Bar dataKey="periodB" name="期間B" radius={[6, 6, 0, 0]}>
+                                  {selectedComparisonData.map((row) => (
+                                    <Cell
+                                      key={`periodB-${row.id}`}
+                                      fill={solidFill(row.fill, 0.85)}
+                                      stroke={row.accent}
+                                      strokeWidth={1.2}
+                                    />
+                                  ))}
+                                  <LabelList
+                                    dataKey="periodB"
+                                    position="top"
+                                    formatter={(value) => `${typeof value === "number" ? value.toFixed(1) : value}%`}
+                                    fill="#1e293b"
+                                    fontSize={11}
                                   />
                                 </Bar>
                               </BarChart>
                             </ResponsiveContainer>
                           </div>
                         </div>
+                        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-inner">
+                          <h3 className="text-sm font-semibold text-slate-800">増減率（期間B - 期間A）</h3>
+                          <p className="text-[11px] text-slate-500">正の値は増加、負の値は減少を示します。破線が基準の0%です。</p>
+                          <div className="mt-4" style={{ height: `${diffChartHeight}px` }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={selectedComparisonData} margin={{ top: 12, right: 32, bottom: 32, left: 32 }} barCategoryGap="35%" barGap={6}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                <XAxis dataKey="label" interval={0} height={60} tick={renderCategoryTick} />
+                                <YAxis domain={comparisonDiffDomain} tickFormatter={(value: number) => `${value}%`} stroke="#94a3b8" />
+                                <RechartsTooltip content={<ComparisonTooltipContent />} />
+                                <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
+                                <Bar dataKey="diff" name="増減率" radius={[6, 6, 6, 6]}>
+                                  {selectedComparisonData.map((row) => (
+                                    <Cell
+                                      key={`diff-${row.id}`}
+                                      fill={row.diff >= 0 ? solidFill("#16a34a", 0.75) : solidFill("#dc2626", 0.8)}
+                                      stroke={row.diff >= 0 ? "#15803d" : "#b91c1c"}
+                                      strokeWidth={1.1}
+                                    />
+                                  ))}
+                                  <LabelList content={DiffLabel} />
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-slate-100 bg-white p-6 text-sm text-slate-600 shadow-inner">
+                        表示する地区が未選択です。地図またはセレクタから表示したい地区を追加してください。
                       </div>
                     )}
-                    <div className="flex flex-col gap-4 lg:flex-row">
 
-                      {/* 右側：増加/減少エリアカード */}
-                      <div className="flex flex-col gap-4 lg:w-[35%]">
-                        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 shadow-sm">
-                          <h3 className="text-sm font-semibold text-emerald-700">増加したエリア</h3>
-                          {topIncrease.length > 0 ? (
-                            <ul className="mt-3 space-y-2 text-xs text-emerald-700">
-                              {topIncrease.map((row) => (
-                                <li key={`inc-${row.id}`} className="flex flex-col gap-1 border-b border-emerald-100 pb-2 last:border-0 last:pb-0">
-                                  <span className="font-semibold">{row.label}</span>
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 shadow-sm">
+                        <h3 className="text-sm font-semibold text-emerald-700">増加したエリア</h3>
+                        {topIncrease.length > 0 ? (
+                          <ul className="mt-3 space-y-2 text-xs text-emerald-700">
+                            {topIncrease.map((row) => {
+                              const location = resolveAreaLocation(row.id);
+                              return (
+                                <li key={`inc-${row.id}`} className="flex flex-col gap-1 rounded-xl border border-emerald-100 bg-white/70 p-3 shadow-sm">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-semibold text-emerald-800">{row.label}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleFocusArea(row.id, true)}
+                                      className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+                                    >
+                                      <MapPin className="h-3 w-3" />
+                                      地図で表示
+                                    </button>
+                                  </div>
+                                  {location && (
+                                    <span className="text-[11px] text-emerald-600">地点: {location}</span>
+                                  )}
                                   <span className="text-[11px]">
                                     {formatPercent(row.shareA)} → {formatPercent(row.shareB)}
                                     <span className="ml-2 font-semibold text-emerald-600">
@@ -1157,19 +1414,35 @@ const MapAnalysisPage = () => {
                                     </span>
                                   </span>
                                 </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="mt-2 text-xs text-emerald-700">増加したエリアはありません。</p>
-                          )}
-                        </div>
-                        <div className="rounded-2xl border border-rose-100 bg-rose-50/60 p-4 shadow-sm">
-                          <h3 className="text-sm font-semibold text-rose-700">減少したエリア</h3>
-                          {topDecrease.length > 0 ? (
-                            <ul className="mt-3 space-y-2 text-xs text-rose-700">
-                              {topDecrease.map((row) => (
-                                <li key={`dec-${row.id}`} className="flex flex-col gap-1 border-b border-rose-100 pb-2 last:border-0 last:pb-0">
-                                  <span className="font-semibold">{row.label}</span>
+                              );
+                            })}
+                          </ul>
+                        ) : (
+                          <p className="mt-2 text-xs text-emerald-700">増加したエリアはありません。</p>
+                        )}
+                      </div>
+                      <div className="rounded-2xl border border-rose-100 bg-rose-50/60 p-4 shadow-sm">
+                        <h3 className="text-sm font-semibold text-rose-700">減少したエリア</h3>
+                        {topDecrease.length > 0 ? (
+                          <ul className="mt-3 space-y-2 text-xs text-rose-700">
+                            {topDecrease.map((row) => {
+                              const location = resolveAreaLocation(row.id);
+                              return (
+                                <li key={`dec-${row.id}`} className="flex flex-col gap-1 rounded-xl border border-rose-100 bg-white/70 p-3 shadow-sm">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-semibold text-rose-700">{row.label}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleFocusArea(row.id, true)}
+                                      className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-500 px-2 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-rose-600"
+                                    >
+                                      <MapPin className="h-3 w-3" />
+                                      地図で表示
+                                    </button>
+                                  </div>
+                                  {location && (
+                                    <span className="text-[11px] text-rose-600">地点: {location}</span>
+                                  )}
                                   <span className="text-[11px]">
                                     {formatPercent(row.shareA)} → {formatPercent(row.shareB)}
                                     <span className="ml-2 font-semibold text-rose-600">
@@ -1177,15 +1450,14 @@ const MapAnalysisPage = () => {
                                     </span>
                                   </span>
                                 </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="mt-2 text-xs text-rose-700">減少したエリアはありません。</p>
-                          )}
-                        </div>
+                              );
+                            })}
+                          </ul>
+                        ) : (
+                          <p className="mt-2 text-xs text-rose-700">減少したエリアはありません。</p>
+                        )}
                       </div>
                     </div>
-
                     <div className="rounded-2xl border border-slate-100 bg-white p-4">
                       <h3 className="text-sm font-semibold text-slate-800">年代構成の比較</h3>
                       <div className="mt-3 overflow-x-auto">

@@ -2,7 +2,7 @@
 ホーム(`/`)は保存済みカルテやアンケートデータを読み込み、月次KPIと更新日をカード表示します。[src/app/page.tsx:114-189]
 予約分析(`/reservations`)は予約CSVをアップロードしてLocalStorageへ保持し、時間帯・曜日・診療科ごとのグラフと差分を表示します。[src/app/reservations/page.tsx:720-1045]
 マップ分析(`/map-analysis`)はカルテ記録をロードして町丁目別・年代別のヒートマップと統計サマリを描画します。[src/app/map-analysis/page.tsx:96-360]
-期間比較ビューは町丁目ごとの期間A・期間Bの割合を横向き棒グラフで並置し、同色で対応させたうえで差分棒グラフと破線基準線で増減率を明示します。[src/app/map-analysis/page.tsx:960-1140]
+期間比較ビューは町丁目ごとの期間A・期間Bの割合を縦棒グラフで並置し、地図クリックで地区を追加しつつ差分バーと破線基準線で増減率を明示します。[src/app/map-analysis/page.tsx:960-1140]
 Cloudflare Worker は `/api/upload` と `/api/data/:id` を提供し、R2バケットでデータ共有を行います。[cloudflare-worker/src/index.ts:48-134]
 地図表示は大阪府町丁目データと全国市区町村座標を組み合わせ、町丁目未特定の場合は市区町村代表点を描画します。[public/data/osaka_towns.json:1][public/data/municipalities.json:1][src/components/reservations/GeoDistributionMap.tsx:538-940]
 
