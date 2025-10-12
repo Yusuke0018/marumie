@@ -1,0 +1,11 @@
+timestamp: 2025-10-13 08:37:32 JST
+branch: main
+commit: 2b13b4a418064e2bcbc4194f41492f1edc76c1ff
+summary: adjust map circle scaling to emphasize zoomed-in counts
+changes:
+  - src/components/reservations/GeoDistributionMap.tsx
+tests:
+  - npm run lint (pass)
+  - npm run typecheck (pass)
+  - npm run build (pass)
+push: origin/main (pending)
