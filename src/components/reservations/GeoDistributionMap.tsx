@@ -523,15 +523,12 @@ export const GeoDistributionMap = ({
       divIcon({
         className: "clinic-marker",
         html: `
-          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;transform:translate(-50%,-100%);">
-            <div style="width:18px;height:18px;border-radius:9999px;background:#ef4444;color:#fff;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(239,68,68,0.45);border:2px solid #ffffff;">+</div>
-            <div style="padding:6px 14px;border-radius:12px;background:#ffffff;color:#d92c2c;font-weight:600;font-size:11px;box-shadow:0 12px 28px rgba(15,23,42,0.18);border:1px solid rgba(239,68,68,0.25);white-space:nowrap;letter-spacing:0.01em;">
-              リベ大総合クリニック大阪院
-            </div>
+          <div style="width:24px;height:24px;border-radius:9999px;background:#ef4444;color:#fff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(239,68,68,0.45);border:2px solid #ffffff;">
+            +
           </div>
         `,
-        iconSize: [0, 0],
-        iconAnchor: [0, 0],
+        iconSize: [24, 24],
+        iconAnchor: [12, 24],
       }),
     [],
   );
