@@ -83,7 +83,7 @@ const toHalfWidthDigits = (value: string): string =>
     String.fromCharCode(digit.charCodeAt(0) - 0xfee0),
   );
 
-const parseOptionalInteger = (value: string | undefined): number | null => {
+const parseOptionalInteger = (value: string | null | undefined): number | null => {
   if (!value) {
     return null;
   }
@@ -99,7 +99,7 @@ const parseOptionalInteger = (value: string | undefined): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-const parseBirthDate = (value: string | undefined): string | null => {
+const parseBirthDate = (value: string | null | undefined): string | null => {
   if (!value) {
     return null;
   }
