@@ -1,0 +1,11 @@
+timestamp: 2025-10-13 08:44:19 JST
+branch: main
+commit: 8951cb2ec21bcb7934cd20cc1821cdfb47148899
+summary: fine-tune circle zoom scaling for map analysis
+changes:
+  - src/components/reservations/GeoDistributionMap.tsx
+tests:
+  - npm run lint (pass)
+  - npm run typecheck (pass)
+  - npm run build (pass)
+push: origin/main (pending)
