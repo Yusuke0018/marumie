@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, CircleMarker, Tooltip, Marker, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, CircleMarker, Tooltip, Marker } from "react-leaflet";
 import { divIcon, type LatLngExpression, type Map as LeafletMap } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -579,14 +579,6 @@ const buildAgePie = (
 };
 
 
-const MapReadyBridge = ({ onReady }: { onReady: (map: LeafletMap) => void }) => {
-  const map = useMap();
-  useEffect(() => {
-    onReady(map);
-  }, [map, onReady]);
-  return null;
-};
-
 export const GeoDistributionMap = ({
   reservations,
   periodLabel,
@@ -647,12 +639,6 @@ export const GeoDistributionMap = ({
 
   const mapRef = useRef<LeafletMap | null>(null);
   const departmentInitializedRef = useRef(false);
-
-  useEffect(() => {
-    return () => {
-      mapRef.current = null;
-    };
-  }, []);
 
   const latestMonth = useMemo(() => {
     const months = reservations
@@ -1197,10 +1183,10 @@ export const GeoDistributionMap = ({
             center={DEFAULT_CENTER}
             zoom={12}
             scrollWheelZoom
+            ref={mapRef}
             style={{ height: "100%", width: "100%" }}
             attributionControl={false}
           >
-            <MapReadyBridge onReady={(mapInstance) => { mapRef.current = mapInstance; }} />
             <TileLayer
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
