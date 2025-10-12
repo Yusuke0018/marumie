@@ -265,7 +265,7 @@ const guessTownFromAddress = (
   };
 };
 
-const deriveSegments = (reservation: Reservation): DerivedSegments | null => {
+const deriveSegments = (reservation: MapVisualizationRecord): DerivedSegments | null => {
   const address = reservation.patientAddress ?? null;
 
   let city = reservation.patientCity?.replace(/\s+/g, "") ?? null;
