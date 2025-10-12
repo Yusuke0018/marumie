@@ -1113,18 +1113,21 @@ const AREA_COLORS = [
                                   }}
                                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                   link={(linkProps: any) => {
-                                    const {
-                                      sourceX = 0,
-                                      sourceY = 0,
-                                      sourceControlX = 0,
-                                      targetX = 0,
-                                      targetY = 0,
-                                      targetControlX = 0,
-                                      linkWidth = 0,
-                                      payload,
-                                    } = linkProps;
+                                    // Rechartsが提供するlink情報を取得
+                                    const { source, target, dy, index = 0 } = linkProps;
 
-                                    const areaColor = payload?.fill ?? "#94a3b8";
+                                    // sourceとtargetノードから座標を計算
+                                    const x0 = source?.x1 ?? 0;
+                                    const x1 = target?.x0 ?? 0;
+                                    const y0 = source?.y0 ?? 0;
+                                    const y1 = target?.y0 ?? 0;
+                                    const linkHeight = dy ?? 10;
+
+                                    // ベジェ曲線の制御点（中間地点）
+                                    const controlX = (x0 + x1) / 2;
+
+                                    // sourceのindexから対応する色を取得
+                                    const areaColor = AREA_COLORS[index % AREA_COLORS.length];
 
                                     // 16進数カラーをrgbaに変換
                                     const hexToRgba = (hex: string, alpha: number) => {
@@ -1134,22 +1137,21 @@ const AREA_COLORS = [
                                       return `rgba(${r},${g},${b},${alpha})`;
                                     };
 
-                                    // サンキー図のリンク（帯）のパスを手動で生成
+                                    // サンキー図のリンク（帯）のパスを生成
                                     const path = `
-                                      M${sourceX},${sourceY}
-                                      C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}
-                                      L${targetX},${targetY + linkWidth}
-                                      C${targetControlX},${targetY + linkWidth} ${sourceControlX},${sourceY + linkWidth} ${sourceX},${sourceY + linkWidth}
+                                      M${x0},${y0}
+                                      C${controlX},${y0} ${controlX},${y1} ${x1},${y1}
+                                      L${x1},${y1 + linkHeight}
+                                      C${controlX},${y1 + linkHeight} ${controlX},${y0 + linkHeight} ${x0},${y0 + linkHeight}
                                       Z
                                     `;
 
                                     return (
                                       <path
                                         d={path}
-                                        fill={hexToRgba(areaColor, 0.6)}
-                                        stroke={hexToRgba(areaColor, 0.8)}
-                                        strokeWidth={0.5}
-                                        opacity={0.9}
+                                        fill={hexToRgba(areaColor, 0.7)}
+                                        stroke="none"
+                                        opacity={0.95}
                                       />
                                     );
                                   }}
