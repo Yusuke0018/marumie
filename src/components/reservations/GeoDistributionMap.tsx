@@ -506,9 +506,15 @@ const computeRadius = (count: number, zoom: number): number => {
 
   const scaled = Math.sqrt(count);
   const baseRadius = 5 + scaled * 10;
-  const adjustedRadius = baseRadius * zoomFactor;
+  let adjustedRadius = baseRadius * zoomFactor;
 
-  return Math.min(80, Math.max(3.5, adjustedRadius));
+  if (count === 1 && zoomDelta < 0) {
+    adjustedRadius *= 0.5;
+  }
+
+  const minRadius = count <= 1 ? 2 : 3.5;
+
+  return Math.min(80, Math.max(minRadius, adjustedRadius));
 };
 
 const formatMonthLabel = (value: string): string => {

@@ -56,9 +56,14 @@ export default function Navigation() {
 
   const isFilterablePage = useMemo(
     () =>
-      ["/patients", "/reservations", "/survey", "/listing", "/correlation"].some(
-        (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-      ),
+      [
+        "/patients",
+        "/reservations",
+        "/survey",
+        "/listing",
+        "/correlation",
+        "/map-analysis",
+      ].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)),
     [pathname],
   );
   const showPeriodBadge = isFilterablePage && analysisPeriodLabel;

@@ -7,6 +7,9 @@ import { RefreshCw, ArrowLeft, MapPin, Target, Plus, X } from "lucide-react";
 import { type KarteRecord } from "@/lib/karteAnalytics";
 import { getCompressedItem } from "@/lib/storageCompression";
 import { KARTE_STORAGE_KEY, KARTE_TIMESTAMP_KEY } from "@/lib/storageKeys";
+import { AnalysisFilterPortal } from "@/components/AnalysisFilterPortal";
+import { useAnalysisPeriodRange } from "@/hooks/useAnalysisPeriodRange";
+import { setAnalysisPeriodLabel } from "@/lib/analysisPeriod";
 import {
   ResponsiveContainer,
   BarChart,
@@ -393,6 +396,19 @@ const MapAnalysisPage = () => {
     return Array.from(months);
   }, [karteRecords]);
 
+  const sortedMonths = useMemo(
+    () => [...availableMonths].sort((a, b) => a.localeCompare(b)),
+    [availableMonths],
+  );
+
+  const {
+    startMonth: mapStartMonth,
+    endMonth: mapEndMonth,
+    setStartMonth: setMapStartMonth,
+    setEndMonth: setMapEndMonth,
+    resetPeriod: resetMapPeriod,
+  } = useAnalysisPeriodRange(sortedMonths, { autoSelectLatest: false });
+
   const mapRecords = useMemo<MapRecord[]>(() => {
     if (karteRecords.length === 0) {
       return [];
@@ -419,15 +435,43 @@ const MapAnalysisPage = () => {
       .filter((record) => record.reservationMonth.length > 0);
   }, [karteRecords]);
 
-  const periodLabel = useMemo(
-    () => buildPeriodLabel(availableMonths),
-    [availableMonths],
+  const filteredMapRecords = useMemo(() => {
+    const hasStart = mapStartMonth && mapStartMonth.length > 0;
+    const hasEnd = mapEndMonth && mapEndMonth.length > 0;
+    if (!hasStart && !hasEnd) {
+      return mapRecords;
+    }
+    return mapRecords.filter((record) => {
+      if (hasStart && record.reservationMonth < mapStartMonth) {
+        return false;
+      }
+      if (hasEnd && record.reservationMonth > mapEndMonth) {
+        return false;
+      }
+      return true;
+    });
+  }, [mapRecords, mapStartMonth, mapEndMonth]);
+
+  const filteredMonths = useMemo(() => {
+    const months = new Set<string>();
+    filteredMapRecords.forEach((record) => {
+      months.add(record.reservationMonth);
+    });
+    return Array.from(months).sort((a, b) => a.localeCompare(b));
+  }, [filteredMapRecords]);
+
+  const mapPeriodLabel = useMemo(
+    () => buildPeriodLabel(filteredMonths),
+    [filteredMonths],
   );
 
-  const sortedMonths = useMemo(
-    () => [...availableMonths].sort((a, b) => a.localeCompare(b)),
-    [availableMonths],
-  );
+  useEffect(() => {
+    if (filteredMonths.length === 0) {
+      setAnalysisPeriodLabel(null);
+    } else {
+      setAnalysisPeriodLabel(mapPeriodLabel);
+    }
+  }, [filteredMonths.length, mapPeriodLabel]);
 
   type ComparisonRange = { start: string | null; end: string | null };
   const [rangeA, setRangeA] = useState<ComparisonRange>({ start: null, end: null });
@@ -1028,7 +1072,7 @@ const MapAnalysisPage = () => {
     );
   };
 
-  const isEmpty = mapRecords.length === 0;
+  const isEmpty = filteredMapRecords.length === 0;
 
   return (
     <main className="min-h-screen bg-background">
@@ -1065,6 +1109,17 @@ const MapAnalysisPage = () => {
           </div>
         </section>
 
+        <AnalysisFilterPortal
+          months={sortedMonths}
+          startMonth={mapStartMonth}
+          endMonth={mapEndMonth}
+          onChangeStart={setMapStartMonth}
+          onChangeEnd={setMapEndMonth}
+          onReset={resetMapPeriod}
+          label={mapPeriodLabel}
+          renderMonthLabel={formatMonthLabel}
+        />
+
         {isEmpty ? (
           <section className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-700 shadow-sm">
             <div className="flex items-center gap-3 text-indigo-600">
@@ -1085,7 +1140,7 @@ const MapAnalysisPage = () => {
                     期間サマリ
                   </p>
                   <p className="mt-1 text-lg font-bold text-indigo-800">
-                    {periodLabel}
+                    {mapPeriodLabel}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3">
@@ -1093,7 +1148,7 @@ const MapAnalysisPage = () => {
                     カルテ件数
                   </p>
                   <p className="mt-1 text-lg font-bold text-emerald-700">
-                    {mapRecords.length.toLocaleString("ja-JP")}件
+                    {filteredMapRecords.length.toLocaleString("ja-JP")}件
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
@@ -1111,8 +1166,8 @@ const MapAnalysisPage = () => {
 
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
               <GeoDistributionMap
-                reservations={mapRecords}
-                periodLabel={periodLabel}
+                reservations={filteredMapRecords}
+                periodLabel={mapPeriodLabel}
                 selectedAreaIds={selectedAreaIds}
                 focusAreaId={focusAreaId}
                 onToggleArea={handleToggleAreaFromMap}
