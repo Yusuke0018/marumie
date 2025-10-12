@@ -33,6 +33,7 @@ import { setCompressedItem } from "@/lib/storageCompression";
 import { AnalysisFilterPortal } from "@/components/AnalysisFilterPortal";
 import { useAnalysisPeriodRange } from "@/hooks/useAnalysisPeriodRange";
 import { setAnalysisPeriodLabel } from "@/lib/analysisPeriod";
+import dynamic from "next/dynamic";
 
 // グラフコンポーネントをReact.lazyで遅延ロード（初期バンドルサイズを削減）
 const WeekdayChartSection = lazy(() =>
@@ -55,10 +56,19 @@ const MonthlyTrendChart = lazy(() =>
     default: m.MonthlyTrendChart,
   })),
 );
-const GeoDistributionMap = lazy(() =>
-  import("@/components/reservations/GeoDistributionMap").then((m) => ({
-    default: m.GeoDistributionMap,
-  })),
+const GeoDistributionMap = dynamic(
+  () =>
+    import("@/components/reservations/GeoDistributionMap").then((m) => ({
+      default: m.GeoDistributionMap,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-[520px] items-center justify-center rounded-3xl border border-slate-200 bg-white text-slate-500">
+        地図コンポーネントを読み込み中です...
+      </div>
+    ),
+  },
 );
 
 type HourlyBucket = {
@@ -1495,18 +1505,10 @@ export default function HomePage() {
           title="来院エリアマップ"
           description="診療科・年代・期間を指定して、町丁目単位の来院元を可視化します。"
         >
-          <Suspense
-            fallback={
-              <div className="flex h-[520px] items-center justify-center text-slate-500">
-                地図セクションを読み込み中です...
-              </div>
-            }
-          >
-            <GeoDistributionMap
-              reservations={filteredReservations}
-              periodLabel={reservationRangeLabel}
-            />
-          </Suspense>
+          <GeoDistributionMap
+            reservations={filteredReservations}
+            periodLabel={reservationRangeLabel}
+          />
         </SectionCard>
 
         {diffMonthly && diffMonthly.length > 0 && (
