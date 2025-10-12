@@ -17,8 +17,6 @@ import {
   Tooltip as RechartsTooltip,
   Legend,
   Sankey,
-  type SankeyNode,
-  type SankeyLink,
 } from "recharts";
 
 const KANJI_DIGITS = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"] as const;
@@ -175,6 +173,17 @@ type MapRecord = {
   patientCity?: string | null;
   patientTown?: string | null;
   patientBaseTown?: string | null;
+};
+
+type ComparisonRow = {
+  id: string;
+  label: string;
+  countA: number;
+  countB: number;
+  shareA: number;
+  shareB: number;
+  diff: number;
+  diffShare: number;
 };
 
 const computeAgeFromBirth = (
@@ -498,7 +507,7 @@ const MapAnalysisPage = () => {
       ...aggregatedB.areas.keys(),
     ]);
 
-    const rows = Array.from(allKeys).map((key) => {
+    const rows: ComparisonRow[] = Array.from(allKeys).map((key) => {
       const areaA = aggregatedA.areas.get(key);
       const areaB = aggregatedB.areas.get(key);
       const countA = areaA?.total ?? 0;
@@ -588,7 +597,7 @@ const MapAnalysisPage = () => {
     };
   }, [rangeA, rangeB]);
 
-  const topDiffRows = useMemo(() => {
+  const topDiffRows = useMemo<ComparisonRow[]>(() => {
     if (!validComparison) {
       return [];
     }
@@ -620,12 +629,15 @@ const MapAnalysisPage = () => {
     }));
   }, [topDiffRows, validComparison]);
 
-  const sankeyData = useMemo(() => {
+  type SankeyNodeDatum = { name: string; label: string; side: "A" | "B" };
+  type SankeyLinkDatum = { source: number; target: number; value: number; payload: ComparisonRow };
+
+  const sankeyData = useMemo<{ nodes: SankeyNodeDatum[]; links: SankeyLinkDatum[] } | null>(() => {
     if (!validComparison || topDiffRows.length === 0) {
       return null;
     }
-    const nodes: SankeyNode<number, { label: string; side: "A" | "B" }>[] = [];
-    const links: SankeyLink<number, number>[] = [];
+    const nodes: SankeyNodeDatum[] = [];
+    const links: SankeyLinkDatum[] = [];
     topDiffRows.forEach((row) => {
       nodes.push({ name: `${row.label} (期間A)`, label: row.label, side: "A" });
     });
