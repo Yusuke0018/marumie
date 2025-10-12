@@ -497,18 +497,18 @@ const computeRadius = (count: number, zoom: number): number => {
   const baseZoom = 12;
   const zoomDelta = zoom - baseZoom;
 
-  // 拡大時はズームレベル差1あたりおよそ1.55倍まで拡大（ズーム14で約2倍）
-  // 縮小時はズームレベル差1あたりおよそ0.45倍まで縮小（ズーム10で約半分以下）
+  // 拡大時はズームレベル差1あたり約1.8倍まで拡大（ズーム14付近で約2.4倍）
+  // 縮小時はズームレベル差1あたり約0.3倍まで縮小（ズーム10で約3分の1以下）
   const zoomFactor =
     zoomDelta >= 0
-      ? 1 + zoomDelta * 0.55
-      : 1 / (1 + Math.abs(zoomDelta) * 1.2);
+      ? 1 + zoomDelta * 0.8
+      : 1 / (1 + Math.abs(zoomDelta) * 2.4);
 
   const scaled = Math.sqrt(count);
   const baseRadius = 5 + scaled * 10;
   const adjustedRadius = baseRadius * zoomFactor;
 
-  return Math.min(70, Math.max(6, adjustedRadius));
+  return Math.min(80, Math.max(3.5, adjustedRadius));
 };
 
 const formatMonthLabel = (value: string): string => {
