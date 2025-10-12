@@ -1,0 +1,13 @@
+timestamp: 2025-10-13 08:56:00 JST
+branch: main
+commit: 39b1573705f2d087599ebbc01ec98a73c38a1deb
+summary: add map month range filter and adjust single-point circle scaling
+changes:
+  - src/app/map-analysis/page.tsx
+  - src/components/Navigation.tsx
+  - src/components/reservations/GeoDistributionMap.tsx
+tests:
+  - npm run lint (pass)
+  - npm run typecheck (pass)
+  - npm run build (pass)
+push: origin/main (pending)
