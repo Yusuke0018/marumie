@@ -17,6 +17,7 @@ type MapVisualizationRecord = {
   patientPrefecture?: string | null;
   patientCity?: string | null;
   patientTown?: string | null;
+  patientBaseTown?: string | null;
   patientAddress: string | null;
 };
 
@@ -285,7 +286,13 @@ const deriveSegments = (reservation: MapVisualizationRecord): DerivedSegments | 
 
   const explicitTown = standardizeTownLabel(reservation.patientTown ?? null);
   let town = explicitTown;
-  let baseTown = explicitTown ? removeChomeSuffix(explicitTown) : null;
+  let baseTown =
+    explicitTown
+      ? removeChomeSuffix(explicitTown)
+      : standardizeTownLabel(reservation.patientBaseTown ?? null);
+  if (town === null && reservation.patientBaseTown) {
+    town = standardizeTownLabel(reservation.patientBaseTown);
+  }
 
   if (!town) {
     const guessed = guessTownFromAddress(address, prefecture, city);

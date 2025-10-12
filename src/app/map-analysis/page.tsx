@@ -139,6 +139,7 @@ type MapRecord = {
   patientPrefecture?: string | null;
   patientCity?: string | null;
   patientTown?: string | null;
+  patientBaseTown?: string | null;
 };
 
 const computeAgeFromBirth = (
@@ -186,27 +187,43 @@ const parseAddressComponents = (
   if (normalized.length === 0) {
     return { prefecture: null, city: null, town: null, baseTown: null };
   }
-  normalized = normalized.replace(/\s+/g, "");
+  normalized = toHalfWidthDigits(normalized.replace(/\s+/g, ""));
+  normalized = normalized.replace(DASH_REGEX, "-");
 
-  let prefecture = normalized.includes("大阪府") ? "大阪府" : null;
-  const cityMatch = normalized.match(/大阪市[\p{Script=Han}]+区/u);
-  const city =
-    cityMatch?.[0] ?? (normalized.startsWith("大阪市") ? "大阪市" : null);
+  let prefecture: string | null = null;
+  if (normalized.startsWith("大阪府")) {
+    prefecture = "大阪府";
+    normalized = normalized.slice("大阪府".length);
+  } else if (normalized.includes("大阪府")) {
+    prefecture = "大阪府";
+    normalized = normalized.replace("大阪府", "");
+  }
+
+  let city: string | null = null;
+  if (normalized.startsWith("大阪市")) {
+    const wardMatch = normalized.match(/^大阪市([\p{Script=Han}]{1,3}区)/u);
+    if (wardMatch) {
+      city = `大阪市${wardMatch[1]}`;
+      normalized = normalized.slice(city.length);
+    } else {
+      city = "大阪市";
+      normalized = normalized.slice("大阪市".length);
+    }
+  } else {
+    const wardMatch = normalized.match(/^([\p{Script=Han}]{1,3}区)/u);
+    if (wardMatch) {
+      city = `大阪市${wardMatch[1]}`;
+      normalized = normalized.slice(wardMatch[1].length);
+    }
+  }
 
   if (!prefecture && city && city.startsWith("大阪市")) {
     prefecture = "大阪府";
   }
 
-  let working = normalized;
-  if (prefecture) {
-    working = working.replace(prefecture, "");
-  }
-  if (city) {
-    working = working.replace(city, "");
-  }
-  working = working.replace(/^大阪市/, "");
+  normalized = normalized.replace(/^大阪市/, "");
 
-  const town = standardizeTownLabel(working);
+  const town = standardizeTownLabel(normalized);
   const baseTown = removeChomeSuffix(town);
 
   return {
@@ -286,7 +303,7 @@ const MapAnalysisPage = () => {
       .map((record) => {
         const month = record.monthKey ?? record.dateIso.slice(0, 7);
         const address = record.patientAddress ?? null;
-        const { prefecture, city, town } = parseAddressComponents(address);
+        const { prefecture, city, town, baseTown } = parseAddressComponents(address);
         return {
           department:
             record.department && record.department.trim().length > 0
@@ -298,6 +315,7 @@ const MapAnalysisPage = () => {
           patientPrefecture: prefecture,
           patientCity: city,
           patientTown: town,
+          patientBaseTown: baseTown,
         } satisfies MapRecord;
       })
       .filter((record) => record.reservationMonth.length > 0);
