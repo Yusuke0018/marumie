@@ -491,11 +491,11 @@ const createAgeBreakdown = (): Record<AgeBandId, number> =>
 
 const computeRadius = (count: number): number => {
   if (count <= 0) {
-    return 8;
+    return 5;
   }
   const scaled = Math.sqrt(count);
-  return Math.min(42, 10 + scaled * 4.5);
-};
+  return Math.min(70, 5 + scaled * 10);
+};;
 
 const formatMonthLabel = (value: string): string => {
   const [yearRaw, monthRaw] = value.split("-");
