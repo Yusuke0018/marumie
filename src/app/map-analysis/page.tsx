@@ -601,21 +601,71 @@ const MapAnalysisPage = () => {
     if (!validComparison) {
       return [];
     }
-    return validComparison.rows.slice(0, 8);
+    // 住所未設定や異常な住所を除外
+    const validRows = validComparison.rows.filter((row) => {
+      const label = row.label.trim();
+      // 「住所未設定」を除外
+      if (label === "住所未設定" || label === "" || label === "未設定") {
+        return false;
+      }
+      // 明らかにおかしい住所パターンを除外
+      // - 単一文字
+      // - 数字のみ
+      // - 記号のみ
+      if (label.length < 2) {
+        return false;
+      }
+      if (/^[\d\-]+$/.test(label)) {
+        return false;
+      }
+      if (/^[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+$/u.test(label)) {
+        return false;
+      }
+      return true;
+    });
+    return validRows.slice(0, 8);
   }, [validComparison]);
 
   const topIncrease = useMemo(() => {
     if (!validComparison) {
       return [];
     }
-    return validComparison.rows.filter((row) => row.diffShare > 0).slice(0, 5);
+    // 住所未設定や異常な住所を除外
+    const validRows = validComparison.rows.filter((row) => {
+      const label = row.label.trim();
+      if (label === "住所未設定" || label === "" || label === "未設定") {
+        return false;
+      }
+      if (label.length < 2 || /^[\d\-]+$/.test(label)) {
+        return false;
+      }
+      if (/^[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+$/u.test(label)) {
+        return false;
+      }
+      return row.diffShare > 0;
+    });
+    return validRows.slice(0, 5);
   }, [validComparison]);
 
   const topDecrease = useMemo(() => {
     if (!validComparison) {
       return [];
     }
-    return validComparison.rows.filter((row) => row.diffShare < 0).slice(0, 5);
+    // 住所未設定や異常な住所を除外
+    const validRows = validComparison.rows.filter((row) => {
+      const label = row.label.trim();
+      if (label === "住所未設定" || label === "" || label === "未設定") {
+        return false;
+      }
+      if (label.length < 2 || /^[\d\-]+$/.test(label)) {
+        return false;
+      }
+      if (/^[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+$/u.test(label)) {
+        return false;
+      }
+      return row.diffShare < 0;
+    });
+    return validRows.slice(0, 5);
   }, [validComparison]);
 
   const chartData = useMemo(() => {
@@ -977,159 +1027,169 @@ const AREA_COLORS = [
                         </div>
                       </div>
                     )}
-                    {sankeyData && (
-                      <div className="rounded-2xl border border-slate-100 bg-white p-6">
-                        <h3 className="mb-1 text-sm font-semibold text-slate-800">期間別エリアシェアのフロー</h3>
-                        <p className="mb-4 text-[11px] text-slate-500">
-                          左列が期間A、右列が期間B。同じ色の帯が同じエリアを表します。帯の太さが来院割合（%）を表します。
-                        </p>
-                        <div className="relative">
-                          <div className="flex justify-between px-8 pb-3 text-xs font-bold text-slate-700">
-                            <span>期間A</span>
-                            <span>期間B</span>
-                          </div>
-                          <div className="h-[600px] overflow-visible">
-                            <ResponsiveContainer width="100%" height="100%">
-                              {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                              {/* @ts-ignore: Recharts types do not expose custom node/link renderer props */}
-                              <Sankey
-                                data={sankeyData}
-                                nodePadding={18}
-                                nodeWidth={24}
-                                linkCurvature={0.5}
-                                iterations={64}
-                                margin={{ top: 10, right: 200, bottom: 10, left: 200 }}
-                                node={(nodeProps) => {
-                                  const anyProps = nodeProps as unknown as {
-                                    x?: number;
-                                    y?: number;
-                                    width?: number;
-                                    height?: number;
-                                    index?: number;
-                                    payload?: { name?: string; fill?: string; shareA?: number; shareB?: number };
-                                  };
-                                  const x = anyProps.x ?? 0;
-                                  const y = anyProps.y ?? 0;
-                                  const width = anyProps.width ?? 24;
-                                  const height = anyProps.height ?? 10;
-                                  const name = anyProps.payload?.name ?? "";
-                                  const fill = anyProps.payload?.fill ?? "#94a3b8";
-                                  const shareA = anyProps.payload?.shareA ?? 0;
-                                  const shareB = anyProps.payload?.shareB ?? 0;
-                                  const index = anyProps.index ?? 0;
-                                  const isLeft = index < (sankeyData.nodes.length / 2);
-                                  const share = isLeft ? shareA : shareB;
-                                  const shareText = `${(share * 100).toFixed(1)}%`;
+                    <div className="flex flex-col gap-4 lg:flex-row">
+                      {/* 左側：サンキー図 */}
+                      {sankeyData && (
+                        <div className="flex-1 rounded-2xl border border-slate-100 bg-white p-6 lg:w-[65%]">
+                          <h3 className="mb-1 text-sm font-semibold text-slate-800">期間別エリアシェアのフロー</h3>
+                          <p className="mb-4 text-[11px] text-slate-500">
+                            左列が期間A、右列が期間B。同じ色の帯が同じエリアを表します。帯の太さが来院割合（%）を表します。
+                          </p>
+                          <div className="relative">
+                            <div className="flex justify-between px-6 pb-3 text-xs font-bold text-slate-700">
+                              <span>期間A</span>
+                              <span>期間B</span>
+                            </div>
+                            <div className="h-[600px] overflow-visible">
+                              <ResponsiveContainer width="100%" height="100%">
+                                {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                                {/* @ts-ignore: Recharts types do not expose custom node/link renderer props */}
+                                <Sankey
+                                  data={sankeyData}
+                                  nodePadding={18}
+                                  nodeWidth={24}
+                                  linkCurvature={0.5}
+                                  iterations={64}
+                                  margin={{ top: 10, right: 150, bottom: 10, left: 150 }}
+                                  node={(nodeProps) => {
+                                    const anyProps = nodeProps as unknown as {
+                                      x?: number;
+                                      y?: number;
+                                      width?: number;
+                                      height?: number;
+                                      index?: number;
+                                      payload?: { name?: string; fill?: string; shareA?: number; shareB?: number };
+                                    };
+                                    const x = anyProps.x ?? 0;
+                                    const y = anyProps.y ?? 0;
+                                    const width = anyProps.width ?? 24;
+                                    const height = anyProps.height ?? 10;
+                                    const name = anyProps.payload?.name ?? "";
+                                    const fill = anyProps.payload?.fill ?? "#94a3b8";
+                                    const shareA = anyProps.payload?.shareA ?? 0;
+                                    const shareB = anyProps.payload?.shareB ?? 0;
+                                    const index = anyProps.index ?? 0;
+                                    const isLeft = index < (sankeyData.nodes.length / 2);
+                                    const share = isLeft ? shareA : shareB;
+                                    const shareText = `${(share * 100).toFixed(1)}%`;
 
-                                  return (
-                                    <g>
-                                      <rect
-                                        x={x}
-                                        y={y}
-                                        width={width}
-                                        height={height}
-                                        fill={fill}
-                                        rx={4}
+                                    return (
+                                      <g>
+                                        <rect
+                                          x={x}
+                                          y={y}
+                                          width={width}
+                                          height={height}
+                                          fill={fill}
+                                          rx={4}
+                                          opacity={0.85}
+                                          stroke={fill}
+                                          strokeWidth={1.5}
+                                        />
+                                        <text
+                                          x={isLeft ? x - 10 : x + width + 10}
+                                          y={y + height / 2}
+                                          textAnchor={isLeft ? "end" : "start"}
+                                          alignmentBaseline="middle"
+                                          fontSize="11"
+                                          fontWeight="600"
+                                          fill="#1e293b"
+                                        >
+                                          {name}
+                                        </text>
+                                        <text
+                                          x={isLeft ? x - 10 : x + width + 10}
+                                          y={y + height / 2 + 13}
+                                          textAnchor={isLeft ? "end" : "start"}
+                                          alignmentBaseline="middle"
+                                          fontSize="10"
+                                          fontWeight="500"
+                                          fill="#64748b"
+                                        >
+                                          {shareText}
+                                        </text>
+                                      </g>
+                                    );
+                                  }}
+                                  link={(linkProps) => {
+                                    const anyProps = linkProps as unknown as {
+                                      path?: string;
+                                      link?: { payload?: ComparisonRow & { fill?: string } };
+                                      payload?: { payload?: ComparisonRow & { fill?: string } };
+                                    };
+                                    const path = typeof anyProps.path === "string" ? anyProps.path : "";
+                                    const linkPayload = anyProps.link?.payload ?? anyProps.payload?.payload;
+                                    const areaColor = linkPayload?.fill ?? "#94a3b8";
+
+                                    // 16進数カラーをrgbaに変換
+                                    const hexToRgba = (hex: string, alpha: number) => {
+                                      const r = parseInt(hex.slice(1, 3), 16);
+                                      const g = parseInt(hex.slice(3, 5), 16);
+                                      const b = parseInt(hex.slice(5, 7), 16);
+                                      return `rgba(${r},${g},${b},${alpha})`;
+                                    };
+
+                                    return (
+                                      <path
+                                        d={path}
+                                        fill={hexToRgba(areaColor, 0.3)}
+                                        stroke={hexToRgba(areaColor, 0.6)}
+                                        strokeWidth={0.5}
                                         opacity={0.85}
-                                        stroke={fill}
-                                        strokeWidth={1.5}
                                       />
-                                      <text
-                                        x={isLeft ? x - 10 : x + width + 10}
-                                        y={y + height / 2}
-                                        textAnchor={isLeft ? "end" : "start"}
-                                        alignmentBaseline="middle"
-                                        fontSize="11"
-                                        fontWeight="600"
-                                        fill="#1e293b"
-                                      >
-                                        {name}
-                                      </text>
-                                      <text
-                                        x={isLeft ? x - 10 : x + width + 10}
-                                        y={y + height / 2 + 13}
-                                        textAnchor={isLeft ? "end" : "start"}
-                                        alignmentBaseline="middle"
-                                        fontSize="10"
-                                        fontWeight="500"
-                                        fill="#64748b"
-                                      >
-                                        {shareText}
-                                      </text>
-                                    </g>
-                                  );
-                                }}
-                                link={(linkProps) => {
-                                  const anyProps = linkProps as unknown as {
-                                    path?: string;
-                                    link?: { payload?: ComparisonRow & { fill?: string } };
-                                    payload?: { payload?: ComparisonRow & { fill?: string } };
-                                  };
-                                  const path = typeof anyProps.path === "string" ? anyProps.path : "";
-                                  const linkPayload = anyProps.link?.payload ?? anyProps.payload?.payload;
-                                  const areaColor = linkPayload?.fill ?? "#94a3b8";
-
-                                  // 16進数カラーをrgbaに変換
-                                  const hexToRgba = (hex: string, alpha: number) => {
-                                    const r = parseInt(hex.slice(1, 3), 16);
-                                    const g = parseInt(hex.slice(3, 5), 16);
-                                    const b = parseInt(hex.slice(5, 7), 16);
-                                    return `rgba(${r},${g},${b},${alpha})`;
-                                  };
-
-                                  return (
-                                    <path
-                                      d={path}
-                                      fill={hexToRgba(areaColor, 0.3)}
-                                      stroke={hexToRgba(areaColor, 0.6)}
-                                      strokeWidth={0.5}
-                                      opacity={0.85}
-                                    />
-                                  );
-                                }}
-                              >
-                                <RechartsTooltip content={<SankeyTooltipContent />} />
-                              </Sankey>
-                            </ResponsiveContainer>
+                                    );
+                                  }}
+                                >
+                                  <RechartsTooltip content={<SankeyTooltipContent />} />
+                                </Sankey>
+                              </ResponsiveContainer>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    <div className="grid gap-4 lg:grid-cols-2">
-                      <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
-                        <h3 className="text-sm font-semibold text-emerald-700">増加したエリア</h3>
-                        {topIncrease.length > 0 ? (
-                          <ul className="mt-3 space-y-2 text-xs text-emerald-700">
-                            {topIncrease.map((row) => (
-                              <li key={`inc-${row.id}`} className="flex items-baseline justify-between gap-4">
-                                <span className="font-semibold">{row.label}</span>
-                                <span>
-                                  {formatPercent(row.shareA)} → {formatPercent(row.shareB)}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="mt-2 text-xs text-emerald-700">増加したエリアはありません。</p>
-                        )}
-                      </div>
-                      <div className="rounded-2xl border border-rose-100 bg-rose-50/60 p-4">
-                        <h3 className="text-sm font-semibold text-rose-700">減少したエリア</h3>
-                        {topDecrease.length > 0 ? (
-                          <ul className="mt-3 space-y-2 text-xs text-rose-700">
-                            {topDecrease.map((row) => (
-                              <li key={`dec-${row.id}`} className="flex items-baseline justify-between gap-4">
-                                <span className="font-semibold">{row.label}</span>
-                                <span>
-                                  {formatPercent(row.shareA)} → {formatPercent(row.shareB)}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="mt-2 text-xs text-rose-700">減少したエリアはありません。</p>
-                        )}
+                      {/* 右側：増加/減少エリアカード */}
+                      <div className="flex flex-col gap-4 lg:w-[35%]">
+                        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 shadow-sm">
+                          <h3 className="text-sm font-semibold text-emerald-700">増加したエリア</h3>
+                          {topIncrease.length > 0 ? (
+                            <ul className="mt-3 space-y-2 text-xs text-emerald-700">
+                              {topIncrease.map((row) => (
+                                <li key={`inc-${row.id}`} className="flex flex-col gap-1 border-b border-emerald-100 pb-2 last:border-0 last:pb-0">
+                                  <span className="font-semibold">{row.label}</span>
+                                  <span className="text-[11px]">
+                                    {formatPercent(row.shareA)} → {formatPercent(row.shareB)}
+                                    <span className="ml-2 font-semibold text-emerald-600">
+                                      (+{formatPercent(row.diffShare)})
+                                    </span>
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="mt-2 text-xs text-emerald-700">増加したエリアはありません。</p>
+                          )}
+                        </div>
+                        <div className="rounded-2xl border border-rose-100 bg-rose-50/60 p-4 shadow-sm">
+                          <h3 className="text-sm font-semibold text-rose-700">減少したエリア</h3>
+                          {topDecrease.length > 0 ? (
+                            <ul className="mt-3 space-y-2 text-xs text-rose-700">
+                              {topDecrease.map((row) => (
+                                <li key={`dec-${row.id}`} className="flex flex-col gap-1 border-b border-rose-100 pb-2 last:border-0 last:pb-0">
+                                  <span className="font-semibold">{row.label}</span>
+                                  <span className="text-[11px]">
+                                    {formatPercent(row.shareA)} → {formatPercent(row.shareB)}
+                                    <span className="ml-2 font-semibold text-rose-600">
+                                      ({formatPercent(row.diffShare)})
+                                    </span>
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="mt-2 text-xs text-rose-700">減少したエリアはありません。</p>
+                          )}
+                        </div>
                       </div>
                     </div>
 
