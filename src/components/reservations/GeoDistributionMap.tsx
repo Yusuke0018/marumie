@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, CircleMarker, Tooltip } from "react-leaflet";
-import type { LatLngExpression } from "leaflet";
+import { MapContainer, TileLayer, CircleMarker, Tooltip, Marker } from "react-leaflet";
+import { divIcon, type LatLngExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 type GeoDistributionMapProps = {
@@ -27,6 +27,20 @@ type TownCoordinate = {
   town: string;
   latitude: number;
   longitude: number;
+};
+
+type MunicipalityCoordinate = {
+  prefecture: string;
+  city: string;
+  latitude: number;
+  longitude: number;
+};
+
+type MunicipalityMatcher = {
+  prefecture: string;
+  city: string;
+  pattern: string;
+  cityOnly: string;
 };
 
 const DEFAULT_CENTER: LatLngExpression = [34.676, 135.497];
@@ -59,6 +73,14 @@ const COLOR_MODES = [
 
 type ColorMode = (typeof COLOR_MODES)[number]["value"];
 
+const CLINIC_LOCATION: { lat: number; lng: number } = {
+  lat: 34.676631,
+  lng: 135.497941,
+};
+
+const CLINIC_NAME = "リベ大総合クリニック大阪院";
+const CLINIC_ADDRESS = "大阪府大阪市西区北堀江2丁目1-11 久我ビルヂング北館";
+
 const KANJI_DIGITS = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"] as const;
 const DASH_REGEX = /[－―ーｰ‐]/g;
 const FULL_WIDTH_DIGITS = /[０-９]/g;
@@ -88,6 +110,30 @@ const interpolateCountColor = (value: number, maxValue: number): string => {
   return `#${toHexComponent(r)}${toHexComponent(g)}${toHexComponent(b)}`;
 };
 
+const hexToRgb = (hex: string): { r: number; g: number; b: number } | null => {
+  const normalized = hex.replace(/^#/, "");
+  if (normalized.length !== 6) {
+    return null;
+  }
+  const r = Number.parseInt(normalized.slice(0, 2), 16);
+  const g = Number.parseInt(normalized.slice(2, 4), 16);
+  const b = Number.parseInt(normalized.slice(4, 6), 16);
+  if ([r, g, b].some((component) => Number.isNaN(component))) {
+    return null;
+  }
+  return { r, g, b };
+};
+
+const lightenColor = (hex: string, amount: number): string => {
+  const rgb = hexToRgb(hex);
+  if (!rgb) {
+    return hex;
+  }
+  const clamped = Math.max(0, Math.min(1, amount));
+  const blend = (component: number) => Math.round(component + (255 - component) * clamped);
+  return `#${toHexComponent(blend(rgb.r))}${toHexComponent(blend(rgb.g))}${toHexComponent(blend(rgb.b))}`;
+};
+
 type DerivedSegments = {
   prefecture: string | null;
   city: string;
@@ -109,6 +155,7 @@ type MapPoint = LocationAggregation & {
   latitude: number;
   longitude: number;
   matchedTownName: string;
+  matchLevel: "town" | "city";
   dominantAgeBandId: AgeBandId;
   radius: number;
 };
@@ -208,6 +255,15 @@ const makeLocationKey = (
   return `${prefPart}|${cityPart}|${townPart}`;
 };
 
+const makeMunicipalityKey = (
+  prefecture: string | null,
+  city: string | null,
+): string => {
+  const prefPart = (prefecture ?? "").replace(/\s+/g, "");
+  const cityPart = (city ?? "").replace(/\s+/g, "");
+  return `${prefPart}|${cityPart}`;
+};
+
 const guessPrefectureFromAddress = (address: string | null | undefined): string | null => {
   if (!address) {
     return null;
@@ -230,74 +286,82 @@ const guessCityFromAddress = (address: string | null | undefined): string | null
   return normalized.includes("大阪市") ? "大阪市" : null;
 };
 
-const guessTownFromAddress = (
-  address: string | null | undefined,
-  prefecture: string | null,
-  city: string | null,
-): { town: string | null; baseTown: string | null } => {
-  if (!address) {
-    return { town: null, baseTown: null };
-  }
-  let working = address.replace(/\s+/g, "");
-  if (prefecture) {
-    working = working.replace(prefecture, "");
-  }
-  if (city) {
-    working = working.replace(city, "");
-  }
-  working = working.replace(/大阪府/g, "").replace(/大阪市/g, "");
-
-  const normalizedTown = standardizeTownLabel(working);
-  if (normalizedTown) {
-    return {
-      town: normalizedTown,
-      baseTown: removeChomeSuffix(normalizedTown),
-    };
-  }
-
-  const baseCandidate = working.replace(/[0-9０-９].*$/, "");
-  if (baseCandidate.length === 0) {
-    return { town: null, baseTown: null };
-  }
-  const baseNormalized = standardizeTownLabel(baseCandidate);
-  return {
-    town: baseNormalized,
-    baseTown: baseNormalized ? removeChomeSuffix(baseNormalized) : null,
-  };
-};
-
-const deriveSegments = (reservation: MapVisualizationRecord): DerivedSegments | null => {
+const deriveSegments = (
+  reservation: MapVisualizationRecord,
+  municipalityMatchers: MunicipalityMatcher[],
+  municipalityIndex: {
+    byPrefCity: Map<string, MunicipalityCoordinate>;
+    byCity: Map<string, MunicipalityCoordinate>;
+  },
+): DerivedSegments | null => {
   const address = reservation.patientAddress ?? null;
 
+  let prefecture =
+    reservation.patientPrefecture?.replace(/\s+/g, "") ??
+    guessPrefectureFromAddress(address);
   let city = reservation.patientCity?.replace(/\s+/g, "") ?? null;
-  if (!city) {
-    city = guessCityFromAddress(address);
+  let town = standardizeTownLabel(reservation.patientTown ?? null);
+  let baseTown = reservation.patientBaseTown
+    ? standardizeTownLabel(reservation.patientBaseTown)
+    : null;
+  if (town && !baseTown) {
+    baseTown = removeChomeSuffix(town);
+  }
+
+  let normalizedAddress: string | null = null;
+  if (address) {
+    normalizedAddress = toHalfWidthDigits(address.replace(/\s+/g, ""));
+  }
+
+  if ((!prefecture || !city) && normalizedAddress) {
+    for (const matcher of municipalityMatchers) {
+      if (normalizedAddress.startsWith(matcher.pattern)) {
+        prefecture = matcher.prefecture;
+        city = matcher.city;
+        normalizedAddress = normalizedAddress.slice(matcher.pattern.length);
+        break;
+      }
+      if (normalizedAddress.startsWith(matcher.cityOnly)) {
+        prefecture = matcher.prefecture;
+        city = matcher.city;
+        normalizedAddress = normalizedAddress.slice(matcher.cityOnly.length);
+        break;
+      }
+    }
+  }
+
+  if (!city && normalizedAddress) {
+    city = guessCityFromAddress(normalizedAddress);
   }
   if (!city) {
     return null;
   }
 
-  let prefecture =
-    reservation.patientPrefecture?.replace(/\s+/g, "") ??
-    guessPrefectureFromAddress(address);
-  if (!prefecture && city.startsWith("大阪市")) {
-    prefecture = "大阪府";
+  if (!prefecture) {
+    const candidate = municipalityIndex.byCity.get(city);
+    if (candidate) {
+      prefecture = candidate.prefecture.replace(/\s+/g, "");
+    } else if (city.startsWith("大阪市")) {
+      prefecture = "大阪府";
+    }
   }
 
-  const explicitTown = standardizeTownLabel(reservation.patientTown ?? null);
-  let town = explicitTown;
-  let baseTown =
-    explicitTown
-      ? removeChomeSuffix(explicitTown)
-      : standardizeTownLabel(reservation.patientBaseTown ?? null);
-  if (town === null && reservation.patientBaseTown) {
-    town = standardizeTownLabel(reservation.patientBaseTown);
+  let remaining = normalizedAddress;
+  if (remaining) {
+    if (prefecture && remaining.startsWith(prefecture)) {
+      remaining = remaining.slice(prefecture.length);
+    }
+    if (city && remaining.startsWith(city)) {
+      remaining = remaining.slice(city.length);
+    }
   }
 
-  if (!town) {
-    const guessed = guessTownFromAddress(address, prefecture, city);
-    town = guessed.town;
-    baseTown = guessed.baseTown ?? baseTown;
+  if (!town && remaining) {
+    const guessedTown = standardizeTownLabel(remaining);
+    if (guessedTown) {
+      town = guessedTown;
+      baseTown = removeChomeSuffix(guessedTown);
+    }
   }
 
   if (!town && baseTown) {
@@ -305,14 +369,15 @@ const deriveSegments = (reservation: MapVisualizationRecord): DerivedSegments | 
   }
 
   if (!town && !baseTown) {
+    const locationKey = makeLocationKey(prefecture, city, null);
     return {
       prefecture,
       city,
       town: null,
       baseTown: null,
       locationLabel: city,
-      locationKey: makeLocationKey(prefecture, city, null),
-      baseLocationKey: makeLocationKey(prefecture, city, null),
+      locationKey,
+      baseLocationKey: locationKey,
     };
   }
 
@@ -453,6 +518,21 @@ export const GeoDistributionMap = ({
     useState<AgeFilterValue>(ALL_AGE_BAND);
   const [colorMode, setColorMode] = useState<ColorMode>("age");
 
+  const clinicIcon = useMemo(
+    () =>
+      divIcon({
+        className: "clinic-marker",
+        html: `
+          <div class="rounded-full bg-rose-500 text-white text-[10px] font-semibold shadow-lg px-3 py-1 border border-white">
+            クリニック
+          </div>
+        `,
+        iconSize: [64, 24],
+        iconAnchor: [32, 12],
+      }),
+    [],
+  );
+
   useEffect(() => {
     if (!departmentOptions.some((option) => option.value === selectedDepartment)) {
       setSelectedDepartment(ALL_DEPARTMENT);
@@ -495,22 +575,61 @@ export const GeoDistributionMap = ({
     });
   }, [enrichedRecords, selectedDepartment, selectedPeriod, selectedAgeBand]);
 
+  const municipalityIndex = useMemo(() => {
+    if (!municipalities) {
+      return {
+        byPrefCity: new Map<string, MunicipalityCoordinate>(),
+        byCity: new Map<string, MunicipalityCoordinate>(),
+      };
+    }
+    const byPrefCity = new Map<string, MunicipalityCoordinate>();
+    const byCity = new Map<string, MunicipalityCoordinate>();
+    municipalities.forEach((item) => {
+      const key = makeMunicipalityKey(item.prefecture, item.city);
+      byPrefCity.set(key, item);
+      const cityKey = item.city.replace(/\s+/g, "");
+      if (!byCity.has(cityKey)) {
+        byCity.set(cityKey, item);
+      }
+    });
+    return { byPrefCity, byCity };
+  }, [municipalities]);
+
+  const municipalityMatchers = useMemo<MunicipalityMatcher[]>(() => {
+    if (!municipalities) {
+      return [];
+    }
+    return municipalities
+      .map((item) => {
+        const pref = item.prefecture.replace(/\s+/g, "");
+        const city = item.city.replace(/\s+/g, "");
+        return {
+          prefecture: pref,
+          city,
+          pattern: `${pref}${city}`,
+          cityOnly: city,
+        };
+      })
+      .sort((a, b) => b.pattern.length - a.pattern.length);
+  }, [municipalities]);
+
   const { groupedLocations, missingLocationCount } = useMemo(() => {
     const map = new Map<string, LocationAggregation>();
     let missing = 0;
     for (const item of filteredRecords) {
-      const segments = deriveSegments(item.reservation);
+      const segments = deriveSegments(
+        item.reservation,
+        municipalityMatchers,
+        municipalityIndex,
+      );
       if (!segments || !segments.city) {
-        missing += 1;
-        continue;
-      }
-      if (!segments.town && !segments.baseTown) {
         missing += 1;
         continue;
       }
       const key =
         segments.locationKey ??
-        `${segments.city}|${segments.baseTown ?? "unknown"}`;
+        makeLocationKey(segments.prefecture, segments.city, segments.baseTown) ??
+        `${segments.city}|city`;
       let entry = map.get(key);
       if (!entry) {
         entry = {
@@ -533,9 +652,10 @@ export const GeoDistributionMap = ({
       groupedLocations: Array.from(map.values()),
       missingLocationCount: missing,
     };
-  }, [filteredRecords]);
+  }, [filteredRecords, municipalityIndex, municipalityMatchers]);
 
   const [townMaster, setTownMaster] = useState<TownCoordinate[] | null>(null);
+  const [municipalities, setMunicipalities] = useState<MunicipalityCoordinate[] | null>(null);
   const [geoLoading, setGeoLoading] = useState<boolean>(false);
   const [geoError, setGeoError] = useState<string | null>(null);
 
@@ -559,7 +679,7 @@ export const GeoDistributionMap = ({
       .catch((error) => {
         console.error(error);
         if (isMounted) {
-          setGeoError("大阪市の住所マスタを読み込めませんでした。");
+          setGeoError("住所マスタを読み込めませんでした。");
         }
       })
       .finally(() => {
@@ -569,6 +689,29 @@ export const GeoDistributionMap = ({
       });
     return () => {
       isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/data/municipalities.json")
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to fetch municipalities: ${response.status}`);
+        }
+        return response.json() as Promise<MunicipalityCoordinate[]>;
+      })
+      .then((data) => {
+        if (!active) {
+          return;
+        }
+        setMunicipalities(data);
+      })
+      .catch((error) => {
+        console.error(error);
+      });
+    return () => {
+      active = false;
     };
   }, []);
 
@@ -631,39 +774,56 @@ export const GeoDistributionMap = ({
   }, [townMaster]);
 
   const { mappedPoints, unmatchedCount } = useMemo(() => {
-    if (!coordinateIndex) {
-      return { mappedPoints: [] as MapPoint[], unmatchedCount: 0 };
-    }
     let unmatchedTotals = 0;
     const result: MapPoint[] = [];
 
     for (const group of groupedLocations) {
-      const candidateKeys = [
-        group.locationKey,
-        group.baseLocationKey,
-        makeLocationKey(group.prefecture, group.city, group.town),
-        makeLocationKey(group.prefecture, group.city, group.baseTown),
-        makeLocationKey(null, group.city, group.town),
-        makeLocationKey(null, group.city, group.baseTown),
-      ].filter((value): value is string => Boolean(value && value.length > 0));
-
       let coordinate: { lat: number; lng: number; town: string } | undefined;
-      for (const key of candidateKeys) {
-        const exact = coordinateIndex.byExact.get(key);
-        if (exact) {
-          coordinate = exact;
-          break;
-        }
-      }
-      if (!coordinate) {
+      let matchLevel: "town" | "city" = "town";
+
+      if (coordinateIndex && group.prefecture === "大阪府") {
+        const candidateKeys = [
+          group.locationKey,
+          group.baseLocationKey,
+          makeLocationKey(group.prefecture, group.city, group.town),
+          makeLocationKey(group.prefecture, group.city, group.baseTown),
+          makeLocationKey(null, group.city, group.town),
+          makeLocationKey(null, group.city, group.baseTown),
+        ].filter((value): value is string => Boolean(value && value.length > 0));
+
         for (const key of candidateKeys) {
-          const base = coordinateIndex.byBase.get(key);
-          if (base) {
-            coordinate = base;
+          const exact = coordinateIndex.byExact.get(key);
+          if (exact) {
+            coordinate = exact;
             break;
           }
         }
+        if (!coordinate) {
+          for (const key of candidateKeys) {
+            const base = coordinateIndex.byBase.get(key);
+            if (base) {
+              coordinate = base;
+              break;
+            }
+          }
+        }
       }
+
+      if (!coordinate && group.city) {
+        const prefKey = makeMunicipalityKey(group.prefecture, group.city);
+        const municipality =
+          municipalityIndex.byPrefCity.get(prefKey) ??
+          municipalityIndex.byCity.get(group.city.replace(/\s+/g, ""));
+        if (municipality) {
+          coordinate = {
+            lat: municipality.latitude,
+            lng: municipality.longitude,
+            town: municipality.city,
+          };
+          matchLevel = "city";
+        }
+      }
+
       if (!coordinate) {
         unmatchedTotals += group.total;
         continue;
@@ -700,13 +860,14 @@ export const GeoDistributionMap = ({
         latitude: coordinate.lat,
         longitude: coordinate.lng,
         matchedTownName: coordinate.town,
+        matchLevel,
         dominantAgeBandId,
         radius: computeRadius(group.total),
       });
     }
 
     return { mappedPoints: result, unmatchedCount: unmatchedTotals };
-  }, [coordinateIndex, groupedLocations, selectedAgeBand]);
+  }, [coordinateIndex, groupedLocations, municipalityIndex, selectedAgeBand]);
 
   const maxPointTotal = useMemo(
     () => mappedPoints.reduce((max, point) => (point.total > max ? point.total : max), 0),
@@ -834,6 +995,16 @@ export const GeoDistributionMap = ({
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
             />
+            <Marker position={[CLINIC_LOCATION.lat, CLINIC_LOCATION.lng]} icon={clinicIcon}>
+              <Tooltip direction="top" offset={[0, -12]} opacity={1} permanent>
+                <div className="text-xs font-semibold text-rose-600">
+                  {CLINIC_NAME}
+                  <div className="mt-0.5 text-[11px] font-normal text-rose-500">
+                    {CLINIC_ADDRESS}
+                  </div>
+                </div>
+              </Tooltip>
+            </Marker>
             {mappedPoints.map((point) => {
               const ageColor =
                 selectedAgeBand === ALL_AGE_BAND
@@ -847,7 +1018,9 @@ export const GeoDistributionMap = ({
                 colorMode === "age"
                   ? ageColor
                   : interpolateCountColor(point.total, maxPointTotal || point.total);
-              const fillOpacity = colorMode === "age" ? 0.45 : 0.65;
+              const strokeColor = lightenColor(markerColor, 0.25);
+              const fillColor = lightenColor(markerColor, 0.55);
+              const fillOpacity = colorMode === "age" ? 0.35 : 0.55;
 
               const ageDetails = AGE_BANDS.filter(
                 (band) => point.ageBreakdown[band.id] > 0,
@@ -864,8 +1037,9 @@ export const GeoDistributionMap = ({
                   center={[point.latitude, point.longitude]}
                   radius={point.radius}
                   pathOptions={{
-                    color: markerColor,
+                    color: strokeColor,
                     weight: 1.5,
+                    fillColor,
                     fillOpacity,
                   }}
                 >
@@ -891,6 +1065,11 @@ export const GeoDistributionMap = ({
                       <p className="text-xs text-slate-600">
                         上位診療科: {formatTopDepartments(point)}
                       </p>
+                      {point.matchLevel === "city" && (
+                        <p className="text-[11px] text-slate-500">
+                          市区町村の代表点でプロットしています。
+                        </p>
+                      )}
                     </div>
                   </Tooltip>
                 </CircleMarker>
@@ -1056,6 +1235,11 @@ export const GeoDistributionMap = ({
                     <div className="flex items-center justify-between gap-4">
                       <span className="font-semibold text-slate-800">
                         {index + 1}. {point.locationLabel}
+                        {point.matchLevel === "city" && (
+                          <span className="ml-2 inline-flex items-center rounded-full bg-slate-100 px-2 py-[2px] text-[10px] font-semibold text-slate-600">
+                            市区町村代表点
+                          </span>
+                        )}
                       </span>
                       <span className="font-semibold text-slate-700">
                         {point.total.toLocaleString("ja-JP")}件

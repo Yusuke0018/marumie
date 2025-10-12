@@ -32,3 +32,17 @@ npm start # 本番構成のサーバーモード
 ビルドコマンドは `npm run build`、出力は Next.js の既定（/.next）を利用します。  
 GitHub Pages 用の静的書き出しは CI 側で `GITHUB_PAGES=true npm run build` を実行してください。  
 それ以外の環境変数や追加ステップは不要です。
+
+## CI/CD セットアップ
+1. GitHub リポジトリの **Settings → Secrets and variables → Actions** で以下を登録してください。  
+   - `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`（Vercel デプロイ用）  
+   - `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`（Cloudflare Worker デプロイ用）
+2. PR または main ブランチへ push すると GitHub Actions が自動で lint/build を実行し、Secrets が登録されていれば Vercel／Cloudflare へ反映します。
+
+## 手動で確認したいとき
+```bash
+npm run lint       # 型チェック前の静的検証
+npm run typecheck  # TypeScript の構文・型チェック
+npm run build      # 本番ビルド
+npm run preview    # out ディレクトリをローカル配信（Pages 確認用）
+```

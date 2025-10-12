@@ -1,16 +1,46 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { RefreshCw, ArrowLeft } from "lucide-react";
 import { type KarteRecord } from "@/lib/karteAnalytics";
 import { getCompressedItem } from "@/lib/storageCompression";
 import { KARTE_STORAGE_KEY, KARTE_TIMESTAMP_KEY } from "@/lib/storageKeys";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip as RechartsTooltip,
+  Legend,
+} from "recharts";
 
 const KANJI_DIGITS = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"] as const;
 const DASH_REGEX = /[－―ーｰ‐]/g;
 const FULL_WIDTH_DIGITS = /[０-９]/g;
+
+const AGE_BANDS = [
+  { id: "0-19" as const, label: "0〜19歳", min: 0, max: 19 },
+  { id: "20-39" as const, label: "20〜39歳", min: 20, max: 39 },
+  { id: "40-59" as const, label: "40〜59歳", min: 40, max: 59 },
+  { id: "60-79" as const, label: "60〜79歳", min: 60, max: 79 },
+  { id: "80+" as const, label: "80歳以上", min: 80, max: null },
+  { id: "unknown" as const, label: "年齢不明", min: null, max: null },
+] as const;
+
+type AgeBandId = (typeof AGE_BANDS)[number]["id"];
+
+const createEmptyAgeBreakdown = () =>
+  AGE_BANDS.reduce(
+    (acc, band) => {
+      acc[band.id] = 0;
+      return acc;
+    },
+    {} as Record<AgeBandId, number>,
+  );
 
 const toHalfWidthDigits = (value: string): string =>
   value.replace(FULL_WIDTH_DIGITS, (digit) =>
@@ -118,6 +148,8 @@ const formatMonthLabel = (value: string): string => {
   return `${year}年${month}月`;
 };
 
+const formatPercent = (value: number): string => `${(value * 100).toFixed(1)}%`;
+
 const buildPeriodLabel = (months: string[]): string => {
   if (months.length === 0) {
     return "データ未取得";
@@ -170,6 +202,21 @@ const computeAgeFromBirth = (
   }
 
   return age >= 0 && age <= 120 ? age : null;
+};
+
+const classifyAgeBandId = (age: number | null | undefined): AgeBandId => {
+  if (age === null || age === undefined || Number.isNaN(age) || age < 0 || age > 120) {
+    return "unknown";
+  }
+  for (const band of AGE_BANDS) {
+    if (band.id === "unknown") {
+      continue;
+    }
+    if (band.min !== null && age >= band.min && (band.max === null || age <= band.max)) {
+      return band.id;
+    }
+  }
+  return "unknown";
 };
 
 const parseAddressComponents = (
@@ -326,6 +373,288 @@ const MapAnalysisPage = () => {
     [availableMonths],
   );
 
+  const sortedMonths = useMemo(
+    () => [...availableMonths].sort((a, b) => a.localeCompare(b)),
+    [availableMonths],
+  );
+
+  type ComparisonRange = { start: string | null; end: string | null };
+  const [rangeA, setRangeA] = useState<ComparisonRange>({ start: null, end: null });
+  const [rangeB, setRangeB] = useState<ComparisonRange>({ start: null, end: null });
+
+  useEffect(() => {
+    if (sortedMonths.length === 0) {
+      return;
+    }
+    setRangeA((prev) => {
+      if (prev.start && prev.end) {
+        return prev;
+      }
+      const mid = Math.max(0, Math.floor(sortedMonths.length / 2) - 1);
+      const start = sortedMonths[0];
+      const end = sortedMonths[Math.max(mid, 0)];
+      return { start, end };
+    });
+    setRangeB((prev) => {
+      if (prev.start && prev.end) {
+        return prev;
+      }
+      const startIndex = Math.max(sortedMonths.length - 3, 0);
+      const start = sortedMonths[startIndex];
+      const end = sortedMonths[sortedMonths.length - 1];
+      return { start, end };
+    });
+  }, [sortedMonths]);
+
+  const filterByRange = useMemo(() => {
+    return (records: MapRecord[], range: ComparisonRange): MapRecord[] => {
+      const { start, end } = range;
+      return records.filter((record) => {
+        if (start && record.reservationMonth < start) {
+          return false;
+        }
+        if (end && record.reservationMonth > end) {
+          return false;
+        }
+        return true;
+      });
+    };
+  }, []);
+
+  const aggregateRange = useMemo(() => {
+    return (records: MapRecord[]) => {
+      const areaMap = new Map<
+        string,
+        {
+          label: string;
+          prefecture: string | null;
+          city: string | null;
+          town: string | null;
+          total: number;
+          ageBreakdown: Record<AgeBandId, number>;
+        }
+      >();
+      const ageTotals = createEmptyAgeBreakdown();
+
+      records.forEach((record) => {
+        const bandId = classifyAgeBandId(record.patientAge);
+        ageTotals[bandId] += 1;
+
+        const prefecture = record.patientPrefecture ?? null;
+        const city = record.patientCity ?? null;
+        const town = record.patientTown ?? record.patientBaseTown ?? null;
+        const labelParts = [city, town].filter((part): part is string => Boolean(part));
+        const label = labelParts.length > 0 ? labelParts.join("") : city ?? "住所未設定";
+        const key = `${prefecture ?? ""}|${city ?? ""}|${town ?? ""}`;
+        let entry = areaMap.get(key);
+        if (!entry) {
+          entry = {
+            label,
+            prefecture,
+            city,
+            town,
+            total: 0,
+            ageBreakdown: createEmptyAgeBreakdown(),
+          };
+          areaMap.set(key, entry);
+        }
+        entry.total += 1;
+        entry.ageBreakdown[bandId] += 1;
+      });
+
+      return {
+        total: records.length,
+        areas: areaMap,
+        ageTotals,
+      };
+    };
+  }, []);
+
+  const comparisonData = useMemo(() => {
+    if (
+      (!rangeA.start && !rangeA.end) ||
+      (!rangeB.start && !rangeB.end)
+    ) {
+      return null;
+    }
+
+    if (
+      (rangeA.start && rangeA.end && rangeA.start > rangeA.end) ||
+      (rangeB.start && rangeB.end && rangeB.start > rangeB.end)
+    ) {
+      return { invalid: true } as const;
+    }
+
+    const recordsA = filterByRange(mapRecords, rangeA);
+    const recordsB = filterByRange(mapRecords, rangeB);
+    const aggregatedA = aggregateRange(recordsA);
+    const aggregatedB = aggregateRange(recordsB);
+
+    const allKeys = new Set<string>([
+      ...aggregatedA.areas.keys(),
+      ...aggregatedB.areas.keys(),
+    ]);
+
+    const rows = Array.from(allKeys).map((key) => {
+      const areaA = aggregatedA.areas.get(key);
+      const areaB = aggregatedB.areas.get(key);
+      const countA = areaA?.total ?? 0;
+      const countB = areaB?.total ?? 0;
+      const shareA = aggregatedA.total > 0 ? countA / aggregatedA.total : 0;
+      const shareB = aggregatedB.total > 0 ? countB / aggregatedB.total : 0;
+      const diff = countB - countA;
+      const diffShare = shareB - shareA;
+      const label = areaB?.label ?? areaA?.label ?? "住所未設定";
+      return {
+        id: key,
+        label,
+        countA,
+        countB,
+        shareA,
+        shareB,
+        diff,
+        diffShare,
+      };
+    });
+
+    rows.sort((a, b) => Math.abs(b.diffShare) - Math.abs(a.diffShare));
+
+    return {
+      invalid: false as const,
+      rows,
+      totalA: aggregatedA.total,
+      totalB: aggregatedB.total,
+      ageA: aggregatedA.ageTotals,
+      ageB: aggregatedB.ageTotals,
+    };
+  }, [aggregateRange, filterByRange, mapRecords, rangeA, rangeB]);
+
+  const ageComparisonRows = useMemo(() => {
+    if (!comparisonData || comparisonData.invalid) {
+      return [];
+    }
+    const { ageA, ageB, totalA, totalB } = comparisonData;
+    return AGE_BANDS.map((band) => {
+      const countA = ageA[band.id];
+      const countB = ageB[band.id];
+      const shareA = totalA > 0 ? countA / totalA : 0;
+      const shareB = totalB > 0 ? countB / totalB : 0;
+      return {
+        id: band.id,
+        label: band.label,
+        countA,
+        countB,
+        shareA,
+        shareB,
+        diff: countB - countA,
+        diffShare: shareB - shareA,
+      };
+    });
+  }, [comparisonData]);
+
+  const rangeDescription = useMemo(() => {
+    const describe = (range: ComparisonRange) => {
+      const { start, end } = range;
+      if (!start && !end) {
+        return "全期間";
+      }
+      if (start && end && start === end) {
+        return formatMonthLabel(start);
+      }
+      if (start && end) {
+        return `${formatMonthLabel(start)}〜${formatMonthLabel(end)}`;
+      }
+      if (start) {
+        return `${formatMonthLabel(start)}以降`;
+      }
+      if (end) {
+        return `${formatMonthLabel(end)}まで`;
+      }
+      return "全期間";
+    };
+    return {
+      a: describe(rangeA),
+      b: describe(rangeB),
+    };
+  }, [rangeA, rangeB]);
+
+  const topDiffRows = useMemo(() => {
+    if (!comparisonData || comparisonData.invalid) {
+      return [];
+    }
+    return comparisonData.rows.slice(0, 8);
+  }, [comparisonData]);
+
+  const topIncrease = useMemo(() => {
+    if (!comparisonData || comparisonData.invalid) {
+      return [];
+    }
+    return comparisonData.rows.filter((row) => row.diffShare > 0).slice(0, 5);
+  }, [comparisonData]);
+
+  const topDecrease = useMemo(() => {
+    if (!comparisonData || comparisonData.invalid) {
+      return [];
+    }
+    return comparisonData.rows.filter((row) => row.diffShare < 0).slice(0, 5);
+  }, [comparisonData]);
+
+  const chartData = useMemo(() => {
+    if (!comparisonData || comparisonData.invalid || topDiffRows.length === 0) {
+      return [];
+    }
+    return topDiffRows.map((row) => ({
+      label: row.label,
+      periodA: Number((row.shareA * 100).toFixed(1)),
+      periodB: Number((row.shareB * 100).toFixed(1)),
+    }));
+  }, [comparisonData, topDiffRows]);
+
+  const invalidRange = useMemo(() => Boolean(comparisonData?.invalid), [comparisonData]);
+
+  const leadingDiff = useMemo(() => {
+    if (!comparisonData || comparisonData.invalid || comparisonData.rows.length === 0) {
+      return null;
+    }
+    return comparisonData.rows[0];
+  }, [comparisonData]);
+
+  const monthOptions = useMemo(
+    () => sortedMonths.map((month) => ({ value: month, label: formatMonthLabel(month) })),
+    [sortedMonths],
+  );
+
+  const handleRangeAChange = (field: keyof ComparisonRange) => (event: ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value || null;
+    setRangeA((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleRangeBChange = (field: keyof ComparisonRange) => (event: ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value || null;
+    setRangeB((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const ComparisonTooltipContent = ({
+    active,
+    payload,
+  }: {
+    active?: boolean;
+    payload?: Array<{ value: number; name: string }>;
+  }) => {
+    if (!active || !payload || payload.length === 0) {
+      return null;
+    }
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
+        {payload.map((entry) => (
+          <p key={entry.name} className="text-slate-600">
+            {entry.name}: {entry.value}%
+          </p>
+        ))}
+      </div>
+    );
+  };
+
   const isEmpty = mapRecords.length === 0;
 
   return (
@@ -409,6 +738,217 @@ const MapAnalysisPage = () => {
 
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
               <GeoDistributionMap reservations={mapRecords} periodLabel={periodLabel} />
+            </section>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
+              <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                  <div>
+                    <h2 className="text-base font-semibold text-slate-900">期間比較モード</h2>
+                    <p className="text-xs text-slate-500">
+                      期間Aと期間Bを指定して、来院エリア・年代構成の変化を確認できます。
+                    </p>
+                  </div>
+                  <div className="grid w-full gap-4 sm:grid-cols-2 md:w-auto">
+                    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+                      <p className="text-xs font-semibold text-indigo-500">期間A</p>
+                      <div className="mt-2 flex items-center gap-2 text-sm">
+                        <select
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                          value={rangeA.start ?? ""}
+                          onChange={handleRangeAChange("start")}
+                        >
+                          <option value="">指定なし</option>
+                          {monthOptions.map((option) => (
+                            <option key={`a-start-${option.value}`} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="text-xs text-slate-500">〜</span>
+                        <select
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                          value={rangeA.end ?? ""}
+                          onChange={handleRangeAChange("end")}
+                        >
+                          <option value="">指定なし</option>
+                          {monthOptions.map((option) => (
+                            <option key={`a-end-${option.value}`} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <p className="mt-2 text-[11px] text-slate-500">{rangeDescription.a}</p>
+                    </div>
+                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+                      <p className="text-xs font-semibold text-emerald-500">期間B</p>
+                      <div className="mt-2 flex items-center gap-2 text-sm">
+                        <select
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                          value={rangeB.start ?? ""}
+                          onChange={handleRangeBChange("start")}
+                        >
+                          <option value="">指定なし</option>
+                          {monthOptions.map((option) => (
+                            <option key={`b-start-${option.value}`} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="text-xs text-slate-500">〜</span>
+                        <select
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                          value={rangeB.end ?? ""}
+                          onChange={handleRangeBChange("end")}
+                        >
+                          <option value="">指定なし</option>
+                          {monthOptions.map((option) => (
+                            <option key={`b-end-${option.value}`} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <p className="mt-2 text-[11px] text-slate-500">{rangeDescription.b}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {invalidRange ? (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50/70 px-4 py-3 text-sm text-rose-700">
+                    期間Aまたは期間Bの開始月が終了月より後になっています。範囲を修正してください。
+                  </div>
+                ) : !comparisonData ? (
+                  <p className="text-sm text-slate-500">比較する期間を選択してください。</p>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+                        <p className="text-xs font-semibold text-indigo-500">期間A 件数</p>
+                        <p className="mt-2 text-2xl font-bold text-indigo-700">
+                          {comparisonData.totalA.toLocaleString("ja-JP")}件
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+                        <p className="text-xs font-semibold text-emerald-500">期間B 件数</p>
+                        <p className="mt-2 text-2xl font-bold text-emerald-700">
+                          {comparisonData.totalB.toLocaleString("ja-JP")}件
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                        <p className="text-xs font-semibold text-slate-500">最大変化エリア</p>
+                        {leadingDiff ? (
+                          <div className="mt-2 text-sm text-slate-800">
+                            <p className="font-semibold">{leadingDiff.label}</p>
+                            <p className="text-xs text-slate-500">
+                              期間A {formatPercent(leadingDiff.shareA)} → 期間B {formatPercent(leadingDiff.shareB)}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-xs text-slate-500">差分のあるエリアがありません。</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {chartData.length > 0 && (
+                      <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-inner">
+                        <h3 className="text-sm font-semibold text-slate-800">割合が変化した上位エリア</h3>
+                        <p className="text-[11px] text-slate-500">縦軸: 地区、横軸: 各期間の来院割合（%）</p>
+                        <div className="mt-3 h-72">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={chartData} layout="vertical" margin={{ top: 12, right: 24, bottom: 12, left: 120 }}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis type="number" unit="%" domain={[0, 100]} />
+                              <YAxis dataKey="label" type="category" width={120} />
+                              <RechartsTooltip content={<ComparisonTooltipContent />} />
+                              <Legend />
+                              <Bar dataKey="periodA" name="期間A" fill="#6366f1" radius={[0, 6, 6, 0]} />
+                              <Bar dataKey="periodB" name="期間B" fill="#22c55e" radius={[0, 6, 6, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+                        <h3 className="text-sm font-semibold text-emerald-700">増加したエリア</h3>
+                        {topIncrease.length > 0 ? (
+                          <ul className="mt-3 space-y-2 text-xs text-emerald-700">
+                            {topIncrease.map((row) => (
+                              <li key={`inc-${row.id}`} className="flex items-baseline justify-between gap-4">
+                                <span className="font-semibold">{row.label}</span>
+                                <span>
+                                  {formatPercent(row.shareA)} → {formatPercent(row.shareB)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="mt-2 text-xs text-emerald-700">増加したエリアはありません。</p>
+                        )}
+                      </div>
+                      <div className="rounded-2xl border border-rose-100 bg-rose-50/60 p-4">
+                        <h3 className="text-sm font-semibold text-rose-700">減少したエリア</h3>
+                        {topDecrease.length > 0 ? (
+                          <ul className="mt-3 space-y-2 text-xs text-rose-700">
+                            {topDecrease.map((row) => (
+                              <li key={`dec-${row.id}`} className="flex items-baseline justify-between gap-4">
+                                <span className="font-semibold">{row.label}</span>
+                                <span>
+                                  {formatPercent(row.shareA)} → {formatPercent(row.shareB)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="mt-2 text-xs text-rose-700">減少したエリアはありません。</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                      <h3 className="text-sm font-semibold text-slate-800">年代構成の比較</h3>
+                      <div className="mt-3 overflow-x-auto">
+                        <table className="min-w-full divide-y divide-slate-200 text-sm">
+                          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                            <tr>
+                              <th className="px-3 py-2 text-left">年代</th>
+                              <th className="px-3 py-2 text-right">期間A</th>
+                              <th className="px-3 py-2 text-right">期間B</th>
+                              <th className="px-3 py-2 text-right">差分</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-slate-700">
+                            {ageComparisonRows.map((row) => (
+                              <tr key={`age-${row.id}`}>
+                                <td className="px-3 py-2 font-medium text-slate-800">{row.label}</td>
+                                <td className="px-3 py-2 text-right">
+                                  {row.countA.toLocaleString("ja-JP")}
+                                  <span className="ml-2 text-[11px] text-slate-500">{formatPercent(row.shareA)}</span>
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  {row.countB.toLocaleString("ja-JP")}
+                                  <span className="ml-2 text-[11px] text-slate-500">{formatPercent(row.shareB)}</span>
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  {row.diff >= 0 ? "+" : ""}
+                                  {row.diff.toLocaleString("ja-JP")}
+                                  <span className="ml-2 text-[11px] text-slate-500">
+                                    {row.diffShare >= 0 ? "+" : ""}
+                                    {formatPercent(row.diffShare)}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </section>
           </section>
         )}
