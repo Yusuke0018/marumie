@@ -629,7 +629,7 @@ const MapAnalysisPage = () => {
     }));
   }, [topDiffRows, validComparison]);
 
-type SankeyNodeDatum = { name: string; fill: string };
+type SankeyNodeDatum = { name: string };
 type SankeyLinkDatum = { source: number; target: number; value: number; payload: ComparisonRow };
 
   const sankeyData = useMemo<{ nodes: SankeyNodeDatum[]; links: SankeyLinkDatum[] } | null>(() => {
@@ -639,10 +639,10 @@ type SankeyLinkDatum = { source: number; target: number; value: number; payload:
     const nodes: SankeyNodeDatum[] = [];
     const links: SankeyLinkDatum[] = [];
     topDiffRows.forEach((row) => {
-      nodes.push({ name: `期間A｜${row.label}`, fill: "#6366f1" });
+      nodes.push({ name: `期間A｜${row.label}` });
     });
     topDiffRows.forEach((row) => {
-      nodes.push({ name: `期間B｜${row.label}`, fill: "#22c55e" });
+      nodes.push({ name: `期間B｜${row.label}` });
     });
     const totalRows = topDiffRows.length;
     topDiffRows.forEach((row, index) => {
@@ -952,6 +952,8 @@ type SankeyLinkDatum = { source: number; target: number; value: number; payload:
                         </p>
                         <div className="mt-4 h-80">
                           <ResponsiveContainer width="100%" height="100%">
+                            {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                            {/* @ts-ignore: Recharts types do not expose custom link renderer props */}
                             <Sankey
                               data={sankeyData}
                               nodePadding={36}
@@ -959,7 +961,10 @@ type SankeyLinkDatum = { source: number; target: number; value: number; payload:
                               linkCurvature={0.45}
                               iterations={32}
                               link={(linkProps) => {
-                                const { link, path } = linkProps;
+                                const { link, path } = linkProps as unknown as {
+                                  link: { payload?: ComparisonRow };
+                                  path: string;
+                                };
                                 const diffShare = link.payload?.diffShare ?? 0;
                                 const positive = diffShare >= 0;
                                 const color = positive ? "rgba(34,197,94,0.35)" : "rgba(239,68,68,0.35)";

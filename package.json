@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "chart.js": "^4.5.0",
+    "d3-sankey": "^0.12.3",
     "date-holidays": "^3.26.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.446.0",
