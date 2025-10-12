@@ -15,8 +15,9 @@ import {
   XAxis,
   YAxis,
   Tooltip as RechartsTooltip,
-  Legend,
-  Sankey,
+  Cell,
+  ReferenceLine,
+  LabelList,
 } from "recharts";
 
 const KANJI_DIGITS = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"] as const;
@@ -186,22 +187,6 @@ type ComparisonRow = {
   diffShare: number;
 };
 
-type SankeyNodeDatum = {
-  name: string;
-  fill?: string;
-  stroke?: string;
-  shareA?: number;
-  shareB?: number;
-};
-type SankeyLinkDatum = {
-  source: number;
-  target: number;
-  value: number;
-  fill?: string;
-  stroke?: string;
-  payload: ComparisonRow;
-};
-
 type AreaColor = { fill: string; accent: string };
 
 // エリアごとの淡色パレットとアクセント色
@@ -225,12 +210,8 @@ const toTransparentColor = (hex: string, alpha: number) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
-const scaleLinkValue = (row: ComparisonRow) => {
-  const maxShare = Math.max(row.shareA, row.shareB);
-  const diffWeight = Math.abs(row.diffShare) * 6000;
-  const baseWeight = maxShare * 1200;
-  return Math.max(diffWeight + baseWeight, 6);
-};
+const translucentFill = (hex: string, alpha = 0.4) => toTransparentColor(hex, alpha);
+const solidFill = (hex: string, alpha = 0.85) => toTransparentColor(hex, alpha);
 
 const computeAgeFromBirth = (
   birthIso: string | null,
@@ -714,95 +695,45 @@ const MapAnalysisPage = () => {
     return validRows.slice(0, 5);
   }, [validComparison]);
 
-  const chartData = useMemo(() => {
+  const comparisonBarData = useMemo<
+    Array<{ label: string; periodA: number; periodB: number; diff: number; fill: string; accent: string }>
+  >(() => {
     if (!validComparison || topDiffRows.length === 0) {
       return [];
     }
-    return topDiffRows.map((row) => ({
-      label: row.label,
-      periodA: Number((row.shareA * 100).toFixed(1)),
-      periodB: Number((row.shareB * 100).toFixed(1)),
-    }));
-}, [topDiffRows, validComparison]);
-
-  const sankeyData = useMemo<{ nodes: SankeyNodeDatum[]; links: SankeyLinkDatum[] } | null>(() => {
-    if (!validComparison || topDiffRows.length === 0) {
-      return null;
-    }
-    const nodes: SankeyNodeDatum[] = [];
-    const links: SankeyLinkDatum[] = [];
-
     const palette = AREA_COLOR_PALETTE;
-
-    // 左側：期間Aの各エリア
-    topDiffRows.forEach((row, index) => {
+    return topDiffRows.map((row, index) => {
       const { fill, accent } = palette[index % palette.length];
-      nodes.push({
-        name: row.label,
+      return {
+        label: row.label,
+        periodA: Number((row.shareA * 100).toFixed(1)),
+        periodB: Number((row.shareB * 100).toFixed(1)),
+        diff: Number((row.diffShare * 100).toFixed(1)),
         fill,
-        stroke: accent,
-        shareA: row.shareA,
-        shareB: row.shareB,
-      });
+        accent,
+      };
     });
-
-    // 右側：期間Bの各エリア
-    topDiffRows.forEach((row, index) => {
-      const { fill, accent } = palette[index % palette.length];
-      nodes.push({
-        name: row.label,
-        fill,
-        stroke: accent,
-        shareA: row.shareA,
-        shareB: row.shareB,
-      });
-    });
-
-    const totalRows = topDiffRows.length;
-
-    // リンク：期間A → 期間B（同じエリアを結ぶ）
-    topDiffRows.forEach((row, index) => {
-      const { accent } = palette[index % palette.length];
-      const valueA = scaleLinkValue(row);
-      links.push({
-        source: index,
-        target: index + totalRows,
-        value: valueA,
-        fill: toTransparentColor(accent, 0.22),
-        stroke: accent,
-        payload: { ...row, fill: accent } as ComparisonRow & { fill: string },
-      });
-    });
-
-    return { nodes, links };
   }, [topDiffRows, validComparison]);
 
-  const SankeyTooltipContent = ({
-    active,
-    payload,
-  }: {
-    active?: boolean;
-    payload?: Array<{ payload?: { payload?: typeof topDiffRows[number] } }>;
-  }) => {
-    if (!active || !payload || payload.length === 0) {
-      return null;
+  const comparisonShareDomain = useMemo<[number, number]>(() => {
+    if (comparisonBarData.length === 0) {
+      return [0, 100];
     }
-    const row = payload[0]?.payload?.payload;
-    if (!row) {
-      return null;
-    }
-    return (
-      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
-        <p className="font-semibold text-slate-800">{row.label}</p>
-        <p className="text-slate-600">期間A: {formatPercent(row.shareA)}</p>
-        <p className="text-slate-600">期間B: {formatPercent(row.shareB)}</p>
-        <p className="text-slate-500">
-          差分: {row.diffShare >= 0 ? "+" : ""}
-          {formatPercent(row.diffShare)}
-        </p>
-      </div>
+    const maxShare = Math.max(
+      ...comparisonBarData.map((row) => Math.max(row.periodA, row.periodB)),
+      5,
     );
-  };
+    return [0, Math.min(100, Math.ceil(maxShare + 1))];
+  }, [comparisonBarData]);
+
+  const comparisonDiffDomain = useMemo<[number, number]>(() => {
+    if (comparisonBarData.length === 0) {
+      return [-10, 10];
+    }
+    const maxAbs = Math.max(...comparisonBarData.map((row) => Math.abs(row.diff)), 1);
+    const padding = Math.ceil(maxAbs + 1);
+    return [-padding, padding];
+  }, [comparisonBarData]);
 
   const invalidRange = useMemo(() => Boolean(comparisonData?.invalid), [comparisonData]);
 
@@ -831,21 +762,61 @@ const MapAnalysisPage = () => {
   const ComparisonTooltipContent = ({
     active,
     payload,
+    label,
   }: {
     active?: boolean;
-    payload?: Array<{ value: number; name: string }>;
+    payload?: Array<{ name?: string | number; dataKey?: string | number; value?: number }>;
+    label?: string | number;
   }) => {
     if (!active || !payload || payload.length === 0) {
       return null;
     }
+    const safeLabel = typeof label === "string" ? label : "";
     return (
       <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
+        {safeLabel && <p className="mb-1 font-semibold text-slate-700">{safeLabel}</p>}
         {payload.map((entry) => (
-          <p key={entry.name} className="text-slate-600">
-            {entry.name}: {entry.value}%
+          <p key={entry.name ?? entry.dataKey?.toString()} className="text-slate-600">
+            {entry.name ?? entry.dataKey}: {typeof entry.value === "number" ? entry.value.toFixed(1) : entry.value}%
           </p>
         ))}
       </div>
+    );
+  };
+
+  const DiffLabel = ({
+    x,
+    y,
+    width,
+    height,
+    value,
+  }: {
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    value?: number;
+  }) => {
+    if (typeof x !== "number" || typeof y !== "number" || typeof width !== "number" || typeof height !== "number" || typeof value !== "number") {
+      return null;
+    }
+    const isPositive = value >= 0;
+    const endX = isPositive ? x + width : x;
+    const anchorX = endX + (isPositive ? 10 : -10);
+    const textAnchor = isPositive ? "start" : "end";
+    const textColor = isPositive ? "#047857" : "#b91c1c";
+    return (
+      <text
+        x={anchorX}
+        y={y + height / 2}
+        fill={textColor}
+        fontSize={11}
+        fontWeight={600}
+        dominantBaseline="middle"
+        textAnchor={textAnchor}
+      >
+        {`${isPositive ? "+" : ""}${value.toFixed(1)}%`}
+      </text>
     );
   };
 
@@ -1045,174 +1016,130 @@ const MapAnalysisPage = () => {
                       </div>
                     </div>
 
-                    {chartData.length > 0 && (
-                      <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-inner">
-                        <h3 className="text-sm font-semibold text-slate-800">割合が変化した上位エリア</h3>
-                        <p className="text-[11px] text-slate-500">縦軸: 地区、横軸: 各期間の来院割合（%）</p>
-                        <div className="mt-3 h-72">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={chartData} layout="vertical" margin={{ top: 12, right: 24, bottom: 12, left: 120 }}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis type="number" unit="%" domain={[0, 100]} />
-                              <YAxis dataKey="label" type="category" width={120} />
-                              <RechartsTooltip content={<ComparisonTooltipContent />} />
-                              <Legend />
-                              <Bar dataKey="periodA" name="期間A" fill="#6366f1" radius={[0, 6, 6, 0]} />
-                              <Bar dataKey="periodB" name="期間B" fill="#22c55e" radius={[0, 6, 6, 0]} />
-                            </BarChart>
-                          </ResponsiveContainer>
-                        </div>
-                      </div>
-                    )}
-                    <div className="flex flex-col gap-4 lg:flex-row">
-                      {/* 左側：サンキー図 */}
-                      {sankeyData && (
-                        <div className="flex-1 rounded-2xl border border-slate-100 bg-white p-6 lg:w-[65%]">
-                          <h3 className="mb-1 text-sm font-semibold text-slate-800">期間別エリアシェアのフロー</h3>
-                          <p className="mb-4 text-[11px] text-slate-500">
-                            左列が期間A、右列が期間B。同じ色の帯が同じエリアを表します。帯の太さが来院割合（%）を表します。
-                          </p>
-                          <div className="relative">
-                            <div className="flex justify-between px-6 pb-3 text-xs font-bold text-slate-700">
-                              <span>期間A</span>
-                              <span>期間B</span>
-                            </div>
-                            <div className="h-[700px] overflow-visible">
+                    {comparisonBarData.length > 0 && (
+                      <div className="space-y-4">
+                        <div className="flex flex-col gap-4 lg:flex-row">
+                          <div className="flex-1 rounded-2xl border border-slate-100 bg-white p-5 shadow-inner">
+                            <h3 className="text-sm font-semibold text-slate-800">期間Aの来院割合</h3>
+                            <p className="text-[11px] text-slate-500">棒の長さが期間Aにおける町丁目別の来院割合（%）です。</p>
+                            <div className="mt-4 h-80">
                               <ResponsiveContainer width="100%" height="100%">
-                                {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                                {/* @ts-ignore: Recharts types do not expose custom node/link renderer props */}
-                                <Sankey
-                                  data={sankeyData}
-                                  nodePadding={30}
-                                  nodeWidth={30}
-                                  linkCurvature={0.5}
-                                  iterations={64}
-                                  margin={{ top: 20, right: 180, bottom: 20, left: 180 }}
-                                  node={(nodeProps) => {
-                                    const anyProps = nodeProps as unknown as {
-                                      x?: number;
-                                      y?: number;
-                                      width?: number;
-                                      height?: number;
-                                      index?: number;
-                                      payload?: {
-                                        name?: string;
-                                        fill?: string;
-                                        stroke?: string;
-                                        shareA?: number;
-                                        shareB?: number;
-                                      };
-                                    };
-                                    const x = anyProps.x ?? 0;
-                                    const y = anyProps.y ?? 0;
-                                    const width = anyProps.width ?? 24;
-                                    const height = anyProps.height ?? 10;
-                                    const name = anyProps.payload?.name ?? "";
-                                    const fill = anyProps.payload?.fill ?? "#94a3b8";
-                                    const stroke = anyProps.payload?.stroke ?? fill;
-                                    const shareA = anyProps.payload?.shareA ?? 0;
-                                    const shareB = anyProps.payload?.shareB ?? 0;
-                                    const index = anyProps.index ?? 0;
-                                    const isLeft = index < (sankeyData.nodes.length / 2);
-                                    const share = isLeft ? shareA : shareB;
-                                    const shareText = `${(share * 100).toFixed(1)}%`;
-                                    const diffValue = (shareB - shareA) * 100;
-                                    const diffText = `${diffValue >= 0 ? "+" : ""}${diffValue.toFixed(1)}%`;
-                                    const diffColor = diffValue >= 0 ? stroke : "#991b1b";
-
-                                    return (
-                                      <g>
-                                        <rect
-                                          x={x}
-                                          y={y}
-                                          width={width}
-                                          height={height}
-                                          fill={fill}
-                                          rx={4}
-                                          opacity={0.65}
-                                          stroke={stroke}
-                                          strokeWidth={1.5}
-                                        />
-                                        <text
-                                          x={isLeft ? x - 10 : x + width + 10}
-                                          y={y + height / 2}
-                                          textAnchor={isLeft ? "end" : "start"}
-                                          alignmentBaseline="middle"
-                                          fontSize="11"
-                                          fontWeight="600"
-                                          fill="#1e293b"
-                                        >
-                                          {name}
-                                        </text>
-                                        <text
-                                          x={isLeft ? x - 10 : x + width + 10}
-                                          y={y + height / 2 + 13}
-                                          textAnchor={isLeft ? "end" : "start"}
-                                          alignmentBaseline="middle"
-                                          fontSize="10"
-                                          fontWeight="500"
-                                          fill="#64748b"
-                                        >
-                                          {shareText}
-                                        </text>
-                                        <text
-                                          x={isLeft ? x - 10 : x + width + 10}
-                                          y={y + height / 2 + 25}
-                                          textAnchor={isLeft ? "end" : "start"}
-                                          alignmentBaseline="middle"
-                                          fontSize="10"
-                                          fontWeight="600"
-                                          fill={diffColor}
-                                        >
-                                          Δ {diffText}
-                                        </text>
-                                      </g>
-                                    );
-                                  }}
-                                  link={(linkProps) => {
-                                    const anyLink = linkProps as {
-                                      d?: string;
-                                      linkWidth: number;
-                                      sourceX: number;
-                                      sourceY: number;
-                                      targetX: number;
-                                      targetY: number;
-                                      sourceControlX: number;
-                                      targetControlX: number;
-                                      payload: { stroke?: string; fill?: string; payload?: ComparisonRow & { fill?: string } };
-                                    };
-                                    const pathD = anyLink.d ?? "";
-                                    const row = anyLink.payload?.payload;
-                                    const accentColor = anyLink.payload?.stroke ?? row?.fill ?? "#64748b";
-                                    const fillColor = anyLink.payload?.fill ?? toTransparentColor(accentColor, 0.22);
-                                    const diffMagnitude = row ? Math.abs(row.diffShare) : 0;
-                                    const highlightWidth = Math.min(
-                                      Math.max(diffMagnitude * 900 + 1.6, 1.8),
-                                      (anyLink.linkWidth ?? 1) * 0.6 + 2.4,
-                                    );
-                                    const strokeOpacity = row && row.diffShare < 0 ? 0.5 : 0.75;
-                                    return (
-                                      <g>
-                                        <path d={pathD} fill={fillColor} stroke="none" />
-                                        <path
-                                          d={pathD}
-                                          fill="none"
-                                          stroke={accentColor}
-                                          strokeWidth={highlightWidth}
-                                          strokeOpacity={strokeOpacity}
-                                          strokeLinecap="round"
-                                        />
-                                      </g>
-                                    );
-                                  }}
-                                >
-                                  <RechartsTooltip content={<SankeyTooltipContent />} />
-                                </Sankey>
+                                <BarChart data={comparisonBarData} layout="vertical" margin={{ top: 12, right: 32, bottom: 12, left: 160 }}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                  <XAxis
+                                    type="number"
+                                    domain={comparisonShareDomain}
+                                    tickFormatter={(value: number) => `${value}%`}
+                                    stroke="#94a3b8"
+                                  />
+                                  <YAxis dataKey="label" type="category" width={160} tick={{ fontSize: 11, fill: "#475569" }} />
+                                  <RechartsTooltip content={<ComparisonTooltipContent />} />
+                                  <Bar dataKey="periodA" name="期間A 割合" radius={[0, 6, 6, 0]}>
+                                    {comparisonBarData.map((row) => (
+                                      <Cell
+                                        key={`periodA-${row.label}`}
+                                        fill={translucentFill(row.fill, 0.45)}
+                                        stroke={row.fill}
+                                        strokeWidth={1.2}
+                                      />
+                                    ))}
+                                    <LabelList
+                                      dataKey="periodA"
+                                      position="right"
+                                      formatter={(value) => `${typeof value === "number" ? value.toFixed(1) : value}%`}
+                                      fill="#1e293b"
+                                      fontSize={11}
+                                      offset={6}
+                                    />
+                                  </Bar>
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </div>
+                          <div className="flex-1 rounded-2xl border border-slate-100 bg-white p-5 shadow-inner">
+                            <h3 className="text-sm font-semibold text-slate-800">期間Bの来院割合</h3>
+                            <p className="text-[11px] text-slate-500">同じ町丁目の色は期間Aと揃えているため増減を視覚で追跡できます。</p>
+                            <div className="mt-4 h-80">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={comparisonBarData} layout="vertical" margin={{ top: 12, right: 32, bottom: 12, left: 160 }}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                  <XAxis
+                                    type="number"
+                                    domain={comparisonShareDomain}
+                                    tickFormatter={(value: number) => `${value}%`}
+                                    stroke="#94a3b8"
+                                  />
+                                  <YAxis dataKey="label" type="category" width={160} tick={{ fontSize: 11, fill: "#475569" }} />
+                                  <RechartsTooltip content={<ComparisonTooltipContent />} />
+                                  <Bar dataKey="periodB" name="期間B 割合" radius={[0, 6, 6, 0]}>
+                                    {comparisonBarData.map((row) => (
+                                      <Cell
+                                        key={`periodB-${row.label}`}
+                                        fill={solidFill(row.fill, 0.85)}
+                                        stroke={row.accent}
+                                        strokeWidth={1.2}
+                                      />
+                                    ))}
+                                    <LabelList
+                                      dataKey="periodB"
+                                      position="right"
+                                      formatter={(value) => `${typeof value === "number" ? value.toFixed(1) : value}%`}
+                                      fill="#1e293b"
+                                      fontSize={11}
+                                      offset={6}
+                                    />
+                                  </Bar>
+                                </BarChart>
                               </ResponsiveContainer>
                             </div>
                           </div>
                         </div>
-                      )}
+                        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-inner">
+                          <h3 className="text-sm font-semibold text-slate-800">増減率（期間B - 期間A）</h3>
+                          <p className="text-[11px] text-slate-500">
+                            破線の左側は減少、右側は増加を示します。値は期間Bの割合から期間Aの割合を引いたものです。
+                          </p>
+                          <div className="mt-4 h-80">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={comparisonBarData} layout="vertical" margin={{ top: 12, right: 48, bottom: 12, left: 160 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                <XAxis
+                                  type="number"
+                                  domain={comparisonDiffDomain}
+                                  tickFormatter={(value: number) => `${value}%`}
+                                  stroke="#94a3b8"
+                                />
+                                <YAxis dataKey="label" type="category" width={160} tick={{ fontSize: 11, fill: "#475569" }} />
+                                <RechartsTooltip content={<ComparisonTooltipContent />} />
+                                <ReferenceLine x={0} stroke="#94a3b8" strokeDasharray="4 4" />
+                                <Bar dataKey="diff" name="期間B - 期間A" radius={[6, 6, 6, 6]}>
+                                  {comparisonBarData.map((row) => (
+                                    <Cell
+                                      key={`diff-${row.label}`}
+                                      fill={row.diff >= 0 ? solidFill("#16a34a", 0.75) : solidFill("#dc2626", 0.8)}
+                                      stroke={row.diff >= 0 ? "#15803d" : "#b91c1c"}
+                                      strokeWidth={1.1}
+                                    />
+                                  ))}
+                                  <LabelList
+                                    content={({ x, y, width, height, value }) => (
+                                      <DiffLabel
+                                        x={typeof x === "number" ? x : undefined}
+                                        y={typeof y === "number" ? y : undefined}
+                                        width={typeof width === "number" ? width : undefined}
+                                        height={typeof height === "number" ? height : undefined}
+                                        value={typeof value === "number" ? value : undefined}
+                                      />
+                                    )}
+                                  />
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-4 lg:flex-row">
 
                       {/* 右側：増加/減少エリアカード */}
                       <div className="flex flex-col gap-4 lg:w-[35%]">
