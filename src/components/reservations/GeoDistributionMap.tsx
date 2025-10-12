@@ -533,6 +533,11 @@ export const GeoDistributionMap = ({
     [],
   );
 
+  const [townMaster, setTownMaster] = useState<TownCoordinate[] | null>(null);
+  const [municipalities, setMunicipalities] = useState<MunicipalityCoordinate[] | null>(null);
+  const [geoLoading, setGeoLoading] = useState<boolean>(false);
+  const [geoError, setGeoError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!departmentOptions.some((option) => option.value === selectedDepartment)) {
       setSelectedDepartment(ALL_DEPARTMENT);
@@ -653,11 +658,6 @@ export const GeoDistributionMap = ({
       missingLocationCount: missing,
     };
   }, [filteredRecords, municipalityIndex, municipalityMatchers]);
-
-  const [townMaster, setTownMaster] = useState<TownCoordinate[] | null>(null);
-  const [municipalities, setMunicipalities] = useState<MunicipalityCoordinate[] | null>(null);
-  const [geoLoading, setGeoLoading] = useState<boolean>(false);
-  const [geoError, setGeoError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
