@@ -638,22 +638,37 @@ type SankeyLinkDatum = { source: number; target: number; value: number; payload:
     }
     const nodes: SankeyNodeDatum[] = [];
     const links: SankeyLinkDatum[] = [];
+
+    // 左側：期間Aの各エリア
     topDiffRows.forEach((row) => {
-      nodes.push({ name: `期間A｜${row.label}`, fill: "#6366f1" });
+      nodes.push({
+        name: row.label,
+        fill: "#6366f1"
+      });
     });
+
+    // 右側：期間Bの各エリア
     topDiffRows.forEach((row) => {
-      nodes.push({ name: `期間B｜${row.label}`, fill: "#22c55e" });
+      nodes.push({
+        name: row.label,
+        fill: "#22c55e"
+      });
     });
+
     const totalRows = topDiffRows.length;
+
+    // リンク：期間A → 期間B
     topDiffRows.forEach((row, index) => {
-      const avgShare = ((row.shareA + row.shareB) / 2) * 100;
+      // 期間Aの割合を使用（0の場合は最小値0.01を設定）
+      const valueA = Math.max(row.shareA * 100, 0.01);
       links.push({
         source: index,
         target: index + totalRows,
-        value: Math.max(avgShare, 0.1),
+        value: valueA,
         payload: row,
       });
     });
+
     return { nodes, links };
   }, [topDiffRows, validComparison]);
 
@@ -945,47 +960,96 @@ type SankeyLinkDatum = { source: number; target: number; value: number; payload:
                       </div>
                     )}
                     {sankeyData && (
-                      <div className="rounded-2xl border border-slate-100 bg-white p-4">
-                        <h3 className="text-sm font-semibold text-slate-800">期間別エリアシェアのフロー</h3>
-                        <p className="text-[11px] text-slate-500">
-                          左列が期間A、右列が期間B。帯の太さが来院割合を表します。
+                      <div className="rounded-2xl border border-slate-100 bg-white p-6">
+                        <h3 className="mb-1 text-sm font-semibold text-slate-800">期間別エリアシェアのフロー</h3>
+                        <p className="mb-4 text-[11px] text-slate-500">
+                          左列が期間A（青）、右列が期間B（緑）。帯の太さが来院割合を表します。
                         </p>
-                        <div className="mt-4 h-80">
-                          <ResponsiveContainer width="100%" height="100%">
-                            {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-                            {/* @ts-ignore: Recharts types do not expose custom link renderer props */}
-                            <Sankey
-                              data={sankeyData}
-                              nodePadding={36}
-                              nodeWidth={12}
-                              linkCurvature={0.45}
-                              iterations={32}
-                              link={(linkProps) => {
-                                const anyProps = linkProps as unknown as {
-                                  path?: string;
-                                  link?: { payload?: ComparisonRow };
-                                  payload?: { payload?: ComparisonRow };
-                                };
-                                const path = typeof anyProps.path === "string" ? anyProps.path : "";
-                                const linkPayload = anyProps.link?.payload ?? anyProps.payload?.payload;
-                                const diffShare = linkPayload?.diffShare ?? 0;
-                                const positive = diffShare >= 0;
-                                const color = positive ? "rgba(34,197,94,0.35)" : "rgba(239,68,68,0.35)";
-                                const strokeColor = positive ? "rgba(34,197,94,0.65)" : "rgba(239,68,68,0.65)";
-                                return (
-                                  <path
-                                    d={path}
-                                    fill={color}
-                                    stroke={strokeColor}
-                                    strokeWidth={2}
-                                    opacity={0.9}
-                                  />
-                                );
-                              }}
-                            >
-                              <RechartsTooltip content={<SankeyTooltipContent />} />
-                            </Sankey>
-                          </ResponsiveContainer>
+                        <div className="relative">
+                          <div className="flex justify-between px-4 pb-2 text-xs font-semibold text-slate-600">
+                            <span className="text-indigo-600">期間A</span>
+                            <span className="text-emerald-600">期間B</span>
+                          </div>
+                          <div className="h-[500px] overflow-visible">
+                            <ResponsiveContainer width="100%" height="100%">
+                              {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+                              {/* @ts-ignore: Recharts types do not expose custom node/link renderer props */}
+                              <Sankey
+                                data={sankeyData}
+                                nodePadding={20}
+                                nodeWidth={20}
+                                linkCurvature={0.5}
+                                iterations={64}
+                                margin={{ top: 10, right: 160, bottom: 10, left: 160 }}
+                                node={(nodeProps) => {
+                                  const anyProps = nodeProps as unknown as {
+                                    x?: number;
+                                    y?: number;
+                                    width?: number;
+                                    height?: number;
+                                    index?: number;
+                                    payload?: { name?: string; fill?: string };
+                                  };
+                                  const x = anyProps.x ?? 0;
+                                  const y = anyProps.y ?? 0;
+                                  const width = anyProps.width ?? 20;
+                                  const height = anyProps.height ?? 10;
+                                  const name = anyProps.payload?.name ?? "";
+                                  const fill = anyProps.payload?.fill ?? "#94a3b8";
+                                  const isLeft = (anyProps.index ?? 0) < (sankeyData.nodes.length / 2);
+
+                                  return (
+                                    <g>
+                                      <rect
+                                        x={x}
+                                        y={y}
+                                        width={width}
+                                        height={height}
+                                        fill={fill}
+                                        rx={4}
+                                        opacity={0.9}
+                                      />
+                                      <text
+                                        x={isLeft ? x - 8 : x + width + 8}
+                                        y={y + height / 2}
+                                        textAnchor={isLeft ? "end" : "start"}
+                                        alignmentBaseline="middle"
+                                        fontSize="11"
+                                        fontWeight="500"
+                                        fill="#475569"
+                                      >
+                                        {name}
+                                      </text>
+                                    </g>
+                                  );
+                                }}
+                                link={(linkProps) => {
+                                  const anyProps = linkProps as unknown as {
+                                    path?: string;
+                                    link?: { payload?: ComparisonRow };
+                                    payload?: { payload?: ComparisonRow };
+                                  };
+                                  const path = typeof anyProps.path === "string" ? anyProps.path : "";
+                                  const linkPayload = anyProps.link?.payload ?? anyProps.payload?.payload;
+                                  const diffShare = linkPayload?.diffShare ?? 0;
+                                  const positive = diffShare >= 0;
+                                  const color = positive ? "rgba(34,197,94,0.25)" : "rgba(239,68,68,0.25)";
+                                  const strokeColor = positive ? "rgba(34,197,94,0.5)" : "rgba(239,68,68,0.5)";
+                                  return (
+                                    <path
+                                      d={path}
+                                      fill={color}
+                                      stroke={strokeColor}
+                                      strokeWidth={1}
+                                      opacity={0.8}
+                                    />
+                                  );
+                                }}
+                              >
+                                <RechartsTooltip content={<SankeyTooltipContent />} />
+                              </Sankey>
+                            </ResponsiveContainer>
+                          </div>
                         </div>
                       </div>
                     )}
