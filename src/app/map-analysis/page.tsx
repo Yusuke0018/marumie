@@ -4,13 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { RefreshCw, ArrowLeft } from "lucide-react";
-import {
-  type Reservation,
-  loadReservationsFromStorage,
-  loadReservationTimestamp,
-  RESERVATION_STORAGE_KEY,
-  RESERVATION_TIMESTAMP_KEY,
-} from "@/lib/reservationData";
+import { type KarteRecord } from "@/lib/karteAnalytics";
+import { getCompressedItem } from "@/lib/storageCompression";
+import { KARTE_STORAGE_KEY, KARTE_TIMESTAMP_KEY } from "@/lib/storageKeys";
 
 const GeoDistributionMap = dynamic(
   () =>
@@ -50,8 +46,62 @@ const buildPeriodLabel = (months: string[]): string => {
   return `${formatMonthLabel(first)}〜${formatMonthLabel(last)}`;
 };
 
+type MapRecord = {
+  department: string;
+  reservationMonth: string;
+  patientAge: number | null;
+  patientAddress: string | null;
+  patientPrefecture?: string | null;
+  patientCity?: string | null;
+  patientTown?: string | null;
+};
+
+const computeAgeFromBirth = (
+  birthIso: string | null,
+  visitIso: string,
+): number | null => {
+  if (!birthIso) {
+    return null;
+  }
+  const birthDate = new Date(birthIso);
+  const visitDate = new Date(visitIso);
+  if (
+    Number.isNaN(birthDate.getTime()) ||
+    Number.isNaN(visitDate.getTime())
+  ) {
+    return null;
+  }
+
+  let age = visitDate.getFullYear() - birthDate.getFullYear();
+  const visitMonth = visitDate.getMonth();
+  const birthMonth = birthDate.getMonth();
+
+  if (
+    visitMonth < birthMonth ||
+    (visitMonth === birthMonth && visitDate.getDate() < birthDate.getDate())
+  ) {
+    age -= 1;
+  }
+
+  return age >= 0 && age <= 120 ? age : null;
+};
+
+const extractAddressMeta = (
+  address: string | null,
+): { prefecture: string | null; city: string | null } => {
+  if (!address) {
+    return { prefecture: null, city: null };
+  }
+  const trimmed = address.trim();
+  const prefecture = trimmed.includes("大阪府") ? "大阪府" : null;
+  const cityMatch = trimmed.match(/大阪市[\p{Script=Han}]+区/u);
+  const city =
+    cityMatch?.[0] ?? (trimmed.startsWith("大阪市") ? "大阪市" : null);
+  return { prefecture, city };
+};
+
 const MapAnalysisPage = () => {
-  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [karteRecords, setKarteRecords] = useState<KarteRecord[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
   useEffect(() => {
@@ -59,21 +109,37 @@ const MapAnalysisPage = () => {
       return;
     }
 
-    const refreshReservations = () => {
-      const stored = loadReservationsFromStorage();
-      setReservations(stored);
-      const timestamp = loadReservationTimestamp();
-      setLastUpdated(timestamp);
+    const refreshKarteRecords = () => {
+      try {
+        const stored = getCompressedItem(KARTE_STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored) as KarteRecord[];
+          setKarteRecords(parsed);
+        } else {
+          setKarteRecords([]);
+        }
+      } catch (error) {
+        console.error("カルテデータの読み込みに失敗しました:", error);
+        setKarteRecords([]);
+      }
+
+      try {
+        const timestamp = window.localStorage.getItem(KARTE_TIMESTAMP_KEY);
+        setLastUpdated(timestamp);
+      } catch (error) {
+        console.error("タイムスタンプの読み込みに失敗しました:", error);
+        setLastUpdated(null);
+      }
     };
 
-    refreshReservations();
+    refreshKarteRecords();
 
     const handleStorage = (event: StorageEvent) => {
       if (
-        event.key === RESERVATION_STORAGE_KEY ||
-        event.key === RESERVATION_TIMESTAMP_KEY
+        event.key === KARTE_STORAGE_KEY ||
+        event.key === KARTE_TIMESTAMP_KEY
       ) {
-        refreshReservations();
+        refreshKarteRecords();
       }
     };
 
@@ -85,20 +151,47 @@ const MapAnalysisPage = () => {
 
   const availableMonths = useMemo(() => {
     const months = new Set<string>();
-    reservations.forEach((reservation) => {
-      if (reservation.reservationMonth) {
-        months.add(reservation.reservationMonth);
+    karteRecords.forEach((record) => {
+      if (record.monthKey) {
+        months.add(record.monthKey);
+      } else if (record.dateIso) {
+        months.add(record.dateIso.slice(0, 7));
       }
     });
     return Array.from(months);
-  }, [reservations]);
+  }, [karteRecords]);
+
+  const mapRecords = useMemo<MapRecord[]>(() => {
+    if (karteRecords.length === 0) {
+      return [];
+    }
+    return karteRecords
+      .map((record) => {
+        const month = record.monthKey ?? record.dateIso.slice(0, 7);
+        const address = record.patientAddress ?? null;
+        const { prefecture, city } = extractAddressMeta(address);
+        return {
+          department:
+            record.department && record.department.trim().length > 0
+              ? record.department.trim()
+              : "診療科未設定",
+          reservationMonth: month,
+          patientAge: computeAgeFromBirth(record.birthDateIso, record.dateIso),
+          patientAddress: address,
+          patientPrefecture: prefecture,
+          patientCity: city,
+          patientTown: null,
+        } satisfies MapRecord;
+      })
+      .filter((record) => record.reservationMonth.length > 0);
+  }, [karteRecords]);
 
   const periodLabel = useMemo(
     () => buildPeriodLabel(availableMonths),
     [availableMonths],
   );
 
-  const isEmpty = reservations.length === 0;
+  const isEmpty = mapRecords.length === 0;
 
   return (
     <main className="min-h-screen bg-background">
@@ -115,16 +208,16 @@ const MapAnalysisPage = () => {
                 マップ分析
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                予約CSVから取り込んだ患者の年代・診療科・住所データをもとに、来院エリアを町丁目レベルで可視化します。診療科や年代を切り替えながら、来院傾向の偏りや新規獲得余地を探索できます。
+                カルテ集計CSVから取り込んだ患者の年代・診療科・住所データをもとに、来院エリアを町丁目レベルで可視化します。診療科や年代を切り替えながら、来院傾向の偏りや新規獲得余地を探索できます。
               </p>
             </div>
             <div className="flex flex-col items-start gap-3 text-sm text-slate-600">
               <Link
-                href="/reservations"
+                href="/patients"
                 className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
               >
                 <ArrowLeft className="h-4 w-4" />
-                予約分析に戻る
+                患者分析に戻る
               </Link>
               {lastUpdated && (
                 <p className="text-xs font-medium text-slate-500">
@@ -139,10 +232,10 @@ const MapAnalysisPage = () => {
           <section className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-700 shadow-sm">
             <div className="flex items-center gap-3 text-indigo-600">
               <RefreshCw className="h-5 w-5 animate-spin" />
-              <p className="text-sm font-semibold">地図に表示できる予約データがありません。</p>
+              <p className="text-sm font-semibold">地図に表示できるカルテデータがありません。</p>
             </div>
             <p className="mt-4 text-sm">
-              まずは「予約分析」ページで予約CSVを取り込み、診療科や期間を選んだ上で来院データを保存してください。保存後にこのページを再読み込みすると、最新情報が反映されます。
+              まずは「患者分析」ページでカルテ集計CSVを取り込み、保存してください。保存後にこのページを開き直すと、最新情報が反映されます。
             </p>
           </section>
         ) : (
@@ -160,10 +253,10 @@ const MapAnalysisPage = () => {
                 </div>
                 <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3">
                   <p className="text-xs font-semibold text-emerald-500">
-                    予約件数
+                    カルテ件数
                   </p>
                   <p className="mt-1 text-lg font-bold text-emerald-700">
-                    {reservations.length.toLocaleString("ja-JP")}件
+                    {mapRecords.length.toLocaleString("ja-JP")}件
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
@@ -180,7 +273,7 @@ const MapAnalysisPage = () => {
             </div>
 
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
-              <GeoDistributionMap reservations={reservations} periodLabel={periodLabel} />
+              <GeoDistributionMap reservations={mapRecords} periodLabel={periodLabel} />
             </section>
           </section>
         )}

@@ -9,6 +9,7 @@ export type KarteRecord = {
   department?: string | null;
   points?: number | null;
   patientNameNormalized?: string | null;
+  patientAddress?: string | null;
 };
 
 export type KarteMonthlyStat = {

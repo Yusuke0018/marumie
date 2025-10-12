@@ -507,6 +507,12 @@ const parseKarteCsv = (text: string): KarteRecord[] => {
     const patientNameNormalized = normalizePatientName(
       row["患者氏名"] ?? row["患者名"] ?? row["氏名"],
     );
+    const patientAddressRaw =
+      row["患者住所"] ?? row["住所"] ?? row["住所1"] ?? row["患者住所1"];
+    const patientAddress =
+      typeof patientAddressRaw === "string" && patientAddressRaw.trim().length > 0
+        ? patientAddressRaw.trim()
+        : null;
 
     records.push({
       dateIso,
@@ -517,6 +523,7 @@ const parseKarteCsv = (text: string): KarteRecord[] => {
       department,
       points,
       patientNameNormalized,
+      patientAddress,
     });
   }
 

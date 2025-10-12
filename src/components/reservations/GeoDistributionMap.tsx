@@ -3,12 +3,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, Tooltip } from "react-leaflet";
 import type { LatLngExpression } from "leaflet";
-import type { Reservation } from "@/lib/reservationData";
 import "leaflet/dist/leaflet.css";
 
 type GeoDistributionMapProps = {
-  reservations: Reservation[];
+  reservations: MapVisualizationRecord[];
   periodLabel: string;
+};
+
+type MapVisualizationRecord = {
+  department: string;
+  reservationMonth: string;
+  patientAge: number | null;
+  patientPrefecture?: string | null;
+  patientCity?: string | null;
+  patientTown?: string | null;
+  patientAddress: string | null;
 };
 
 type TownCoordinate = {
@@ -42,6 +51,13 @@ const AGE_BAND_COLOR_MAP: Record<AgeBandId, string> = {
   unknown: "#94a3b8",
 };
 
+const COLOR_MODES = [
+  { value: "age", label: "年代別カラー" },
+  { value: "count", label: "件数ヒートマップ" },
+] as const;
+
+type ColorMode = (typeof COLOR_MODES)[number]["value"];
+
 const KANJI_DIGITS = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"] as const;
 const DASH_REGEX = /[－―ーｰ‐]/g;
 const FULL_WIDTH_DIGITS = /[０-９]/g;
@@ -51,6 +67,25 @@ const ALL_PERIOD = "__all_period__";
 const ALL_AGE_BAND = "all" as const;
 
 type AgeFilterValue = AgeBandId | typeof ALL_AGE_BAND;
+
+const COUNT_COLOR_START = { r: 219, g: 234, b: 254 }; // #dbebfe
+const COUNT_COLOR_END = { r: 30, g: 64, b: 175 }; // #1e40af
+
+const lerp = (start: number, end: number, t: number) => start + (end - start) * t;
+
+const toHexComponent = (value: number) =>
+  Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, "0");
+
+const interpolateCountColor = (value: number, maxValue: number): string => {
+  if (!Number.isFinite(value) || value <= 0 || !Number.isFinite(maxValue) || maxValue <= 0) {
+    return "#bfdbfe";
+  }
+  const clamped = Math.max(0, Math.min(1, value / maxValue));
+  const r = lerp(COUNT_COLOR_START.r, COUNT_COLOR_END.r, clamped);
+  const g = lerp(COUNT_COLOR_START.g, COUNT_COLOR_END.g, clamped);
+  const b = lerp(COUNT_COLOR_START.b, COUNT_COLOR_END.b, clamped);
+  return `#${toHexComponent(r)}${toHexComponent(g)}${toHexComponent(b)}`;
+};
 
 type DerivedSegments = {
   prefecture: string | null;
@@ -73,7 +108,6 @@ type MapPoint = LocationAggregation & {
   latitude: number;
   longitude: number;
   matchedTownName: string;
-  markerColor: string;
   dominantAgeBandId: AgeBandId;
   radius: number;
 };
@@ -410,6 +444,7 @@ export const GeoDistributionMap = ({
   const [selectedPeriod, setSelectedPeriod] = useState<string>(ALL_PERIOD);
   const [selectedAgeBand, setSelectedAgeBand] =
     useState<AgeFilterValue>(ALL_AGE_BAND);
+  const [colorMode, setColorMode] = useState<ColorMode>("age");
 
   useEffect(() => {
     if (!departmentOptions.some((option) => option.value === selectedDepartment)) {
@@ -653,21 +688,11 @@ export const GeoDistributionMap = ({
         dominantAgeBandId = bestValue > 0 ? bestId : "unknown";
       }
 
-      const markerColor =
-        selectedAgeBand === ALL_AGE_BAND
-          ? AGE_BAND_COLOR_MAP[dominantAgeBandId]
-          : AGE_BAND_COLOR_MAP[
-              selectedAgeBand === "unknown"
-                ? "unknown"
-                : (selectedAgeBand as AgeBandId)
-            ];
-
       result.push({
         ...group,
         latitude: coordinate.lat,
         longitude: coordinate.lng,
         matchedTownName: coordinate.town,
-        markerColor,
         dominantAgeBandId,
         radius: computeRadius(group.total),
       });
@@ -675,6 +700,11 @@ export const GeoDistributionMap = ({
 
     return { mappedPoints: result, unmatchedCount: unmatchedTotals };
   }, [coordinateIndex, groupedLocations, selectedAgeBand]);
+
+  const maxPointTotal = useMemo(
+    () => mappedPoints.reduce((max, point) => (point.total > max ? point.total : max), 0),
+    [mappedPoints],
+  );
 
   const totalFiltered = filteredRecords.length;
   const mappedTotal = mappedPoints.reduce((sum, point) => sum + point.total, 0);
@@ -694,6 +724,19 @@ export const GeoDistributionMap = ({
     ageFilterOptions.find((option) => option.value === selectedAgeBand)?.label ??
     "全ての年代";
 
+  const ageSummary = useMemo(() => {
+    const totals = createAgeBreakdown();
+    filteredRecords.forEach(({ ageBand }) => {
+      totals[ageBand.id] = (totals[ageBand.id] ?? 0) + 1;
+    });
+    const total = Object.values(totals).reduce((sum, value) => sum + value, 0);
+    const rows = AGE_BANDS.map((band) => {
+      const count = totals[band.id] ?? 0;
+      const share = total > 0 ? Math.round((count / total) * 1000) / 10 : 0;
+      return { id: band.id, label: band.label, total: count, share };
+    });
+    return { totals, total, rows };
+  }, [filteredRecords]);
   const topLocations = useMemo(() => {
     return [...mappedPoints]
       .sort((a, b) => b.total - a.total)
@@ -753,6 +796,22 @@ export const GeoDistributionMap = ({
             ))}
           </select>
         </label>
+        <label className="flex items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            表示モード
+          </span>
+          <select
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            value={colorMode}
+            onChange={(event) => setColorMode(event.target.value as ColorMode)}
+          >
+            {COLOR_MODES.map((mode) => (
+              <option key={mode.value} value={mode.value}>
+                {mode.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)]">
@@ -768,38 +827,68 @@ export const GeoDistributionMap = ({
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
             />
-            {mappedPoints.map((point) => (
-              <CircleMarker
-                key={point.id}
-                center={[point.latitude, point.longitude]}
-                radius={point.radius}
-                pathOptions={{
-                  color: point.markerColor,
-                  weight: 1.5,
-                  fillOpacity: 0.45,
-                }}
-              >
-                <Tooltip direction="top" offset={[0, -point.radius]} opacity={1}>
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-slate-900">
-                      {point.locationLabel}
-                    </p>
-                    <p className="text-xs text-slate-600">
-                      件数: {point.total.toLocaleString("ja-JP")}件
-                    </p>
-                    <p className="text-xs text-slate-600">
-                      主要年代:
-                      {" "}
-                      {AGE_BANDS.find((band) => band.id === point.dominantAgeBandId)?.label ??
-                        "不明"}
-                    </p>
-                    <p className="text-xs text-slate-600">
-                      上位診療科: {formatTopDepartments(point)}
-                    </p>
-                  </div>
-                </Tooltip>
-              </CircleMarker>
-            ))}
+            {mappedPoints.map((point) => {
+              const ageColor =
+                selectedAgeBand === ALL_AGE_BAND
+                  ? AGE_BAND_COLOR_MAP[point.dominantAgeBandId]
+                  : AGE_BAND_COLOR_MAP[
+                      selectedAgeBand === "unknown"
+                        ? "unknown"
+                        : (selectedAgeBand as AgeBandId)
+                    ];
+              const markerColor =
+                colorMode === "age"
+                  ? ageColor
+                  : interpolateCountColor(point.total, maxPointTotal || point.total);
+              const fillOpacity = colorMode === "age" ? 0.45 : 0.65;
+
+              const ageDetails = AGE_BANDS.filter(
+                (band) => point.ageBreakdown[band.id] > 0,
+              )
+                .map(
+                  (band) =>
+                    `${band.label} ${point.ageBreakdown[band.id].toLocaleString("ja-JP")}件`,
+                )
+                .join(" / ");
+
+              return (
+                <CircleMarker
+                  key={point.id}
+                  center={[point.latitude, point.longitude]}
+                  radius={point.radius}
+                  pathOptions={{
+                    color: markerColor,
+                    weight: 1.5,
+                    fillOpacity,
+                  }}
+                >
+                  <Tooltip direction="top" offset={[0, -point.radius]} opacity={1}>
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-slate-900">
+                        {point.locationLabel}
+                      </p>
+                      <p className="text-xs text-slate-600">
+                        件数: {point.total.toLocaleString("ja-JP")}件
+                      </p>
+                      <p className="text-xs text-slate-600">
+                        主要年代:
+                        {" "}
+                        {AGE_BANDS.find((band) => band.id === point.dominantAgeBandId)
+                          ?.label ?? "不明"}
+                      </p>
+                      {ageDetails.length > 0 && (
+                        <p className="text-[11px] leading-4 text-slate-500">
+                          年代内訳: {ageDetails}
+                        </p>
+                      )}
+                      <p className="text-xs text-slate-600">
+                        上位診療科: {formatTopDepartments(point)}
+                      </p>
+                    </div>
+                  </Tooltip>
+                </CircleMarker>
+              );
+            })}
           </MapContainer>
           {geoLoading && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-white/60 text-sm font-medium text-slate-600">
@@ -872,29 +961,78 @@ export const GeoDistributionMap = ({
 
           <div className="mt-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              年代レジェンド
+              年代内訳
             </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {AGE_BANDS.filter((band) => band.id !== "unknown").map((band) => (
-                <span
-                  key={band.id}
-                  className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-[12px]"
-                >
+            {ageSummary.total > 0 ? (
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {ageSummary.rows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+                  >
+                    <span className="flex items-center gap-2 font-semibold text-slate-800">
+                      <span
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: AGE_BAND_COLOR_MAP[row.id] }}
+                      />
+                      {row.label}
+                    </span>
+                    <span className="text-xs text-slate-600">
+                      {row.total.toLocaleString("ja-JP")}件
+                      {row.total > 0 && (
+                        <span className="ml-1 text-[11px] text-slate-500">
+                          ({row.share.toFixed(1)}%)
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-slate-500">年代情報がありません。</p>
+            )}
+          </div>
+
+          <div className="mt-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {colorMode === "age" ? "年代レジェンド" : "件数レジェンド"}
+            </p>
+            {colorMode === "age" ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {AGE_BANDS.filter((band) => band.id !== "unknown").map((band) => (
+                  <span
+                    key={band.id}
+                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-[12px]"
+                  >
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: AGE_BAND_COLOR_MAP[band.id] }}
+                    />
+                    {band.label}
+                  </span>
+                ))}
+                <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-[12px]">
                   <span
                     className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: AGE_BAND_COLOR_MAP[band.id] }}
+                    style={{ backgroundColor: AGE_BAND_COLOR_MAP.unknown }}
                   />
-                  {band.label}
+                  年齢不明
                 </span>
-              ))}
-              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-[12px]">
-                <span
-                  className="h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: AGE_BAND_COLOR_MAP.unknown }}
-                />
-                年齢不明
-              </span>
-            </div>
+              </div>
+            ) : (
+              <>
+                <div className="mt-2 h-3 w-full rounded-full bg-gradient-to-r from-[#dbeafe] via-[#60a5fa] to-[#1d4ed8]" />
+                <div className="mt-1 flex justify-between text-[11px] text-slate-500">
+                  <span>件数少</span>
+                  <span>件数多</span>
+                </div>
+              </>
+            )}
+            <p className="mt-1 text-[11px] text-slate-500">
+              {colorMode === "age"
+                ? "丸の色は主要な年代を示し、サイズは件数に比例します。"
+                : "丸の色と濃さが件数の多さを示し、サイズは件数に比例します。"}
+            </p>
           </div>
 
           <div className="mt-4">
@@ -906,14 +1044,37 @@ export const GeoDistributionMap = ({
                 {topLocations.map((point, index) => (
                   <li
                     key={point.id}
-                    className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2"
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2"
                   >
-                    <span className="font-semibold text-slate-800">
-                      {index + 1}. {point.locationLabel}
-                    </span>
-                    <span className="font-semibold text-slate-700">
-                      {point.total.toLocaleString("ja-JP")}件
-                    </span>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="font-semibold text-slate-800">
+                        {index + 1}. {point.locationLabel}
+                      </span>
+                      <span className="font-semibold text-slate-700">
+                        {point.total.toLocaleString("ja-JP")}件
+                      </span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500">
+                      {AGE_BANDS.filter((band) => point.ageBreakdown[band.id] > 0).map(
+                        (band) => (
+                          <span key={band.id} className="inline-flex items-center gap-1">
+                            <span
+                              className="h-2 w-2 rounded-full"
+                              style={{ backgroundColor: AGE_BAND_COLOR_MAP[band.id] }}
+                            />
+                            {band.label}
+                            {" "}
+                            {point.ageBreakdown[band.id].toLocaleString("ja-JP")}件
+                          </span>
+                        ),
+                      )}
+                      {Object.values(point.ageBreakdown).every((value) => value === 0) && (
+                        <span>年代情報なし</span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      上位診療科: {formatTopDepartments(point)}
+                    </p>
                   </li>
                 ))}
               </ul>
