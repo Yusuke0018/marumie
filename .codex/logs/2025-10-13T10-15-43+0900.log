@@ -1,0 +1,11 @@
+timestamp: 2025-10-13 10:15:43 JST
+branch: main
+commit: cebecaa31f2b7370a660d9c6a60cb4b64f8f06aa
+summary: exclude unknown-address rows from area trend visuals
+changes:
+  - src/app/map-analysis/page.tsx
+tests:
+  - npm run lint (pass)
+  - npm run typecheck (pass)
+  - npm run build (pass)
+push: origin/main (pending)
