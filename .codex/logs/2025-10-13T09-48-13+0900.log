@@ -1,0 +1,11 @@
+timestamp: 2025-10-13 09:48:13 JST
+branch: main
+commit: 45e388be8b37a92700b67f458bf2fd6579e2fe7f
+summary: redesign map analysis to surface monthly area/age momentum at a glance
+changes:
+  - src/app/map-analysis/page.tsx
+tests:
+  - npm run lint (pass)
+  - npm run typecheck (pass)
+  - npm run build (pass)
+push: origin/main (pending)
