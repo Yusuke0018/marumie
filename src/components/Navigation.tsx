@@ -89,15 +89,15 @@ export default function Navigation() {
               </div>
               {showPeriodBadge && (
                 <div className="flex justify-start sm:justify-end">
-                  <span className="inline-flex items-center gap-4 rounded-full border-2 border-brand-500 bg-white px-5 py-2 shadow-lg shadow-brand-500/30">
-                    <span className="period-pulse flex h-10 w-10 items-center justify-center rounded-full bg-brand-500 text-white shadow-inner">
+                  <span className="inline-flex items-center gap-4 rounded-full border-2 border-accent-400 bg-accent-50/90 px-5 py-2 text-accent-600 shadow-lg shadow-accent-400/40">
+                    <span className="period-pulse flex h-10 w-10 items-center justify-center rounded-full bg-accent-500 text-white shadow-inner">
                       <CalendarRange className="h-5 w-5" />
                     </span>
                     <span className="flex flex-col gap-1">
-                      <span className="text-xs font-semibold tracking-[0.2em] text-brand-500">
+                      <span className="text-xs font-semibold tracking-[0.3em] text-accent-500">
                         表示期間
                       </span>
-                      <span className="inline-flex w-full items-center justify-start rounded-md bg-brand-50 px-3 py-1 text-sm font-bold text-brand-700">
+                      <span className="inline-flex w-full items-center justify-start rounded-md bg-white px-3 py-1 text-sm font-bold text-slate-900">
                         {analysisPeriodLabel}
                       </span>
                     </span>
