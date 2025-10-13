@@ -1,0 +1,10 @@
+timestamp: 2025-10-13T16-16-52+0900
+branch: main
+commit: c1e908af8560cfb24aace1aa4a3630fbead913fd
+summary: 表示期間バッジの配色改善
+changes: src/app/globals.css (アクセントカラーでのグロー調整)
+  src/components/Navigation.tsx (アクセント配色と文字色の更新)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: pending
