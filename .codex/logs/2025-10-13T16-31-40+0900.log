@@ -1,0 +1,9 @@
+timestamp: 2025-10-13T16-31-40+0900
+branch: main
+commit: 9136b2cec0c74cd43f02cb2f32c8c50a488e7751
+summary: 比較モードのマップ選択と表示更新
+changes: src/app/map-analysis/page.tsx (地図モーダル追加、期間ラベルの実期間表示、ツールチップ更新)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: pending
