@@ -1,0 +1,9 @@
+timestamp: 2025-10-13T15-45-32+0900
+branch: main
+commit: 896a65ccd39453702a9275f9b54bb98c77380bc8
+summary: ナビゲーションの期間表示を調整
+changes: src/components/Navigation.tsx (ロゴの折返し防止、表示期間バッジを縦レイアウトとハイライト配色に変更)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: pending
