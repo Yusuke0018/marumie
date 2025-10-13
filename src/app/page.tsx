@@ -11,6 +11,7 @@ import {
   CalendarClock,
   ClipboardList,
   BarChart3,
+  Map as MapIcon,
 } from "lucide-react";
 import { getCompressedItem } from "@/lib/storageCompression";
 import { KARTE_STORAGE_KEY, KARTE_TIMESTAMP_KEY } from "@/lib/storageKeys";
@@ -349,6 +350,14 @@ export default function HomePage() {
         "予約ログの時間帯・曜日・診療科ごとの傾向を可視化し、初診・再診バランスや当日予約の動きを確認できます。",
       highlights: ["時間帯別", "曜日別", "差分比較"],
       icon: CalendarClock,
+    },
+    {
+      href: "/map-analysis" as const,
+      title: "マップ分析",
+      description:
+        "町丁目単位のヒートマップと期間比較で来院エリアの偏りを把握し、重点フォロー地区を素早く抽出できます。",
+      highlights: ["町丁目比較", "期間差分", "ヒートマップ"],
+      icon: MapIcon,
     },
     {
       href: "/survey" as const,

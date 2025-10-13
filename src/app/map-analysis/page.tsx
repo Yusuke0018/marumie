@@ -1139,8 +1139,9 @@ const MapAnalysisPage = () => {
       return [];
     }
     const dataMap = new Map(comparisonBarData.map((row) => [row.id, row]));
-    const sourceIds =
-      selectedAreaIds.length > 0 ? selectedAreaIds : defaultAreaIds;
+    const useCustomSelection =
+      hasCustomSelection || selectedAreaIds.length > 0;
+    const sourceIds = useCustomSelection ? selectedAreaIds : defaultAreaIds;
     const orderedUnique = sourceIds.filter(
       (id, index, array) => array.indexOf(id) === index,
     );
@@ -1166,7 +1167,13 @@ const MapAnalysisPage = () => {
         };
       })
       .filter((row): row is (typeof comparisonBarData)[number] => Boolean(row));
-  }, [comparisonBarData, selectedAreaIds, defaultAreaIds, areaLabelMap]);
+  }, [
+    comparisonBarData,
+    selectedAreaIds,
+    defaultAreaIds,
+    areaLabelMap,
+    hasCustomSelection,
+  ]);
 
   const areaOptions = useMemo(() => {
     const options = comparisonBarData.map((row) => ({
@@ -1191,7 +1198,6 @@ const MapAnalysisPage = () => {
       if (!option) {
         return;
       }
-      setHasCustomSelection(true);
       setAreaLabelMap((prev) => {
         if (prev[areaId]) {
           return prev;
@@ -1202,18 +1208,16 @@ const MapAnalysisPage = () => {
         if (prev.includes(areaId)) {
           return prev;
         }
-        let next = [...prev, areaId];
-        let reachedLimit = false;
-        if (next.length > MAX_SELECTED_AREAS) {
-          next = next.slice(next.length - MAX_SELECTED_AREAS);
-          reachedLimit = true;
+        if (prev.length >= MAX_SELECTED_AREAS) {
+          showSelectionFeedback(
+            "limit",
+            `比較対象は最大${MAX_SELECTED_AREAS}件までです。`,
+          );
+          return prev;
         }
-        const tone = reachedLimit ? "limit" : "added";
-        const message = reachedLimit
-          ? `${option.label} を比較に追加しました（最大${MAX_SELECTED_AREAS}件に到達）`
-          : `${option.label} を比較に追加しました`;
-        showSelectionFeedback(tone, message);
-        return next;
+        showSelectionFeedback("added", `${option.label} を比較に追加しました`);
+        setHasCustomSelection(true);
+        return [...prev, areaId];
       });
       setFocusAreaId(areaId);
       setPendingAreaId("");
@@ -1276,7 +1280,6 @@ const MapAnalysisPage = () => {
     };
 
   const handleRemoveArea = (areaId: string) => {
-    setHasCustomSelection(true);
     setSelectedAreaIds((prev) => {
       if (!prev.includes(areaId)) {
         return prev;
@@ -1289,6 +1292,11 @@ const MapAnalysisPage = () => {
         showSelectionFeedback("removed", `${label} を比較対象から外しました`);
       } else {
         showSelectionFeedback("removed", "選択した地区を比較対象から外しました");
+      }
+      if (next.length === 0) {
+        setHasCustomSelection(false);
+      } else {
+        setHasCustomSelection(true);
       }
       return next;
     });
@@ -1347,23 +1355,20 @@ const MapAnalysisPage = () => {
       areaLabelMap[areaId] ??
       areaOptions.find((option) => option.id === areaId)?.label ??
       "選択した地区";
-    setHasCustomSelection(true);
     setSelectedAreaIds((prev) => {
       if (prev.includes(areaId)) {
         return prev;
       }
-      let next = [...prev, areaId];
-      let reachedLimit = false;
-      if (next.length > MAX_SELECTED_AREAS) {
-        next = next.slice(next.length - MAX_SELECTED_AREAS);
-        reachedLimit = true;
+      if (prev.length >= MAX_SELECTED_AREAS) {
+        showSelectionFeedback(
+          "limit",
+          `比較対象は最大${MAX_SELECTED_AREAS}件までです。`,
+        );
+        return prev;
       }
-      const tone = reachedLimit ? "limit" : "added";
-      const message = reachedLimit
-        ? `${label} を比較に追加しました（最大${MAX_SELECTED_AREAS}件に到達）`
-        : `${label} を比較に追加しました`;
-      showSelectionFeedback(tone, message);
-      return next;
+      showSelectionFeedback("added", `${label} を比較に追加しました`);
+      setHasCustomSelection(true);
+      return [...prev, areaId];
     });
     setFocusAreaId(areaId);
   };
@@ -1382,7 +1387,6 @@ const MapAnalysisPage = () => {
 
   const handleToggleAreaFromMap = useCallback(
     (area: AreaSelectionMeta) => {
-      setHasCustomSelection(true);
       setAreaLabelMap((prev) => {
         if (prev[area.id]) {
           return prev;
@@ -1400,19 +1404,23 @@ const MapAnalysisPage = () => {
             "removed",
             `${area.label} を比較対象から外しました`,
           );
-        } else {
-          next = [...prev, area.id];
-          let reachedLimit = false;
-          if (next.length > MAX_SELECTED_AREAS) {
-            next = next.slice(next.length - MAX_SELECTED_AREAS);
-            reachedLimit = true;
+          if (next.length === 0) {
+            setHasCustomSelection(false);
+          } else {
+            setHasCustomSelection(true);
           }
+        } else {
+          if (prev.length >= MAX_SELECTED_AREAS) {
+            showSelectionFeedback(
+              "limit",
+              `比較対象は最大${MAX_SELECTED_AREAS}件までです。`,
+            );
+            return prev;
+          }
+          next = [...prev, area.id];
           nextFocus = area.id;
-          const tone = reachedLimit ? "limit" : "added";
-          const message = reachedLimit
-            ? `${area.label} を比較に追加しました（最大${MAX_SELECTED_AREAS}件に到達）`
-            : `${area.label} を比較に追加しました`;
-          showSelectionFeedback(tone, message);
+          showSelectionFeedback("added", `${area.label} を比較に追加しました`);
+          setHasCustomSelection(true);
         }
         setFocusAreaId(nextFocus);
         return next;
