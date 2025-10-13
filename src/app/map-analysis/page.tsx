@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, type ChangeEvent } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { RefreshCw, ArrowLeft } from "lucide-react";
+import { RefreshCw, ArrowLeft, Target, Plus, X } from "lucide-react";
 import { type KarteRecord } from "@/lib/karteAnalytics";
 import { getCompressedItem } from "@/lib/storageCompression";
 import { KARTE_STORAGE_KEY, KARTE_TIMESTAMP_KEY } from "@/lib/storageKeys";
@@ -19,6 +19,11 @@ import {
   AreaChart,
   Area,
   Legend,
+  BarChart,
+  Bar,
+  Cell,
+  ReferenceLine,
+  LabelList,
 } from "recharts";
 
 const KANJI_DIGITS = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"] as const;
@@ -35,6 +40,15 @@ const AGE_BANDS = [
 ] as const;
 
 type AgeBandId = (typeof AGE_BANDS)[number]["id"];
+
+const createEmptyAgeBreakdown = () =>
+  AGE_BANDS.reduce(
+    (acc, band) => {
+      acc[band.id] = 0;
+      return acc;
+    },
+    {} as Record<AgeBandId, number>,
+  );
 
 const toHalfWidthDigits = (value: string): string =>
   value.replace(FULL_WIDTH_DIGITS, (digit) =>
@@ -168,6 +182,17 @@ type MapRecord = {
   patientBaseTown?: string | null;
 };
 
+type ComparisonRow = {
+  id: string;
+  label: string;
+  countA: number;
+  countB: number;
+  shareA: number;
+  shareB: number;
+  diff: number;
+  diffShare: number;
+};
+
 type AreaSelectionMeta = {
   id: string;
   label: string;
@@ -224,6 +249,8 @@ type SummaryEntry = {
   town?: string | null;
   type: "area" | "age";
 };
+
+type ComparisonRange = { start: string | null; end: string | null };
 
 const buildAreaSeries = (
   records: MapRecord[],
@@ -469,6 +496,32 @@ const AGE_BAND_COLOR_MAP: Record<AgeBandId, string> = {
   "80+": "#ef4444",
   unknown: "#94a3b8",
 };
+
+const AREA_COLOR_PALETTE: Array<{ fill: string; accent: string }> = [
+  { fill: "#2563eb", accent: "#1d4ed8" },
+  { fill: "#0f766e", accent: "#0b5f59" },
+  { fill: "#b45309", accent: "#92400e" },
+  { fill: "#be123c", accent: "#9f1239" },
+  { fill: "#7c3aed", accent: "#6d28d9" },
+  { fill: "#db2777", accent: "#be185d" },
+  { fill: "#0ea5e9", accent: "#0284c7" },
+  { fill: "#ea580c", accent: "#c2410c" },
+];
+
+const toTransparentColor = (hex: string, alpha: number) => {
+  const sanitized = hex.replace("#", "");
+  const bigint = Number.parseInt(sanitized, 16);
+  if (Number.isNaN(bigint)) {
+    return hex;
+  }
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const translucentFill = (hex: string, alpha = 0.4) => toTransparentColor(hex, alpha);
+const solidFill = (hex: string, alpha = 0.85) => toTransparentColor(hex, alpha);
 
 const computeAgeFromBirth = (
   birthIso: string | null,
@@ -722,7 +775,11 @@ const MapAnalysisPage = () => {
     useState<AgeBandId | null>(null);
   const [ageViewMode, setAgeViewMode] = useState<AgeViewMode>("ratio");
   const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>([]);
+  const [hasCustomSelection, setHasCustomSelection] = useState(false);
   const [focusAreaId, setFocusAreaId] = useState<string | null>(null);
+  const [pendingAreaId, setPendingAreaId] = useState<string>("");
+  const [rangeA, setRangeA] = useState<ComparisonRange>({ start: null, end: null });
+  const [rangeB, setRangeB] = useState<ComparisonRange>({ start: null, end: null });
 
   useEffect(() => {
     setSelectedAgeMonthIndex(
@@ -772,6 +829,30 @@ const MapAnalysisPage = () => {
     [areaSeries, ageSeries, filteredMonths],
   );
 
+  useEffect(() => {
+    if (sortedMonths.length === 0) {
+      return;
+    }
+    setRangeA((prev) => {
+      if (prev.start && prev.end) {
+        return prev;
+      }
+      const mid = Math.max(0, Math.floor(sortedMonths.length / 2) - 1);
+      const start = sortedMonths[0] ?? null;
+      const end = sortedMonths[Math.max(mid, 0)] ?? null;
+      return { start, end };
+    });
+    setRangeB((prev) => {
+      if (prev.start && prev.end) {
+        return prev;
+      }
+      const startIndex = Math.max(sortedMonths.length - 3, 0);
+      const start = sortedMonths[startIndex] ?? null;
+      const end = sortedMonths[sortedMonths.length - 1] ?? null;
+      return { start, end };
+    });
+  }, [sortedMonths]);
+
   const ageSnapshot = useMemo(() => {
     if (filteredMonths.length === 0) {
       return [];
@@ -819,6 +900,377 @@ const MapAnalysisPage = () => {
   const activeAreaId =
     focusAreaId ?? latestSelectedAreaId ?? summary.increases[0]?.id ?? null;
 
+  const filterByRange = useMemo(() => {
+    return (records: MapRecord[], range: ComparisonRange): MapRecord[] => {
+      const { start, end } = range;
+      return records.filter((record) => {
+        if (start && record.reservationMonth < start) {
+          return false;
+        }
+        if (end && record.reservationMonth > end) {
+          return false;
+        }
+        return true;
+      });
+    };
+  }, []);
+
+  const aggregateRange = useMemo(() => {
+    return (records: MapRecord[]) => {
+      const areaMap = new Map<
+        string,
+        {
+          label: string;
+          prefecture: string | null;
+          city: string | null;
+          town: string | null;
+          total: number;
+          ageBreakdown: Record<AgeBandId, number>;
+        }
+      >();
+      const ageTotals = createEmptyAgeBreakdown();
+
+      records.forEach((record) => {
+        const bandId = classifyAgeBandId(record.patientAge);
+        ageTotals[bandId] += 1;
+
+        const prefecture = record.patientPrefecture ?? null;
+        const city = record.patientCity ?? null;
+        const town = record.patientTown ?? record.patientBaseTown ?? null;
+        const labelParts = [city, town].filter((part): part is string => Boolean(part));
+        const label = labelParts.length > 0 ? labelParts.join("") : city ?? "住所未設定";
+        const key = `${prefecture ?? ""}|${city ?? ""}|${town ?? ""}`;
+        let entry = areaMap.get(key);
+        if (!entry) {
+          entry = {
+            label,
+            prefecture,
+            city,
+            town,
+            total: 0,
+            ageBreakdown: createEmptyAgeBreakdown(),
+          };
+          areaMap.set(key, entry);
+        }
+        entry.total += 1;
+        entry.ageBreakdown[bandId] += 1;
+      });
+
+      return {
+        total: records.length,
+        areas: areaMap,
+        ageTotals,
+      };
+    };
+  }, []);
+
+  const comparisonData = useMemo(() => {
+    if (
+      (!rangeA.start && !rangeA.end) ||
+      (!rangeB.start && !rangeB.end)
+    ) {
+      return null;
+    }
+
+    if (
+      (rangeA.start && rangeA.end && rangeA.start > rangeA.end) ||
+      (rangeB.start && rangeB.end && rangeB.start > rangeB.end)
+    ) {
+      return { invalid: true } as const;
+    }
+
+    const recordsA = filterByRange(mapRecords, rangeA);
+    const recordsB = filterByRange(mapRecords, rangeB);
+    const aggregatedA = aggregateRange(recordsA);
+    const aggregatedB = aggregateRange(recordsB);
+
+    const allKeys = new Set<string>([
+      ...aggregatedA.areas.keys(),
+      ...aggregatedB.areas.keys(),
+    ]);
+
+    const rows: ComparisonRow[] = Array.from(allKeys).map((key) => {
+      const areaA = aggregatedA.areas.get(key);
+      const areaB = aggregatedB.areas.get(key);
+      const countA = areaA?.total ?? 0;
+      const countB = areaB?.total ?? 0;
+      const shareA = aggregatedA.total > 0 ? countA / aggregatedA.total : 0;
+      const shareB = aggregatedB.total > 0 ? countB / aggregatedB.total : 0;
+      const diff = countB - countA;
+      const diffShare = shareB - shareA;
+      const label = areaB?.label ?? areaA?.label ?? "住所未設定";
+      return {
+        id: key,
+        label,
+        countA,
+        countB,
+        shareA,
+        shareB,
+        diff,
+        diffShare,
+      };
+    });
+
+    rows.sort((a, b) => Math.abs(b.diffShare) - Math.abs(a.diffShare));
+
+    return {
+      invalid: false as const,
+      rows,
+      totalA: aggregatedA.total,
+      totalB: aggregatedB.total,
+      ageA: aggregatedA.ageTotals,
+      ageB: aggregatedB.ageTotals,
+    };
+  }, [aggregateRange, filterByRange, mapRecords, rangeA, rangeB]);
+
+  const validComparison = useMemo(() => {
+    if (!comparisonData || comparisonData.invalid) {
+      return null;
+    }
+    return comparisonData;
+  }, [comparisonData]);
+
+  const ageComparisonRows = useMemo(() => {
+    if (!validComparison) {
+      return [];
+    }
+    const { ageA, ageB, totalA, totalB } = validComparison;
+    return AGE_BANDS.map((band) => {
+      const countA = ageA[band.id];
+      const countB = ageB[band.id];
+      const shareA = totalA > 0 ? countA / totalA : 0;
+      const shareB = totalB > 0 ? countB / totalB : 0;
+      return {
+        id: band.id,
+        label: band.label,
+        countA,
+        countB,
+        shareA,
+        shareB,
+        diff: countB - countA,
+        diffShare: shareB - shareA,
+      };
+    });
+  }, [validComparison]);
+
+  const rangeDescription = useMemo(() => {
+    const describe = (range: ComparisonRange) => {
+      const { start, end } = range;
+      if (!start && !end) {
+        return "全期間";
+      }
+      if (start && end && start === end) {
+        return formatMonthLabel(start);
+      }
+      if (start && end) {
+        return `${formatMonthLabel(start)}〜${formatMonthLabel(end)}`;
+      }
+      if (start) {
+        return `${formatMonthLabel(start)}以降`;
+      }
+      if (end) {
+        return `${formatMonthLabel(end)}まで`;
+      }
+      return "全期間";
+    };
+    return {
+      a: describe(rangeA),
+      b: describe(rangeB),
+    };
+  }, [rangeA, rangeB]);
+
+  const topDiffRows = useMemo<ComparisonRow[]>(() => {
+    if (!validComparison) {
+      return [];
+    }
+    const validRows = validComparison.rows.filter((row) => {
+      const label = row.label.trim();
+      if (label === "住所未設定" || label === "" || label === "未設定") {
+        return false;
+      }
+      if (label.length < 2) {
+        return false;
+      }
+      if (/^[\d\-]+$/.test(label)) {
+        return false;
+      }
+      if (/^[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+$/u.test(label)) {
+        return false;
+      }
+      return true;
+    });
+    return validRows.slice(0, 8);
+  }, [validComparison]);
+
+  const defaultAreaIds = useMemo(
+    () => topDiffRows.slice(0, MAX_SELECTED_AREAS).map((row) => row.id),
+    [topDiffRows],
+  );
+
+  useEffect(() => {
+    if (hasCustomSelection) {
+      return;
+    }
+    setSelectedAreaIds((prev) => {
+      if (
+        prev.length === defaultAreaIds.length &&
+        prev.every((id, index) => id === defaultAreaIds[index])
+      ) {
+        return prev;
+      }
+      return defaultAreaIds;
+    });
+  }, [defaultAreaIds, hasCustomSelection]);
+
+  const comparisonBarData = useMemo<
+    Array<{ id: string; label: string; periodA: number; periodB: number; diff: number; fill: string; accent: string }>
+  >(() => {
+    if (!validComparison || topDiffRows.length === 0) {
+      return [];
+    }
+    const palette = AREA_COLOR_PALETTE;
+    return topDiffRows.map((row, index) => {
+      const { fill, accent } = palette[index % palette.length];
+      return {
+        id: row.id,
+        label: row.label,
+        periodA: Number((row.shareA * 100).toFixed(1)),
+        periodB: Number((row.shareB * 100).toFixed(1)),
+        diff: Number((row.diffShare * 100).toFixed(1)),
+        fill,
+        accent,
+      };
+    });
+  }, [topDiffRows, validComparison]);
+
+  useEffect(() => {
+    if (comparisonBarData.length === 0) {
+      setSelectedAreaIds([]);
+      return;
+    }
+    const available = new Set(comparisonBarData.map((row) => row.id));
+    setSelectedAreaIds((prev) => {
+      const filtered = prev.filter((id) => available.has(id));
+      if (filtered.length === prev.length) {
+        return prev;
+      }
+      return filtered;
+    });
+  }, [comparisonBarData]);
+
+  const selectedComparisonData = useMemo(() => {
+    if (comparisonBarData.length === 0) {
+      return [];
+    }
+    const dataMap = new Map(comparisonBarData.map((row) => [row.id, row]));
+    const sourceIds =
+      selectedAreaIds.length > 0 ? selectedAreaIds : defaultAreaIds;
+    const orderedUnique = sourceIds.filter(
+      (id, index, array) => array.indexOf(id) === index,
+    );
+    return orderedUnique
+      .map((id) => dataMap.get(id))
+      .filter((row): row is (typeof comparisonBarData)[number] => Boolean(row));
+  }, [comparisonBarData, selectedAreaIds, defaultAreaIds]);
+
+  const areaOptions = useMemo(
+    () =>
+      comparisonBarData.map((row) => ({
+        id: row.id,
+        label: row.label,
+      })),
+    [comparisonBarData],
+  );
+
+  const comparisonChartHeight = Math.max(280, selectedComparisonData.length * 68);
+  const diffChartHeight = Math.max(240, selectedComparisonData.length * 60);
+
+  const comparisonShareDomain = useMemo<[number, number]>(() => {
+    if (comparisonBarData.length === 0) {
+      return [0, 100];
+    }
+    const maxShare = Math.max(
+      ...comparisonBarData.map((row) => Math.max(row.periodA, row.periodB)),
+      5,
+    );
+    return [0, Math.min(100, Math.ceil(maxShare + 1))];
+  }, [comparisonBarData]);
+
+  const comparisonDiffDomain = useMemo<[number, number]>(() => {
+    if (comparisonBarData.length === 0) {
+      return [-10, 10];
+    }
+    const maxAbs = Math.max(...comparisonBarData.map((row) => Math.abs(row.diff)), 1);
+    const padding = Math.ceil(maxAbs + 1);
+    return [-padding, padding];
+  }, [comparisonBarData]);
+
+  const invalidRange = useMemo(() => Boolean(comparisonData?.invalid), [comparisonData]);
+
+  const leadingDiff = useMemo(() => {
+    if (!validComparison || validComparison.rows.length === 0) {
+      return null;
+    }
+    return validComparison.rows[0];
+  }, [validComparison]);
+
+  const monthOptions = useMemo(
+    () => sortedMonths.map((month) => ({ value: month, label: formatMonthLabel(month) })),
+    [sortedMonths],
+  );
+
+  const handleRangeAChange =
+    (field: keyof ComparisonRange) => (event: ChangeEvent<HTMLSelectElement>) => {
+      const value = event.target.value || null;
+      setRangeA((prev) => ({ ...prev, [field]: value }));
+    };
+
+  const handleRangeBChange =
+    (field: keyof ComparisonRange) => (event: ChangeEvent<HTMLSelectElement>) => {
+      const value = event.target.value || null;
+      setRangeB((prev) => ({ ...prev, [field]: value }));
+    };
+
+  const handleAddArea = (areaId: string) => {
+    if (!areaId) {
+      return;
+    }
+    const available = comparisonBarData.find((row) => row.id === areaId);
+    if (!available) {
+      return;
+    }
+    setHasCustomSelection(true);
+    setSelectedAreaIds((prev) => {
+      if (prev.includes(areaId)) {
+        return prev;
+      }
+      const next = [...prev, areaId];
+      if (next.length > MAX_SELECTED_AREAS) {
+        next.shift();
+      }
+      return next;
+    });
+    setFocusAreaId(areaId);
+    setPendingAreaId("");
+  };
+
+  const handleRemoveArea = (areaId: string) => {
+    setHasCustomSelection(true);
+    setSelectedAreaIds((prev) => prev.filter((id) => id !== areaId));
+    setFocusAreaId((current) => (current === areaId ? null : current));
+  };
+
+  const handleResetAreas = () => {
+    setHasCustomSelection(false);
+    setSelectedAreaIds(defaultAreaIds);
+    setFocusAreaId(null);
+    setPendingAreaId("");
+  };
+
+  const handlePendingAreaChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    setPendingAreaId(event.target.value);
+  };
+
   const formatDiffValue = (value: number) => {
     if (value === 0) {
       return "±0件";
@@ -841,6 +1293,7 @@ const MapAnalysisPage = () => {
     if (!areaId) {
       return;
     }
+    setHasCustomSelection(true);
     setSelectedAreaIds((prev) => {
       if (prev.includes(areaId)) {
         return prev;
@@ -859,6 +1312,7 @@ const MapAnalysisPage = () => {
   };
 
   const handleToggleAreaFromMap = useCallback((area: AreaSelectionMeta) => {
+    setHasCustomSelection(true);
     setSelectedAreaIds((prev) => {
       let next: string[];
       if (prev.includes(area.id)) {
@@ -876,6 +1330,108 @@ const MapAnalysisPage = () => {
       return next;
     });
   }, []);
+
+  const ComparisonTooltipContent = ({
+    active,
+    payload,
+    label,
+  }: {
+    active?: boolean;
+    payload?: Array<{ name?: string | number; dataKey?: string | number; value?: number }>;
+    label?: string | number;
+  }) => {
+    if (!active || !payload || payload.length === 0) {
+      return null;
+    }
+    const safeLabel = typeof label === "string" ? label : "";
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
+        {safeLabel && <p className="mb-1 font-semibold text-slate-700">{safeLabel}</p>}
+        {payload.map((entry) => (
+          <p key={entry.name ?? entry.dataKey?.toString()} className="text-slate-600">
+            {entry.name ?? entry.dataKey}: {typeof entry.value === "number" ? entry.value.toFixed(1) : entry.value}%
+          </p>
+        ))}
+      </div>
+    );
+  };
+
+  type LabelGeometry = {
+    x?: number | string;
+    y?: number | string;
+    width?: number | string;
+    height?: number | string;
+    value?: number | string;
+  };
+
+  const DiffLabel = ({ x, y, width, height, value }: LabelGeometry) => {
+    const toNumber = (input?: number | string) => {
+      if (typeof input === "number") {
+        return input;
+      }
+      if (typeof input === "string") {
+        const parsed = Number.parseFloat(input);
+        return Number.isFinite(parsed) ? parsed : undefined;
+      }
+      return undefined;
+    };
+    const xCoord = toNumber(x);
+    const yCoord = toNumber(y);
+    const barWidth = toNumber(width);
+    const barHeight = toNumber(height);
+    const numericValue = toNumber(value);
+    if (
+      typeof xCoord !== "number" ||
+      typeof yCoord !== "number" ||
+      typeof barWidth !== "number" ||
+      typeof barHeight !== "number" ||
+      typeof numericValue !== "number"
+    ) {
+      return <g />;
+    }
+    const isPositive = numericValue >= 0;
+    const anchorX = xCoord + barWidth / 2;
+    const anchorY = isPositive ? yCoord - 8 : yCoord + barHeight + 14;
+    const textColor = isPositive ? "#047857" : "#b91c1c";
+    return (
+      <text
+        x={anchorX}
+        y={anchorY}
+        fill={textColor}
+        fontSize={11}
+        fontWeight={600}
+        textAnchor="middle"
+      >
+        {`${isPositive ? "+" : ""}${numericValue.toFixed(1)}%`}
+      </text>
+    );
+  };
+
+  const renderCategoryTick = ({
+    x,
+    y,
+    payload,
+  }: {
+    x?: number;
+    y?: number;
+    payload?: { value: string };
+  }) => {
+    if (typeof x !== "number" || typeof y !== "number" || !payload?.value) {
+      return <g />;
+    }
+    const segments = payload.value.match(/.{1,6}/g) ?? [payload.value];
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} fill="#475569" fontSize={10} textAnchor="middle">
+          {segments.map((segment, index) => (
+            <tspan key={`${payload.value}-${index}`} x={0} dy={index === 0 ? 0 : 12}>
+              {segment}
+            </tspan>
+          ))}
+        </text>
+      </g>
+    );
+  };
 
   const isEmpty = filteredMapRecords.length === 0;
 
@@ -1292,6 +1848,315 @@ const MapAnalysisPage = () => {
                   })}
                 </div>
               </div>
+            </section>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
+              <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-900">期間比較モード</h2>
+                  <p className="text-xs text-slate-500">
+                    期間Aと期間Bを指定して、来院エリアや年代構成の変化を比較できます。
+                  </p>
+                </div>
+                <div className="grid w-full gap-4 sm:grid-cols-2 md:w-auto">
+                  <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
+                    <p className="text-xs font-semibold text-indigo-500">期間A</p>
+                    <div className="mt-2 flex items-center gap-2 text-sm">
+                      <select
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                        value={rangeA.start ?? ""}
+                        onChange={handleRangeAChange("start")}
+                      >
+                        <option value="">指定なし</option>
+                        {monthOptions.map((option) => (
+                          <option key={`rangeA-start-${option.value}`} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-xs text-slate-500">〜</span>
+                      <select
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                        value={rangeA.end ?? ""}
+                        onChange={handleRangeAChange("end")}
+                      >
+                        <option value="">指定なし</option>
+                        {monthOptions.map((option) => (
+                          <option key={`rangeA-end-${option.value}`} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                    <p className="text-xs font-semibold text-emerald-500">期間B</p>
+                    <div className="mt-2 flex items-center gap-2 text-sm">
+                      <select
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                        value={rangeB.start ?? ""}
+                        onChange={handleRangeBChange("start")}
+                      >
+                        <option value="">指定なし</option>
+                        {monthOptions.map((option) => (
+                          <option key={`rangeB-start-${option.value}`} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-xs text-slate-500">〜</span>
+                      <select
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                        value={rangeB.end ?? ""}
+                        onChange={handleRangeBChange("end")}
+                      >
+                        <option value="">指定なし</option>
+                        {monthOptions.map((option) => (
+                          <option key={`rangeB-end-${option.value}`} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-slate-500">
+                <span>期間A: {rangeDescription.a}</span>
+                <span>期間B: {rangeDescription.b}</span>
+              </div>
+
+              {invalidRange ? (
+                <div className="mt-6 rounded-xl border border-rose-200 bg-rose-50/70 px-4 py-3 text-sm text-rose-700">
+                  期間Aまたは期間Bの開始月が終了月より後になっています。範囲を修正してください。
+                </div>
+              ) : !validComparison ? (
+                <p className="mt-6 text-sm text-slate-500">比較する期間を選択してください。</p>
+              ) : (
+                <div className="mt-6 space-y-6">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
+                      <p className="text-xs font-semibold text-indigo-500">期間A 件数</p>
+                      <p className="mt-2 text-2xl font-bold text-indigo-700">
+                        {validComparison.totalA.toLocaleString("ja-JP")}件
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                      <p className="text-xs font-semibold text-emerald-500">期間B 件数</p>
+                      <p className="mt-2 text-2xl font-bold text-emerald-700">
+                        {validComparison.totalB.toLocaleString("ja-JP")}件
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                      <p className="text-xs font-semibold text-slate-500">最大変化エリア</p>
+                      {leadingDiff ? (
+                        <div className="mt-2 text-sm text-slate-800">
+                          <p className="font-semibold">{leadingDiff.label}</p>
+                          <p className="text-xs text-slate-500">
+                            期間A {formatPercent(leadingDiff.shareA)} → 期間B {formatPercent(leadingDiff.shareB)}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-xs text-slate-500">差分のあるエリアがありません。</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-inner">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-semibold text-slate-800">比較する地区を選択</h3>
+                        <p className="text-[11px] text-slate-500">
+                          地図をクリックすると地区を追加・削除できます。最大{MAX_SELECTED_AREAS}件まで表示可能です。
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleResetAreas}
+                        className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
+                      >
+                        <Target className="h-3.5 w-3.5" />
+                        推薦にリセット
+                      </button>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {selectedComparisonData.length > 0 ? (
+                        selectedComparisonData.map((row) => (
+                          <span
+                            key={`selection-${row.id}`}
+                            className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm"
+                            style={{ borderColor: row.fill, backgroundColor: translucentFill(row.fill, 0.25) }}
+                          >
+                            <span>{row.label}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveArea(row.id)}
+                              className="flex h-5 w-5 items-center justify-center rounded-full bg-white/85 text-slate-500 transition hover:bg-white hover:text-slate-700"
+                              aria-label={`${row.label}を削除`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-slate-500">
+                          地図または下のセレクタから地区を追加してください。
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <select
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                        value={pendingAreaId}
+                        onChange={handlePendingAreaChange}
+                      >
+                        <option value="">地区を選択して追加</option>
+                        {areaOptions.map((option) => (
+                          <option key={`option-${option.id}`} value={option.id}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => handleAddArea(pendingAreaId)}
+                        disabled={!pendingAreaId || selectedAreaIds.includes(pendingAreaId)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-500 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-600 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-200 disabled:text-slate-500"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        選択に追加
+                      </button>
+                      <p className="text-[11px] text-slate-500">
+                        選択数: {selectedComparisonData.length}/{MAX_SELECTED_AREAS}
+                      </p>
+                    </div>
+                  </div>
+
+                  {selectedComparisonData.length > 0 ? (
+                    <div className="space-y-4">
+                      <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-inner">
+                        <h3 className="text-sm font-semibold text-slate-800">来院割合の比較</h3>
+                        <p className="text-[11px] text-slate-500">淡色が期間A、濃色が期間Bです。</p>
+                        <div className="mt-4" style={{ height: `${comparisonChartHeight}px` }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={selectedComparisonData} margin={{ top: 12, right: 24, bottom: 32, left: 32 }} barCategoryGap="30%" barGap={6}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                              <XAxis dataKey="label" interval={0} height={60} tick={renderCategoryTick} />
+                              <YAxis domain={comparisonShareDomain} tickFormatter={(value: number) => `${value}%`} stroke="#94a3b8" />
+                              <RechartsTooltip content={<ComparisonTooltipContent />} />
+                              <Bar dataKey="periodA" name="期間A" radius={[6, 6, 0, 0]}>
+                                {selectedComparisonData.map((row) => (
+                                  <Cell
+                                    key={`periodA-${row.id}`}
+                                    fill={translucentFill(row.fill, 0.5)}
+                                    stroke={row.fill}
+                                    strokeWidth={1.2}
+                                  />
+                                ))}
+                                <LabelList
+                                  dataKey="periodA"
+                                  position="top"
+                                  formatter={(value) => `${typeof value === "number" ? value.toFixed(1) : value}%`}
+                                  fill="#1f2937"
+                                  fontSize={11}
+                                />
+                              </Bar>
+                              <Bar dataKey="periodB" name="期間B" radius={[6, 6, 0, 0]}>
+                                {selectedComparisonData.map((row) => (
+                                  <Cell
+                                    key={`periodB-${row.id}`}
+                                    fill={solidFill(row.fill, 0.85)}
+                                    stroke={row.accent}
+                                    strokeWidth={1.2}
+                                  />
+                                ))}
+                                <LabelList
+                                  dataKey="periodB"
+                                  position="top"
+                                  formatter={(value) => `${typeof value === "number" ? value.toFixed(1) : value}%`}
+                                  fill="#1f2937"
+                                  fontSize={11}
+                                />
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-inner">
+                        <h3 className="text-sm font-semibold text-slate-800">増減率（期間B - 期間A）</h3>
+                        <p className="text-[11px] text-slate-500">正の値は増加、負の値は減少を示します。</p>
+                        <div className="mt-4" style={{ height: `${diffChartHeight}px` }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={selectedComparisonData} margin={{ top: 12, right: 32, bottom: 32, left: 32 }} barCategoryGap="35%" barGap={6}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                              <XAxis dataKey="label" interval={0} height={60} tick={renderCategoryTick} />
+                              <YAxis domain={comparisonDiffDomain} tickFormatter={(value: number) => `${value}%`} stroke="#94a3b8" />
+                              <RechartsTooltip content={<ComparisonTooltipContent />} />
+                              <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
+                              <Bar dataKey="diff" name="増減率" radius={[6, 6, 6, 6]}>
+                                {selectedComparisonData.map((row) => (
+                                  <Cell
+                                    key={`diff-${row.id}`}
+                                    fill={row.diff >= 0 ? solidFill("#16a34a", 0.75) : solidFill("#dc2626", 0.8)}
+                                    stroke={row.diff >= 0 ? "#15803d" : "#b91c1c"}
+                                    strokeWidth={1.1}
+                                  />
+                                ))}
+                                <LabelList content={DiffLabel} />
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-slate-100 bg-white p-6 text-sm text-slate-600 shadow-inner">
+                      表示する地区が未選択です。地図またはセレクタから表示したい地区を追加してください。
+                    </div>
+                  )}
+
+                  <div className="rounded-2xl border border-slate-100 bg-white p-4">
+                    <h3 className="text-sm font-semibold text-slate-800">年代構成の比較</h3>
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                          <tr>
+                            <th className="px-3 py-2 text-left">年代</th>
+                            <th className="px-3 py-2 text-right">期間A</th>
+                            <th className="px-3 py-2 text-right">期間B</th>
+                            <th className="px-3 py-2 text-right">差分</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-slate-700">
+                          {ageComparisonRows.map((row) => (
+                            <tr key={`age-${row.id}`}>
+                              <td className="px-3 py-2 font-medium text-slate-800">{row.label}</td>
+                              <td className="px-3 py-2 text-right">
+                                {row.countA.toLocaleString("ja-JP")}
+                                <span className="ml-2 text-[11px] text-slate-500">{formatPercent(row.shareA)}</span>
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                {row.countB.toLocaleString("ja-JP")}
+                                <span className="ml-2 text-[11px] text-slate-500">{formatPercent(row.shareB)}</span>
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                {row.diff >= 0 ? "+" : ""}
+                                {row.diff.toLocaleString("ja-JP")}
+                                <span className="ml-2 text-[11px] text-slate-500">
+                                  {row.diffShare >= 0 ? "+" : ""}
+                                  {formatPercent(row.diffShare)}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
             </section>
           </section>
         )}
