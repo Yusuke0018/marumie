@@ -1089,7 +1089,7 @@ const MapAnalysisPage = () => {
   const periodALabel = rangeDescription.a;
   const periodBLabel = rangeDescription.b;
 
-  const topDiffRows = useMemo<ComparisonRow[]>(() => {
+  const filteredComparisonRows = useMemo<ComparisonRow[]>(() => {
     if (!validComparison) {
       return [];
     }
@@ -1116,83 +1116,134 @@ const MapAnalysisPage = () => {
       }
       return true;
     });
-    return validRows.slice(0, 8);
+    return validRows;
   }, [validComparison]);
 
-  const defaultAreaIds = useMemo(
-    () => topDiffRows.slice(0, MAX_SELECTED_AREAS).map((row) => row.id),
-    [topDiffRows],
+  const pickIds = useCallback((rows: ComparisonRow[], limit: number) => {
+    const seen = new Set<string>();
+    const ids: string[] = [];
+    for (const row of rows) {
+      if (seen.has(row.id)) {
+        continue;
+      }
+      seen.add(row.id);
+      ids.push(row.id);
+      if (ids.length >= limit) {
+        break;
+      }
+    }
+    return ids;
+  }, []);
+
+  const shareRecommendedIds = useMemo(
+    () =>
+      pickIds(
+        [...filteredComparisonRows].sort(
+          (a, b) => Math.abs(b.diffShare) - Math.abs(a.diffShare),
+        ),
+        MAX_SELECTED_AREAS,
+      ),
+    [filteredComparisonRows, pickIds],
   );
 
-  const increaseComparisonRows = useMemo(() => {
-    if (!validComparison) {
-      return [] as ComparisonRow[];
-    }
-    return validComparison.rows
-      .filter((row) => {
-        const label = row.label.trim();
-        if (isCorporateLabel(label)) {
-          return false;
-        }
-        if (row.diffShare <= 0) {
-          return false;
-        }
-        const prominentShare = Math.max(row.shareA, row.shareB);
-        return prominentShare >= SHARE_RATIO_THRESHOLD;
-      })
-      .sort((a, b) => b.diffShare - a.diffShare);
-  }, [validComparison]);
+  const shareIncreaseIds = useMemo(
+    () =>
+      pickIds(
+        filteredComparisonRows
+          .filter((row) => row.diffShare > 0)
+          .sort((a, b) => b.diffShare - a.diffShare),
+        MAX_SELECTED_AREAS,
+      ),
+    [filteredComparisonRows, pickIds],
+  );
 
-  const decreaseComparisonRows = useMemo(() => {
-    if (!validComparison) {
-      return [] as ComparisonRow[];
-    }
-    return validComparison.rows
-      .filter((row) => {
-        const label = row.label.trim();
-        if (isCorporateLabel(label)) {
-          return false;
-        }
-        if (row.diffShare >= 0) {
-          return false;
-        }
-        const prominentShare = Math.max(row.shareA, row.shareB);
-        return prominentShare >= SHARE_RATIO_THRESHOLD;
-      })
-      .sort((a, b) => a.diffShare - b.diffShare);
-  }, [validComparison]);
+  const shareDecreaseIds = useMemo(
+    () =>
+      pickIds(
+        filteredComparisonRows
+          .filter((row) => row.diffShare < 0)
+          .sort((a, b) => a.diffShare - b.diffShare),
+        MAX_SELECTED_AREAS,
+      ),
+    [filteredComparisonRows, pickIds],
+  );
 
-  const selectionPresetMap = useMemo(() => {
-    const pickIds = (rows: ComparisonRow[], limit: number) => {
-      const seen = new Set<string>();
-      const ids: string[] = [];
-      for (const row of rows) {
-        if (seen.has(row.id)) {
-          continue;
-        }
-        seen.add(row.id);
-        ids.push(row.id);
-        if (ids.length >= limit) {
-          break;
-        }
-      }
-      return ids;
-    };
+  const countRecommendedIds = useMemo(
+    () =>
+      pickIds(
+        [...filteredComparisonRows].sort(
+          (a, b) => Math.abs(b.diffCount) - Math.abs(a.diffCount),
+        ),
+        MAX_SELECTED_AREAS,
+      ),
+    [filteredComparisonRows, pickIds],
+  );
 
-    const increaseTop10 = pickIds(increaseComparisonRows, MAX_SELECTED_AREAS);
-    const decreaseTop10 = pickIds(decreaseComparisonRows, MAX_SELECTED_AREAS);
-    const mixedTop5 = pickIds(
-      [...increaseComparisonRows.slice(0, 5), ...decreaseComparisonRows.slice(0, 5)],
+  const countIncreaseIds = useMemo(
+    () =>
+      pickIds(
+        filteredComparisonRows
+          .filter((row) => row.diffCount > 0)
+          .sort((a, b) => b.diffCount - a.diffCount),
+        MAX_SELECTED_AREAS,
+      ),
+    [filteredComparisonRows, pickIds],
+  );
+
+  const countDecreaseIds = useMemo(
+    () =>
+      pickIds(
+        filteredComparisonRows
+          .filter((row) => row.diffCount < 0)
+          .sort((a, b) => a.diffCount - b.diffCount),
+        MAX_SELECTED_AREAS,
+      ),
+    [filteredComparisonRows, pickIds],
+  );
+
+  const recommendedIds = useMemo(
+    () => (isShareMetric ? shareRecommendedIds : countRecommendedIds),
+    [countRecommendedIds, isShareMetric, shareRecommendedIds],
+  );
+
+  const increasePresetIds = useMemo(
+    () => (isShareMetric ? shareIncreaseIds : countIncreaseIds),
+    [countIncreaseIds, isShareMetric, shareIncreaseIds],
+  );
+
+  const decreasePresetIds = useMemo(
+    () => (isShareMetric ? shareDecreaseIds : countDecreaseIds),
+    [countDecreaseIds, isShareMetric, shareDecreaseIds],
+  );
+
+  const mixedPresetIds = useMemo(() => {
+    const combined = [
+      ...increasePresetIds.slice(0, 5),
+      ...decreasePresetIds.slice(0, 5),
+    ];
+    return pickIds(
+      combined
+        .map((id) => filteredComparisonRows.find((row) => row.id === id))
+        .filter((row): row is ComparisonRow => Boolean(row))
+        .sort((a, b) => {
+          if (isShareMetric) {
+            return Math.abs(b.diffShare) - Math.abs(a.diffShare);
+          }
+          return Math.abs(b.diffCount) - Math.abs(a.diffCount);
+        }),
       MAX_SELECTED_AREAS,
     );
+  }, [decreasePresetIds, filteredComparisonRows, increasePresetIds, isShareMetric, pickIds]);
 
-    return {
-      recommended: defaultAreaIds,
-      increaseTop10,
-      decreaseTop10,
-      mixedTop5,
-    } as Record<Exclude<ComparisonSelectionPreset, "custom">, string[]>;
-  }, [defaultAreaIds, decreaseComparisonRows, increaseComparisonRows]);
+  const selectionPresetMap = useMemo(
+    () => ({
+      recommended: recommendedIds,
+      increaseTop10: increasePresetIds,
+      decreaseTop10: decreasePresetIds,
+      mixedTop5: mixedPresetIds,
+    }) as Record<Exclude<ComparisonSelectionPreset, "custom">, string[]>,
+    [decreasePresetIds, increasePresetIds, mixedPresetIds, recommendedIds],
+  );
 
   const comparisonBarData = useMemo<
     Array<{
@@ -1208,11 +1259,11 @@ const MapAnalysisPage = () => {
       accent: string;
     }>
   >(() => {
-    if (!validComparison || topDiffRows.length === 0) {
+    if (filteredComparisonRows.length === 0) {
       return [];
     }
     const palette = AREA_COLOR_PALETTE;
-    return topDiffRows.map((row, index) => {
+    return filteredComparisonRows.map((row, index) => {
       const { fill, accent } = palette[index % palette.length];
       const shareA = Number((row.shareA * 100).toFixed(1));
       const shareB = Number((row.shareB * 100).toFixed(1));
@@ -1230,7 +1281,7 @@ const MapAnalysisPage = () => {
         accent,
       };
     });
-  }, [topDiffRows, validComparison]);
+  }, [filteredComparisonRows]);
 
   useEffect(() => {
     if (comparisonBarData.length === 0) {
@@ -1272,34 +1323,46 @@ const MapAnalysisPage = () => {
   ]);
 
   const selectionPresetOptions = useMemo(
-    () => [
-      {
-        value: "recommended" as const,
-        label: "推奨（差分順）",
-        disabled: selectionPresetMap.recommended.length === 0,
-      },
-      {
-        value: "increaseTop10" as const,
-        label: "増加順 TOP10（0.1%以上）",
-        disabled: selectionPresetMap.increaseTop10.length === 0,
-      },
-      {
-        value: "decreaseTop10" as const,
-        label: "減少順 TOP10（0.1%以上）",
-        disabled: selectionPresetMap.decreaseTop10.length === 0,
-      },
-      {
-        value: "mixedTop5" as const,
-        label: "増加TOP5 + 減少TOP5（0.1%以上）",
-        disabled: selectionPresetMap.mixedTop5.length === 0,
-      },
-      {
-        value: "custom" as const,
-        label: "手動選択（保持）",
-        disabled: false,
-      },
-    ],
-    [selectionPresetMap],
+    () => {
+      const recommendedLabel = isShareMetric ? "推奨（割合差分順）" : "推奨（人数差分順）";
+      const increaseLabel = isShareMetric
+        ? "増加順 TOP10（0.1%以上）"
+        : "増加人数 TOP10";
+      const decreaseLabel = isShareMetric
+        ? "減少順 TOP10（0.1%以上）"
+        : "減少人数 TOP10";
+      const mixedLabel = isShareMetric
+        ? "増加TOP5 + 減少TOP5（0.1%以上）"
+        : "増加人数TOP5 + 減少人数TOP5";
+      return [
+        {
+          value: "recommended" as const,
+          label: recommendedLabel,
+          disabled: selectionPresetMap.recommended.length === 0,
+        },
+        {
+          value: "increaseTop10" as const,
+          label: increaseLabel,
+          disabled: selectionPresetMap.increaseTop10.length === 0,
+        },
+        {
+          value: "decreaseTop10" as const,
+          label: decreaseLabel,
+          disabled: selectionPresetMap.decreaseTop10.length === 0,
+        },
+        {
+          value: "mixedTop5" as const,
+          label: mixedLabel,
+          disabled: selectionPresetMap.mixedTop5.length === 0,
+        },
+        {
+          value: "custom" as const,
+          label: "手動選択（保持）",
+          disabled: false,
+        },
+      ];
+    },
+    [isShareMetric, selectionPresetMap],
   );
 
   const selectedComparisonData = useMemo(() => {
