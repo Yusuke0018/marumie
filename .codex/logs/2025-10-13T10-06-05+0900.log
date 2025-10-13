@@ -1,0 +1,11 @@
+timestamp: 2025-10-13 10:06:05 JST
+branch: main
+commit: ed6dd26cfb21d96f185e89774706a493a5ac69ac
+summary: bring the geo map to the top and give area charts full width
+changes:
+  - src/app/map-analysis/page.tsx
+tests:
+  - npm run lint (pass)
+  - npm run typecheck (pass)
+  - npm run build (pass)
+push: origin/main (pending)
