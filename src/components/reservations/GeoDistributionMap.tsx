@@ -1140,7 +1140,7 @@ const GeoDistributionMapComponent = ({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)]">
-        <div className="relative h-[520px] w-full overflow-hidden rounded-3xl border border-slate-200 shadow-inner">
+        <div className="relative z-0 h-[520px] w-full overflow-hidden rounded-3xl border border-slate-200 shadow-inner">
           <MapContainer
             center={DEFAULT_CENTER}
             zoom={12}
