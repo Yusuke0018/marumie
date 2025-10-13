@@ -1775,6 +1775,16 @@ const MapAnalysisPage = () => {
           </section>
         ) : (
           <section className="space-y-8">
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
+              <GeoDistributionMap
+                reservations={filteredMapRecords}
+                periodLabel={mapPeriodLabel}
+                selectedAreaIds={selectedAreaIds}
+                focusAreaId={focusAreaId}
+                onToggleArea={handleToggleAreaFromMap}
+              />
+            </section>
+
             <div className="rounded-3xl border border-indigo-200 bg-white/85 p-6 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap gap-2">
@@ -2124,107 +2134,96 @@ const MapAnalysisPage = () => {
                   </table>
                 </div>
 
-                <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-inner">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-slate-800">選択地区の推移</h3>
-                      {focusedAreaSeries && (
-                        <span className="text-[11px] text-slate-500">{focusedAreaSeries.label}</span>
-                      )}
-                    </div>
-                    <div className="mt-4 h-64">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={focusedAreaTrend} margin={{ top: 12, right: 28, bottom: 8, left: 12 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                          <XAxis dataKey="month" tickFormatter={formatMonthLabel} stroke="#94a3b8" />
-                          <YAxis yAxisId="count" stroke="#2563eb" allowDecimals={false} />
-                          <YAxis yAxisId="diff" orientation="right" stroke="#dc2626" />
-                          <RechartsTooltip
-                            formatter={(value: number, name) => [
-                              typeof value === "number" ? value.toLocaleString("ja-JP") : value,
-                              name,
-                            ]}
-                            labelFormatter={(label) => formatMonthLabel(String(label))}
-                          />
-                          <Legend verticalAlign="top" height={24} iconType="circle" />
-                          <Area
-                            yAxisId="count"
-                            type="monotone"
-                            dataKey="件数"
-                            stroke="#2563eb"
-                            fill="rgba(37,99,235,0.35)"
-                            strokeWidth={2.2}
-                            activeDot={{ r: 4 }}
-                          />
-                          <Line
-                            yAxisId="diff"
-                            type="monotone"
-                            dataKey="差分"
-                            stroke="#dc2626"
-                            strokeWidth={2}
-                            dot={{ r: 3 }}
-                          />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-inner">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-slate-800">選択地区の推移</h3>
+                    {focusedAreaSeries && (
+                      <span className="text-[11px] text-slate-500">{focusedAreaSeries.label}</span>
+                    )}
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-inner">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-slate-800">タイル地図（面積=件数 / 色=増減）</h3>
-                      <span className="text-[11px] text-slate-500">最新月基準</span>
-                    </div>
-                    <div className="mt-4 grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-                      {tileMapData.map((tile) => (
-                        <button
-                          key={`tile-${tile.id}`}
-                          type="button"
-                          onClick={() => handleSummaryAreaClick(tile.id)}
-                          className={`flex flex-col gap-1 rounded-xl border px-3 py-3 text-left text-xs shadow-sm transition ${
-                            focusedAreaId === tile.id
-                              ? "border-indigo-400 bg-indigo-50"
-                              : "border-slate-200 bg-white hover:border-indigo-200"
-                          }`}
-                          style={{ minHeight: `${Math.round(72 + (tile.count / maxTileCount) * 48)}px` }}
-                        >
-                          <span className="text-sm font-semibold text-slate-800">{tile.label}</span>
-                          {(tile.city || tile.town) && (
-                            <span className="text-[10px] text-slate-500">{tile.city ?? tile.town}</span>
-                          )}
-                          <span className="text-[11px] font-semibold text-slate-700">
-                            {tile.count.toLocaleString("ja-JP")}件
-                          </span>
-                          <span className={`text-[11px] font-semibold ${tile.diff >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                            {formatDiffValue(tile.diff)}
-                          </span>
-                          <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-200">
-                            <div
-                              className="h-full rounded-full"
-                              style={{
-                                width: `${Math.max(tile.share * 100, 6)}%`,
-                                backgroundColor:
-                                  tile.diff >= 0 ? "rgba(16,185,129,0.8)" : "rgba(220,38,38,0.8)",
-                              }}
-                            />
-                          </div>
-                        </button>
-                      ))}
-                      {tileMapData.length === 0 && (
-                        <p className="col-span-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-4 text-center text-xs text-slate-500">
-                          表示可能な地区がありません。
-                        </p>
-                      )}
-                    </div>
+                  <div className="mt-4 h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={focusedAreaTrend} margin={{ top: 12, right: 28, bottom: 8, left: 12 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="month" tickFormatter={formatMonthLabel} stroke="#94a3b8" />
+                        <YAxis yAxisId="count" stroke="#2563eb" allowDecimals={false} />
+                        <YAxis yAxisId="diff" orientation="right" stroke="#dc2626" />
+                        <RechartsTooltip
+                          formatter={(value: number, name) => [
+                            typeof value === "number" ? value.toLocaleString("ja-JP") : value,
+                            name,
+                          ]}
+                          labelFormatter={(label) => formatMonthLabel(String(label))}
+                        />
+                        <Legend verticalAlign="top" height={24} iconType="circle" />
+                        <Area
+                          yAxisId="count"
+                          type="monotone"
+                          dataKey="件数"
+                          stroke="#2563eb"
+                          fill="rgba(37,99,235,0.35)"
+                          strokeWidth={2.2}
+                          activeDot={{ r: 4 }}
+                        />
+                        <Line
+                          yAxisId="diff"
+                          type="monotone"
+                          dataKey="差分"
+                          stroke="#dc2626"
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
-                  <GeoDistributionMap
-                    reservations={filteredMapRecords}
-                    periodLabel={mapPeriodLabel}
-                    selectedAreaIds={selectedAreaIds}
-                    focusAreaId={focusAreaId}
-                    onToggleArea={handleToggleAreaFromMap}
-                  />
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-inner">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-slate-800">タイル地図（面積=件数 / 色=増減）</h3>
+                    <span className="text-[11px] text-slate-500">最新月基準</span>
+                  </div>
+                  <div className="mt-4 grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                    {tileMapData.map((tile) => (
+                      <button
+                        key={`tile-${tile.id}`}
+                        type="button"
+                        onClick={() => handleSummaryAreaClick(tile.id)}
+                        className={`flex flex-col gap-1 rounded-xl border px-3 py-3 text-left text-xs shadow-sm transition ${
+                          focusedAreaId === tile.id
+                            ? "border-indigo-400 bg-indigo-50"
+                            : "border-slate-200 bg-white hover:border-indigo-200"
+                        }`}
+                        style={{ minHeight: `${Math.round(96 + (tile.count / maxTileCount) * 56)}px` }}
+                      >
+                        <span className="text-sm font-semibold text-slate-800">{tile.label}</span>
+                        {(tile.city || tile.town) && (
+                          <span className="text-[10px] text-slate-500">{tile.city ?? tile.town}</span>
+                        )}
+                        <span className="text-[11px] font-semibold text-slate-700">
+                          {tile.count.toLocaleString("ja-JP")}件
+                        </span>
+                        <span className={`text-[11px] font-semibold ${tile.diff >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                          {formatDiffValue(tile.diff)}
+                        </span>
+                        <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.max(tile.share * 100, 6)}%`,
+                              backgroundColor:
+                                tile.diff >= 0 ? "rgba(16,185,129,0.8)" : "rgba(220,38,38,0.8)",
+                            }}
+                          />
+                        </div>
+                      </button>
+                    ))}
+                    {tileMapData.length === 0 && (
+                      <p className="col-span-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-4 text-center text-xs text-slate-500">
+                        表示可能な地区がありません。
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-inner">
