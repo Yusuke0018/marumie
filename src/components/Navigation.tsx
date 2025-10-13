@@ -76,7 +76,7 @@ export default function Navigation() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <div className="flex items-center gap-3">
-                  <h1 className="text-lg sm:text-xl font-bold tracking-wide text-brand-600">
+                  <h1 className="text-lg sm:text-xl font-bold tracking-wide text-brand-600 whitespace-nowrap">
                     マルミエ
                   </h1>
                 </div>
@@ -89,11 +89,18 @@ export default function Navigation() {
               </div>
               {showPeriodBadge && (
                 <div className="flex justify-start sm:justify-end">
-                  <span className="inline-flex items-center gap-3 rounded-full border-2 border-brand-500 bg-white px-5 py-2 text-sm font-semibold text-brand-600 shadow-lg shadow-brand-500/30 sm:text-base">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-white shadow-inner">
-                      <CalendarRange className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <span className="inline-flex items-center gap-4 rounded-full border-2 border-brand-500 bg-white px-5 py-2 shadow-lg shadow-brand-500/30">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-500 text-white shadow-inner">
+                      <CalendarRange className="h-5 w-5" />
                     </span>
-                    <span className="tracking-wide">表示期間 {analysisPeriodLabel}</span>
+                    <span className="flex flex-col gap-1">
+                      <span className="text-xs font-semibold tracking-[0.2em] text-brand-500">
+                        表示期間
+                      </span>
+                      <span className="inline-flex w-full items-center justify-start rounded-md bg-brand-50 px-3 py-1 text-sm font-bold text-brand-700">
+                        {analysisPeriodLabel}
+                      </span>
+                    </span>
                   </span>
                 </div>
               )}
