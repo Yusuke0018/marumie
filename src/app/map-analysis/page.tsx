@@ -201,6 +201,17 @@ type AreaSelectionMeta = {
 };
 
 const MAX_SELECTED_AREAS = 10;
+const SHARE_DIFF_THRESHOLD = 0.002;
+
+type ComparisonSelectionPreset =
+  | "recommended"
+  | "increaseTop10"
+  | "decreaseTop10"
+  | "mixedTop5"
+  | "custom";
+
+const arraysEqual = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((value, index) => value === b[index]);
 
 const HIDDEN_AREA_LABEL = "住所未設定";
 
@@ -758,7 +769,7 @@ const MapAnalysisPage = () => {
   const [highlightedAgeBand, setHighlightedAgeBand] =
     useState<AgeBandId | null>(null);
   const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>([]);
-  const [hasCustomSelection, setHasCustomSelection] = useState(false);
+  const [selectionPreset, setSelectionPreset] = useState<ComparisonSelectionPreset>("recommended");
   const [focusAreaId, setFocusAreaId] = useState<string | null>(null);
   const [pendingAreaId, setPendingAreaId] = useState<string>("");
   const [rangeA, setRangeA] = useState<ComparisonRange>({ start: null, end: null });
@@ -1083,20 +1094,55 @@ const MapAnalysisPage = () => {
     [topDiffRows],
   );
 
-  useEffect(() => {
-    if (hasCustomSelection) {
-      return;
+  const increaseComparisonRows = useMemo(() => {
+    if (!validComparison) {
+      return [] as ComparisonRow[];
     }
-    setSelectedAreaIds((prev) => {
-      if (
-        prev.length === defaultAreaIds.length &&
-        prev.every((id, index) => id === defaultAreaIds[index])
-      ) {
-        return prev;
+    return validComparison.rows
+      .filter((row) => row.diffShare >= SHARE_DIFF_THRESHOLD)
+      .sort((a, b) => b.diffShare - a.diffShare);
+  }, [validComparison]);
+
+  const decreaseComparisonRows = useMemo(() => {
+    if (!validComparison) {
+      return [] as ComparisonRow[];
+    }
+    return validComparison.rows
+      .filter((row) => row.diffShare <= -SHARE_DIFF_THRESHOLD)
+      .sort((a, b) => a.diffShare - b.diffShare);
+  }, [validComparison]);
+
+  const selectionPresetMap = useMemo(() => {
+    const pickIds = (rows: ComparisonRow[], limit: number) => {
+      const seen = new Set<string>();
+      const ids: string[] = [];
+      for (const row of rows) {
+        if (seen.has(row.id)) {
+          continue;
+        }
+        seen.add(row.id);
+        ids.push(row.id);
+        if (ids.length >= limit) {
+          break;
+        }
       }
-      return defaultAreaIds;
-    });
-  }, [defaultAreaIds, hasCustomSelection]);
+      return ids;
+    };
+
+    const increaseTop10 = pickIds(increaseComparisonRows, MAX_SELECTED_AREAS);
+    const decreaseTop10 = pickIds(decreaseComparisonRows, MAX_SELECTED_AREAS);
+    const mixedTop5 = pickIds(
+      [...increaseComparisonRows.slice(0, 5), ...decreaseComparisonRows.slice(0, 5)],
+      MAX_SELECTED_AREAS,
+    );
+
+    return {
+      recommended: defaultAreaIds,
+      increaseTop10,
+      decreaseTop10,
+      mixedTop5,
+    } as Record<Exclude<ComparisonSelectionPreset, "custom">, string[]>;
+  }, [defaultAreaIds, decreaseComparisonRows, increaseComparisonRows]);
 
   const comparisonBarData = useMemo<
     Array<{ id: string; label: string; periodA: number; periodB: number; diff: number; fill: string; accent: string }>
@@ -1134,14 +1180,68 @@ const MapAnalysisPage = () => {
     });
   }, [comparisonBarData]);
 
+  useEffect(() => {
+    if (selectionPreset === "custom") {
+      return;
+    }
+    const targetIds = selectionPresetMap[selectionPreset] ?? [];
+    const availableIds = new Set(comparisonBarData.map((row) => row.id));
+    const filteredTarget = targetIds.filter((id) => availableIds.has(id));
+    const fallback = filteredTarget.length > 0 ? filteredTarget : selectionPresetMap.recommended ?? [];
+    const changed = !arraysEqual(selectedAreaIds, fallback);
+    if (changed) {
+      setSelectedAreaIds(fallback);
+    }
+    const fallbackFocus = fallback[fallback.length - 1] ?? null;
+    if (changed || focusAreaId !== fallbackFocus) {
+      setFocusAreaId(fallbackFocus);
+    }
+  }, [
+    comparisonBarData,
+    focusAreaId,
+    selectedAreaIds,
+    selectionPreset,
+    selectionPresetMap,
+  ]);
+
+  const selectionPresetOptions = useMemo(
+    () => [
+      {
+        value: "recommended" as const,
+        label: "推奨（差分順）",
+        disabled: selectionPresetMap.recommended.length === 0,
+      },
+      {
+        value: "increaseTop10" as const,
+        label: "増加順 TOP10（0.2%以上）",
+        disabled: selectionPresetMap.increaseTop10.length === 0,
+      },
+      {
+        value: "decreaseTop10" as const,
+        label: "減少順 TOP10（0.2%以上）",
+        disabled: selectionPresetMap.decreaseTop10.length === 0,
+      },
+      {
+        value: "mixedTop5" as const,
+        label: "増加TOP5 + 減少TOP5（0.2%以上）",
+        disabled: selectionPresetMap.mixedTop5.length === 0,
+      },
+      {
+        value: "custom" as const,
+        label: "手動選択（保持）",
+        disabled: selectionPreset !== "custom",
+      },
+    ],
+    [selectionPreset, selectionPresetMap],
+  );
+
   const selectedComparisonData = useMemo(() => {
     if (comparisonBarData.length === 0) {
       return [];
     }
     const dataMap = new Map(comparisonBarData.map((row) => [row.id, row]));
-    const useCustomSelection =
-      hasCustomSelection || selectedAreaIds.length > 0;
-    const sourceIds = useCustomSelection ? selectedAreaIds : defaultAreaIds;
+    const fallbackIds = selectionPresetMap.recommended ?? [];
+    const sourceIds = selectedAreaIds.length > 0 ? selectedAreaIds : fallbackIds;
     const orderedUnique = sourceIds.filter(
       (id, index, array) => array.indexOf(id) === index,
     );
@@ -1167,13 +1267,7 @@ const MapAnalysisPage = () => {
         };
       })
       .filter((row): row is (typeof comparisonBarData)[number] => Boolean(row));
-  }, [
-    comparisonBarData,
-    selectedAreaIds,
-    defaultAreaIds,
-    areaLabelMap,
-    hasCustomSelection,
-  ]);
+  }, [comparisonBarData, selectedAreaIds, areaLabelMap, selectionPresetMap]);
 
   const areaOptions = useMemo(() => {
     const options = comparisonBarData.map((row) => ({
@@ -1204,6 +1298,7 @@ const MapAnalysisPage = () => {
         }
         return { ...prev, [areaId]: option.label };
       });
+      let didAdd = false;
       setSelectedAreaIds((prev) => {
         if (prev.includes(areaId)) {
           return prev;
@@ -1215,11 +1310,14 @@ const MapAnalysisPage = () => {
           );
           return prev;
         }
+        didAdd = true;
         showSelectionFeedback("added", `${option.label} を比較に追加しました`);
-        setHasCustomSelection(true);
         return [...prev, areaId];
       });
-      setFocusAreaId(areaId);
+      if (didAdd) {
+        setSelectionPreset("custom");
+        setFocusAreaId(areaId);
+      }
       setPendingAreaId("");
     },
     [areaOptions, showSelectionFeedback],
@@ -1280,11 +1378,13 @@ const MapAnalysisPage = () => {
     };
 
   const handleRemoveArea = (areaId: string) => {
+    let nextLength = -1;
     setSelectedAreaIds((prev) => {
       if (!prev.includes(areaId)) {
         return prev;
       }
       const next = prev.filter((id) => id !== areaId);
+      nextLength = next.length;
       const lastId = next[next.length - 1] ?? null;
       setFocusAreaId(lastId);
       const label = areaLabelMap[areaId];
@@ -1293,24 +1393,28 @@ const MapAnalysisPage = () => {
       } else {
         showSelectionFeedback("removed", "選択した地区を比較対象から外しました");
       }
-      if (next.length === 0) {
-        setHasCustomSelection(false);
-      } else {
-        setHasCustomSelection(true);
-      }
       return next;
     });
+    if (nextLength >= 0) {
+      setSelectionPreset(nextLength === 0 ? "recommended" : "custom");
+    }
   };
 
   const handleResetAreas = () => {
-    setHasCustomSelection(false);
-    setSelectedAreaIds(defaultAreaIds);
-    setFocusAreaId(null);
+    const recommendedIds = selectionPresetMap.recommended ?? [];
+    setSelectionPreset("recommended");
+    setSelectedAreaIds(recommendedIds);
+    setFocusAreaId(recommendedIds[recommendedIds.length - 1] ?? null);
     setPendingAreaId("");
   };
 
   const handlePendingAreaChange = (event: ChangeEvent<HTMLSelectElement>) => {
     setPendingAreaId(event.target.value);
+  };
+
+  const handlePresetChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value as ComparisonSelectionPreset;
+    setSelectionPreset(value);
   };
 
   const formatDiffValue = (value: number) => {
@@ -1355,6 +1459,7 @@ const MapAnalysisPage = () => {
       areaLabelMap[areaId] ??
       areaOptions.find((option) => option.id === areaId)?.label ??
       "選択した地区";
+    let didAdd = false;
     setSelectedAreaIds((prev) => {
       if (prev.includes(areaId)) {
         return prev;
@@ -1366,11 +1471,14 @@ const MapAnalysisPage = () => {
         );
         return prev;
       }
+      didAdd = true;
       showSelectionFeedback("added", `${label} を比較に追加しました`);
-      setHasCustomSelection(true);
       return [...prev, areaId];
     });
-    setFocusAreaId(areaId);
+    if (didAdd) {
+      setSelectionPreset("custom");
+      setFocusAreaId(areaId);
+    }
   };
 
   const openAreaPicker = () => {
@@ -1393,6 +1501,7 @@ const MapAnalysisPage = () => {
         }
         return { ...prev, [area.id]: area.label };
       });
+      let nextPreset: ComparisonSelectionPreset | null = null;
       setSelectedAreaIds((prev) => {
         const exists = prev.includes(area.id);
         let next: string[];
@@ -1404,11 +1513,7 @@ const MapAnalysisPage = () => {
             "removed",
             `${area.label} を比較対象から外しました`,
           );
-          if (next.length === 0) {
-            setHasCustomSelection(false);
-          } else {
-            setHasCustomSelection(true);
-          }
+          nextPreset = next.length === 0 ? "recommended" : "custom";
         } else {
           if (prev.length >= MAX_SELECTED_AREAS) {
             showSelectionFeedback(
@@ -1420,11 +1525,14 @@ const MapAnalysisPage = () => {
           next = [...prev, area.id];
           nextFocus = area.id;
           showSelectionFeedback("added", `${area.label} を比較に追加しました`);
-          setHasCustomSelection(true);
+          nextPreset = "custom";
         }
         setFocusAreaId(nextFocus);
         return next;
       });
+      if (nextPreset) {
+        setSelectionPreset(nextPreset);
+      }
     },
     [showSelectionFeedback],
   );
@@ -1977,13 +2085,27 @@ const MapAnalysisPage = () => {
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs shadow-sm">
+                          <span className="font-semibold text-slate-600">プリセット</span>
+                          <select
+                            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                            value={selectionPreset}
+                            onChange={handlePresetChange}
+                          >
+                            {selectionPresetOptions.map((option) => (
+                              <option key={option.value} value={option.value} disabled={option.disabled}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                         <button
                           type="button"
                           onClick={handleResetAreas}
                           className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
                         >
                           <Target className="h-3.5 w-3.5" />
-                          推薦にリセット
+                          推奨へ戻す
                         </button>
                         <button
                           type="button"

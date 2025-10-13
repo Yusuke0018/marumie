@@ -6,6 +6,8 @@ import {
 
 type UseAnalysisPeriodRangeOptions = {
   autoSelectLatest?: boolean;
+  persistStart?: boolean;
+  persistEnd?: boolean;
 };
 
 export const useAnalysisPeriodRange = (
@@ -15,6 +17,10 @@ export const useAnalysisPeriodRange = (
   const [startMonth, setStartMonthState] = useState<string>("");
   const [endMonth, setEndMonthState] = useState<string>("");
   const [isInitialized, setIsInitialized] = useState(false);
+
+  const autoSelectLatest = options.autoSelectLatest ?? true;
+  const persistStart = options.persistStart !== false;
+  const persistEnd = options.persistEnd !== false;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -42,14 +48,14 @@ export const useAnalysisPeriodRange = (
               ? parsed.endMonth
               : "";
 
-          if (storedStart) {
+          if (persistStart && storedStart) {
             setStartMonthState(storedStart);
           }
           if (storedEnd) {
             const normalizedEnd =
               storedStart && storedEnd < storedStart ? storedStart : storedEnd;
             setEndMonthState(normalizedEnd);
-          } else if (parsed.endMonth === null) {
+          } else if (persistEnd && parsed.endMonth === null) {
             setEndMonthState("");
           }
         }
@@ -59,7 +65,7 @@ export const useAnalysisPeriodRange = (
     } finally {
       setIsInitialized(true);
     }
-  }, [availableMonths, isInitialized]);
+  }, [availableMonths, isInitialized, persistEnd, persistStart]);
 
   useEffect(() => {
     if (!isInitialized) {
@@ -95,7 +101,7 @@ export const useAnalysisPeriodRange = (
     if (!isInitialized) {
       return;
     }
-    if (!options.autoSelectLatest) {
+    if (!autoSelectLatest) {
       return;
     }
     if (availableMonths.length === 0) {
@@ -110,7 +116,7 @@ export const useAnalysisPeriodRange = (
       setStartMonthState(latestMonth);
       setEndMonthState(latestMonth);
     }
-  }, [availableMonths, endMonth, isInitialized, options.autoSelectLatest, startMonth]);
+  }, [availableMonths, endMonth, isInitialized, autoSelectLatest, startMonth]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -120,17 +126,30 @@ export const useAnalysisPeriodRange = (
       return;
     }
 
-    if (!startMonth && !endMonth) {
+    let existing: StoredPeriodRange | null = null;
+    if (!persistStart || !persistEnd) {
+      try {
+        const rawExisting = window.localStorage.getItem(ANALYSIS_PERIOD_RANGE_STORAGE_KEY);
+        if (rawExisting) {
+          existing = JSON.parse(rawExisting) as StoredPeriodRange;
+        }
+      } catch (error) {
+        console.warn("期間設定の既存値取得に失敗しました", error);
+      }
+    }
+
+    const payload: StoredPeriodRange = {
+      startMonth: persistStart ? (startMonth || null) : existing?.startMonth ?? null,
+      endMonth: persistEnd ? (endMonth || null) : existing?.endMonth ?? null,
+    };
+
+    if (!payload.startMonth && !payload.endMonth) {
       window.localStorage.removeItem(ANALYSIS_PERIOD_RANGE_STORAGE_KEY);
       return;
     }
 
-    const payload: StoredPeriodRange = {
-      startMonth: startMonth || null,
-      endMonth: endMonth || null,
-    };
     window.localStorage.setItem(ANALYSIS_PERIOD_RANGE_STORAGE_KEY, JSON.stringify(payload));
-  }, [endMonth, isInitialized, startMonth]);
+  }, [endMonth, isInitialized, persistEnd, persistStart, startMonth]);
 
   const setStartMonth = useCallback((value: string) => {
     setStartMonthState(value);

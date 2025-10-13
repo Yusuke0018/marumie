@@ -1298,6 +1298,7 @@ function PatientAnalysisPageContent() {
     resetPeriod,
   } = useAnalysisPeriodRange(allAvailableMonths, {
     autoSelectLatest: !lifestyleOnly,
+    persistStart: !lifestyleOnly,
   });
 
   useEffect(() => {
