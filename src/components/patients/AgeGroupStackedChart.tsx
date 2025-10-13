@@ -42,6 +42,55 @@ const AGE_GROUP_COLORS: Record<AgeGroup, string> = {
   "不明": "rgba(203, 213, 225, 0.6)",     // slate-300
 };
 
+const AGE_GROUP_REFERENCE_COLORS: Record<AgeGroup, string> = {
+  "10代以下": "rgba(147, 197, 253, 0.28)",
+  "20代": "rgba(134, 239, 172, 0.28)",
+  "30代": "rgba(253, 224, 71, 0.28)",
+  "40代": "rgba(251, 146, 60, 0.28)",
+  "50代": "rgba(248, 113, 113, 0.28)",
+  "60代": "rgba(216, 180, 254, 0.28)",
+  "70代": "rgba(244, 114, 182, 0.28)",
+  "80代以上": "rgba(156, 163, 175, 0.28)",
+  "不明": "rgba(203, 213, 225, 0.18)",
+};
+
+const AGE_GROUP_REFERENCE_BORDER_COLORS: Record<AgeGroup, string> = {
+  "10代以下": "rgba(59, 130, 246, 0.65)",
+  "20代": "rgba(13, 148, 136, 0.65)",
+  "30代": "rgba(202, 138, 4, 0.65)",
+  "40代": "rgba(234, 88, 12, 0.65)",
+  "50代": "rgba(220, 38, 38, 0.65)",
+  "60代": "rgba(147, 51, 234, 0.65)",
+  "70代": "rgba(190, 24, 93, 0.65)",
+  "80代以上": "rgba(71, 85, 105, 0.65)",
+  "不明": "rgba(148, 163, 184, 0.45)",
+};
+
+const NISHI_KU_POPULATION_TOTAL = 110_374;
+
+const NISHI_KU_POPULATION_COUNTS: Record<AgeGroup, number> = {
+  "10代以下": 15_798,
+  "20代": 19_710,
+  "30代": 20_147,
+  "40代": 19_159,
+  "50代": 14_545,
+  "60代": 8_255,
+  "70代": 7_564,
+  "80代以上": 5_196,
+  "不明": 0,
+};
+
+const NISHI_KU_POPULATION_SHARE: Record<AgeGroup, number> = Object.fromEntries(
+  (Object.entries(NISHI_KU_POPULATION_COUNTS) as Array<[AgeGroup, number]>).map(
+    ([ageGroup, count]) => [
+      ageGroup,
+      NISHI_KU_POPULATION_TOTAL > 0
+        ? Math.round((count / NISHI_KU_POPULATION_TOTAL) * 1000) / 10
+        : 0,
+    ],
+  ),
+) as Record<AgeGroup, number>;
+
 export function AgeGroupStackedChart({ data, title = "年代別構成比" }: Props) {
   const chartData = useMemo(() => {
     if (data.length === 0) {
@@ -59,7 +108,7 @@ export function AgeGroupStackedChart({ data, title = "年代別構成比" }: Pro
     // 不明を除いた年代グループのみ表示
     const visibleAgeGroups = AGE_GROUPS.filter((group) => group !== "不明");
 
-    const datasets = visibleAgeGroups.map((ageGroup) => {
+    const patientDatasets = visibleAgeGroups.map((ageGroup) => {
       const dataValues = data.map((stat) => {
         const count = stat.ageGroups[ageGroup] || 0;
         const total = stat.total - (stat.ageGroups["不明"] || 0); // 不明を除く合計
@@ -68,12 +117,34 @@ export function AgeGroupStackedChart({ data, title = "年代別構成比" }: Pro
       });
 
       return {
-        label: ageGroup,
+        label: `${ageGroup}（患者）`,
         data: dataValues,
         backgroundColor: AGE_GROUP_COLORS[ageGroup],
         borderWidth: 0,
+        stack: "patients",
+        barPercentage: 0.52,
+        categoryPercentage: 0.7,
+        borderRadius: 6,
       };
     });
+
+    const populationDatasets = visibleAgeGroups.map((ageGroup) => {
+      const populationShare = NISHI_KU_POPULATION_SHARE[ageGroup] ?? 0;
+      const populationValues = labels.map(() => populationShare);
+      return {
+        label: `${ageGroup}（西区人口）`,
+        data: populationValues,
+        backgroundColor: AGE_GROUP_REFERENCE_COLORS[ageGroup],
+        borderColor: AGE_GROUP_REFERENCE_BORDER_COLORS[ageGroup],
+        borderWidth: 1.2,
+        stack: "population",
+        barPercentage: 0.38,
+        categoryPercentage: 0.7,
+        borderRadius: 6,
+      };
+    });
+
+    const datasets = [...patientDatasets, ...populationDatasets];
 
     return {
       labels,
@@ -185,6 +256,9 @@ export function AgeGroupStackedChart({ data, title = "年代別構成比" }: Pro
       <div style={{ height: "400px" }}>
         <Bar data={chartData} options={options} />
       </div>
+      <p className="mt-4 text-xs leading-relaxed text-slate-500">
+        淡色のバーは大阪市西区（令和6年9月30日現在）の年代別人口構成比を参考値として表示しています。
+      </p>
     </div>
   );
 }
