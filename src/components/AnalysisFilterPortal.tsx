@@ -42,6 +42,11 @@ export const AnalysisFilterPortal = ({
 
   const formatMonth = renderMonthLabel ?? ((month: string) => month);
 
+  const displayLabel =
+    label && !label.includes("\n")
+      ? label.replace(/\s*〜\s*/, "〜\n")
+      : label;
+
   return createPortal(
     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex flex-wrap items-center gap-3">
@@ -90,7 +95,10 @@ export const AnalysisFilterPortal = ({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         {label && (
           <p className="text-[11px] text-slate-500">
-            表示期間: {label}
+            表示期間:{" "}
+            <span className="whitespace-pre-line">
+              {displayLabel}
+            </span>
           </p>
         )}
         {rightContent}
