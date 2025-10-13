@@ -18,3 +18,19 @@ a {
 ::selection {
   @apply bg-brand-200 text-slate-900;
 }
+
+@keyframes period-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.85;
+  }
+}
+
+.period-pulse {
+  animation: period-pulse 3s ease-in-out infinite;
+}

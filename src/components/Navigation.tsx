@@ -90,7 +90,7 @@ export default function Navigation() {
               {showPeriodBadge && (
                 <div className="flex justify-start sm:justify-end">
                   <span className="inline-flex items-center gap-4 rounded-full border-2 border-brand-500 bg-white px-5 py-2 shadow-lg shadow-brand-500/30">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-500 text-white shadow-inner">
+                    <span className="period-pulse flex h-10 w-10 items-center justify-center rounded-full bg-brand-500 text-white shadow-inner">
                       <CalendarRange className="h-5 w-5" />
                     </span>
                     <span className="flex flex-col gap-1">
