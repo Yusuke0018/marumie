@@ -1,0 +1,11 @@
+timestamp: 2025-10-13 10:20:12 JST
+branch: main
+commit: 0bd3440638aa7b8af66c9661e23ce4a5f8d25d28
+summary: move area ranking chart beneath age ranking section
+changes:
+  - src/app/map-analysis/page.tsx
+tests:
+  - npm run lint (pass)
+  - npm run typecheck (pass)
+  - npm run build (pass)
+push: origin/main (pending)
