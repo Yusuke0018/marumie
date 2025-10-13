@@ -1513,7 +1513,9 @@ const MapAnalysisPage = () => {
     return map;
   }, [selectedComparisonData]);
 
-  const tickFontSize = selectedComparisonData.length >= 9 ? 11 : 12;
+  const tickFontSize = selectedComparisonData.length >= 9 ? 13 : 14;
+  const tickLineHeight = tickFontSize + 3;
+  const tickYOffset = tickFontSize >= 14 ? 16 : 14;
 
   const renderCategoryTick = useCallback(
     ({
@@ -1532,7 +1534,7 @@ const MapAnalysisPage = () => {
       const baseColor = labelColorMap.get(payload.value);
       const textColor = baseColor ? solidFill(baseColor, 0.95) : "#1f2937";
       return (
-        <g transform={`translate(${x},${y})`}>
+        <g transform={`translate(${x},${y + tickYOffset})`}>
           <text
             x={0}
             y={0}
@@ -1542,7 +1544,7 @@ const MapAnalysisPage = () => {
             textAnchor="middle"
           >
             {segments.map((segment, index) => (
-              <tspan key={`${payload.value}-${index}`} x={0} dy={index === 0 ? 0 : 13}>
+              <tspan key={`${payload.value}-${index}`} x={0} dy={index === 0 ? 0 : tickLineHeight}>
                 {segment}
               </tspan>
             ))}
@@ -1550,7 +1552,7 @@ const MapAnalysisPage = () => {
         </g>
       );
     },
-    [labelColorMap, tickFontSize],
+    [labelColorMap, tickFontSize, tickLineHeight, tickYOffset],
   );
 
   const isEmpty = filteredMapRecords.length === 0;
@@ -2054,7 +2056,7 @@ const MapAnalysisPage = () => {
                               barGap={shareBarGap}
                             >
                               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                              <XAxis dataKey="label" interval={0} height={60} tick={renderCategoryTick} />
+                              <XAxis dataKey="label" interval={0} height={72} tick={renderCategoryTick} />
                               <YAxis domain={comparisonShareDomain} tickFormatter={(value: number) => `${value}%`} stroke="#94a3b8" />
                               <RechartsTooltip content={<ComparisonTooltipContent />} />
                               <Bar dataKey="periodA" name={periodALabel} radius={[6, 6, 0, 0]}>
@@ -2108,7 +2110,7 @@ const MapAnalysisPage = () => {
                               barGap={diffBarGap}
                             >
                               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                              <XAxis dataKey="label" interval={0} height={60} tick={renderCategoryTick} />
+                              <XAxis dataKey="label" interval={0} height={72} tick={renderCategoryTick} />
                               <YAxis domain={comparisonDiffDomain} tickFormatter={(value: number) => `${value}%`} stroke="#94a3b8" />
                               <RechartsTooltip content={<ComparisonTooltipContent />} />
                               <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
@@ -2183,7 +2185,7 @@ const MapAnalysisPage = () => {
       {selectionFeedback && (
         <div
           key={selectionFeedback.key}
-          className={`selection-feedback fixed bottom-8 right-6 z-40 flex max-w-sm items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-xl ${
+          className={`selection-feedback fixed bottom-8 right-6 z-[1200] flex max-w-sm items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-xl ${
             selectionFeedback.tone === "added"
               ? "bg-emerald-600/90"
               : selectionFeedback.tone === "removed"
