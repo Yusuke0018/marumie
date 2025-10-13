@@ -1,0 +1,9 @@
+timestamp: 2025-10-13T15-59-25+0900
+branch: main
+commit: 84f2a9bef707a3ed9aee9b261b10b67df9fcc60a
+summary: パルス強度を再調整
+changes: src/app/globals.css (period-pulse のスケールとグロー増幅)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: pending
