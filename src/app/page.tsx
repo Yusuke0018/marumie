@@ -12,6 +12,7 @@ import {
   ClipboardList,
   BarChart3,
   Map as MapIcon,
+  Gauge,
 } from "lucide-react";
 import { getCompressedItem } from "@/lib/storageCompression";
 import { KARTE_STORAGE_KEY, KARTE_TIMESTAMP_KEY } from "@/lib/storageKeys";
@@ -28,7 +29,7 @@ import { classifyKarteRecords, isEndoscopyDepartment, type KarteRecord } from "@
 type DashboardStats = {
   totalPatients: number | null;
   pureFirstVisits: number | null;
-  revisitCount: number | null;
+  averageAge: number | null;
   endoscopyPatients: number | null;
   lifestyleDiseasePatients: number | null;
   internalReferrals: number | null;
@@ -41,7 +42,7 @@ type DashboardStats = {
 const INITIAL_STATS: DashboardStats = {
   totalPatients: null,
   pureFirstVisits: null,
-  revisitCount: null,
+  averageAge: null,
   endoscopyPatients: null,
   lifestyleDiseasePatients: null,
   internalReferrals: null,
@@ -56,6 +57,40 @@ const formatCount = (value: number | null) =>
 
 const formatTimestamp = (value: string | null) =>
   value ? new Date(value).toLocaleString("ja-JP") : "未更新";
+
+const formatAverageAge = (value: number | null) =>
+  value === null
+    ? "—"
+    : value.toLocaleString("ja-JP", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+const toDateFromIso = (iso: string | null) => {
+  if (!iso) {
+    return null;
+  }
+  const [yearStr, monthStr, dayStr] = iso.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return null;
+  }
+  return new Date(year, month - 1, day);
+};
+
+const calcAge = (birthDate: Date, visitDate: Date) => {
+  let age = visitDate.getFullYear() - birthDate.getFullYear();
+  const visitMonth = visitDate.getMonth();
+  const birthMonth = birthDate.getMonth();
+
+  if (
+    visitMonth < birthMonth ||
+    (visitMonth === birthMonth && visitDate.getDate() < birthDate.getDate())
+  ) {
+    age -= 1;
+  }
+
+  return age;
+};
 
 const safeParse = <T,>(raw: string | null): T | null => {
   if (!raw) {
@@ -146,9 +181,32 @@ export default function HomePage() {
             next.pureFirstVisits = latestClassified.filter(
               (r) => r.category === "pureFirst",
             ).length;
-            next.revisitCount = latestClassified.filter(
-              (r) => r.category === "revisit",
-            ).length;
+
+            const ageTotals = latestRecords.reduce(
+              (acc, record) => {
+                if (!record.birthDateIso) {
+                  return acc;
+                }
+                const birthDate = toDateFromIso(record.birthDateIso);
+                const visitDate = toDateFromIso(record.dateIso);
+                if (!birthDate || !visitDate) {
+                  return acc;
+                }
+                const age = calcAge(birthDate, visitDate);
+                if (!Number.isFinite(age) || age < 0) {
+                  return acc;
+                }
+                return {
+                  sum: acc.sum + age,
+                  count: acc.count + 1,
+                };
+              },
+              { sum: 0, count: 0 },
+            );
+
+            next.averageAge = ageTotals.count > 0
+              ? Math.round((ageTotals.sum / ageTotals.count) * 10) / 10
+              : null;
 
             const monthLabel = formatMonthDisplay(latestMonth);
             if (monthLabel) {
@@ -281,14 +339,14 @@ export default function HomePage() {
       gradient: "from-emerald-500 to-emerald-400",
     },
     {
-      id: "revisit",
-      label: "再診数",
-      value: formatCount(stats.revisitCount),
-      unit: "人",
+      id: "averageAge",
+      label: "平均年齢",
+      value: formatAverageAge(stats.averageAge),
+      unit: "歳",
       hint: stats.kartePeriodLabel
-        ? `再来院された患者数（${stats.kartePeriodLabel}の集計）`
-        : "再来院された患者数",
-      icon: Users,
+        ? `来院患者の平均年齢（${stats.kartePeriodLabel}の集計）`
+        : "来院患者の平均年齢",
+      icon: Gauge,
       gradient: "from-sky-500 to-sky-400",
     },
     {
@@ -405,6 +463,20 @@ export default function HomePage() {
                 総患者数、純初診数、再診数、生活習慣病患者数、内科の家族・友人紹介など、
                 重要なKPIをひと目で確認できます。詳細分析ページへスムーズにアクセスし、次のアクションへつなげてください。
               </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <Link
+                  href="/patients#data-management-panel"
+                  className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600"
+                >
+                  データ管理を開く
+                </Link>
+                <Link
+                  href="/patients"
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-brand-200 hover:text-brand-600"
+                >
+                  患者分析を見る
+                </Link>
+              </div>
             </div>
           </div>
         </section>

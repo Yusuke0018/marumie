@@ -887,7 +887,7 @@ const MapAnalysisPage = () => {
       : null;
   const periodRangeDisplay =
     startMonthLabel && endMonthLabel
-      ? `${startMonthLabel} → ${endMonthLabel}`
+      ? `${startMonthLabel}〜\n${endMonthLabel}`
       : startMonthLabel ?? endMonthLabel ?? "期間未設定";
 
   const totalRecords = filteredMapRecords.length;
@@ -1990,7 +1990,7 @@ const MapAnalysisPage = () => {
                 <div>
                   <h2 className="text-base font-semibold text-slate-900">期間サマリー</h2>
                   <p className="text-xs text-slate-500">
-                    範囲: <span className="font-semibold text-slate-700">{periodRangeDisplay}</span>
+                    範囲: <span className="whitespace-pre-line font-semibold text-slate-700">{periodRangeDisplay}</span>
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">

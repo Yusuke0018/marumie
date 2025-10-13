@@ -3394,9 +3394,18 @@ function PatientAnalysisPageContent() {
                   </p>
                 )}
               </div>
-              <p className="text-xs text-slate-500">
-                CSVのアップロードや共有はページ下部の「データ管理」セクションから操作できます。
-              </p>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                <span>
+                  CSVのアップロードや共有はページ下部の「データ管理」セクションから操作できます。
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsManagementOpen(true)}
+                  className="inline-flex items-center rounded-full border border-brand-200 px-2.5 py-1 font-semibold text-brand-600 transition hover:bg-brand-50"
+                >
+                  データ管理を開く
+                </button>
+              </div>
             </div>
             {isLoadingShared && (
               <div className="mt-6 rounded-2xl border border-brand-200 bg-white/80 px-4 py-3">
@@ -3417,16 +3426,6 @@ function PatientAnalysisPageContent() {
           onReset={resetPeriod}
           label={diagnosisRangeLabel}
           renderMonthLabel={formatMonthLabel}
-          rightContent={
-            <button
-              type="button"
-              onClick={() => setIsManagementOpen(true)}
-              disabled={isManagementOpen}
-              className="inline-flex items-center justify-center rounded-full border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-600 transition hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              データ管理を{isManagementOpen ? "表示中" : "開く"}
-            </button>
-          }
         />
 
         {!lifestyleOnly && (
