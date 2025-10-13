@@ -200,7 +200,7 @@ type AreaSelectionMeta = {
   prefecture: string | null;
 };
 
-const MAX_SELECTED_AREAS = 8;
+const MAX_SELECTED_AREAS = 10;
 
 const HIDDEN_AREA_LABEL = "住所未設定";
 
@@ -766,8 +766,15 @@ const MapAnalysisPage = () => {
   const [isAreaPickerOpen, setAreaPickerOpen] = useState(false);
   const [areaLabelMap, setAreaLabelMap] = useState<Record<string, string>>({});
   const [selectionFeedback, setSelectionFeedback] = useState<
-    { key: number; label: string; action: "added" | "removed" } | null
+    { key: number; message: string; tone: "added" | "removed" | "limit" } | null
   >(null);
+
+  const showSelectionFeedback = useCallback(
+    (tone: "added" | "removed" | "limit", message: string) => {
+      setSelectionFeedback({ key: Date.now(), tone, message });
+    },
+    [],
+  );
 
   useEffect(() => {
     setHighlightedAgeBand(null);
@@ -1196,20 +1203,31 @@ const MapAnalysisPage = () => {
           return prev;
         }
         let next = [...prev, areaId];
+        let reachedLimit = false;
         if (next.length > MAX_SELECTED_AREAS) {
           next = next.slice(next.length - MAX_SELECTED_AREAS);
+          reachedLimit = true;
         }
-        setSelectionFeedback({ key: Date.now(), label: option.label, action: "added" });
+        const tone = reachedLimit ? "limit" : "added";
+        const message = reachedLimit
+          ? `${option.label} を比較に追加しました（最大${MAX_SELECTED_AREAS}件に到達）`
+          : `${option.label} を比較に追加しました`;
+        showSelectionFeedback(tone, message);
         return next;
       });
       setFocusAreaId(areaId);
       setPendingAreaId("");
     },
-    [areaOptions],
+    [areaOptions, showSelectionFeedback],
   );
 
-  const comparisonChartHeight = Math.max(280, selectedComparisonData.length * 68);
-  const diffChartHeight = Math.max(240, selectedComparisonData.length * 60);
+  const isExpandedComparison = selectedComparisonData.length >= 8;
+  const comparisonChartHeight = Math.max(320, selectedComparisonData.length * 72);
+  const diffChartHeight = Math.max(260, selectedComparisonData.length * 64);
+  const shareBarCategoryGap = isExpandedComparison ? "18%" : "26%";
+  const shareBarGap = isExpandedComparison ? 4 : 6;
+  const diffBarCategoryGap = isExpandedComparison ? "24%" : "32%";
+  const diffBarGap = isExpandedComparison ? 4 : 6;
 
   const comparisonShareDomain = useMemo<[number, number]>(() => {
     if (comparisonBarData.length === 0) {
@@ -1268,7 +1286,9 @@ const MapAnalysisPage = () => {
       setFocusAreaId(lastId);
       const label = areaLabelMap[areaId];
       if (label) {
-        setSelectionFeedback({ key: Date.now(), label, action: "removed" });
+        showSelectionFeedback("removed", `${label} を比較対象から外しました`);
+      } else {
+        showSelectionFeedback("removed", "選択した地区を比較対象から外しました");
       }
       return next;
     });
@@ -1322,15 +1342,27 @@ const MapAnalysisPage = () => {
     if (!areaId) {
       return;
     }
+    const label =
+      comparisonBarData.find((row) => row.id === areaId)?.label ??
+      areaLabelMap[areaId] ??
+      areaOptions.find((option) => option.id === areaId)?.label ??
+      "選択した地区";
     setHasCustomSelection(true);
     setSelectedAreaIds((prev) => {
       if (prev.includes(areaId)) {
         return prev;
       }
-      const next = [...prev, areaId];
+      let next = [...prev, areaId];
+      let reachedLimit = false;
       if (next.length > MAX_SELECTED_AREAS) {
-        next.shift();
+        next = next.slice(next.length - MAX_SELECTED_AREAS);
+        reachedLimit = true;
       }
+      const tone = reachedLimit ? "limit" : "added";
+      const message = reachedLimit
+        ? `${label} を比較に追加しました（最大${MAX_SELECTED_AREAS}件に到達）`
+        : `${label} を比較に追加しました`;
+      showSelectionFeedback(tone, message);
       return next;
     });
     setFocusAreaId(areaId);
@@ -1348,36 +1380,46 @@ const MapAnalysisPage = () => {
     setHighlightedAgeBand(ageBandId);
   };
 
-  const handleToggleAreaFromMap = useCallback((area: AreaSelectionMeta) => {
-    setHasCustomSelection(true);
-    setAreaLabelMap((prev) => {
-      if (prev[area.id]) {
-        return prev;
-      }
-      return { ...prev, [area.id]: area.label };
-    });
-    setSelectedAreaIds((prev) => {
-      const exists = prev.includes(area.id);
-      let next: string[];
-      let nextFocus: string | null;
-      let action: "added" | "removed";
-      if (exists) {
-        action = "removed";
-        next = prev.filter((id) => id !== area.id);
-        nextFocus = next[next.length - 1] ?? null;
-      } else {
-        action = "added";
-        next = [...prev, area.id];
-        if (next.length > MAX_SELECTED_AREAS) {
-          next = next.slice(next.length - MAX_SELECTED_AREAS);
+  const handleToggleAreaFromMap = useCallback(
+    (area: AreaSelectionMeta) => {
+      setHasCustomSelection(true);
+      setAreaLabelMap((prev) => {
+        if (prev[area.id]) {
+          return prev;
         }
-        nextFocus = area.id;
-      }
-      setFocusAreaId(nextFocus);
-      setSelectionFeedback({ key: Date.now(), label: area.label, action });
-      return next;
-    });
-  }, []);
+        return { ...prev, [area.id]: area.label };
+      });
+      setSelectedAreaIds((prev) => {
+        const exists = prev.includes(area.id);
+        let next: string[];
+        let nextFocus: string | null;
+        if (exists) {
+          next = prev.filter((id) => id !== area.id);
+          nextFocus = next[next.length - 1] ?? null;
+          showSelectionFeedback(
+            "removed",
+            `${area.label} を比較対象から外しました`,
+          );
+        } else {
+          next = [...prev, area.id];
+          let reachedLimit = false;
+          if (next.length > MAX_SELECTED_AREAS) {
+            next = next.slice(next.length - MAX_SELECTED_AREAS);
+            reachedLimit = true;
+          }
+          nextFocus = area.id;
+          const tone = reachedLimit ? "limit" : "added";
+          const message = reachedLimit
+            ? `${area.label} を比較に追加しました（最大${MAX_SELECTED_AREAS}件に到達）`
+            : `${area.label} を比較に追加しました`;
+          showSelectionFeedback(tone, message);
+        }
+        setFocusAreaId(nextFocus);
+        return next;
+      });
+    },
+    [showSelectionFeedback],
+  );
 
   const ComparisonTooltipContent = ({
     active,
@@ -1463,31 +1505,53 @@ const MapAnalysisPage = () => {
     );
   };
 
-  const renderCategoryTick = ({
-    x,
-    y,
-    payload,
-  }: {
-    x?: number;
-    y?: number;
-    payload?: { value: string };
-  }) => {
-    if (typeof x !== "number" || typeof y !== "number" || !payload?.value) {
-      return <g />;
-    }
-    const segments = payload.value.match(/.{1,6}/g) ?? [payload.value];
-    return (
-      <g transform={`translate(${x},${y})`}>
-        <text x={0} y={0} fill="#475569" fontSize={10} textAnchor="middle">
-          {segments.map((segment, index) => (
-            <tspan key={`${payload.value}-${index}`} x={0} dy={index === 0 ? 0 : 12}>
-              {segment}
-            </tspan>
-          ))}
-        </text>
-      </g>
-    );
-  };
+  const labelColorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    selectedComparisonData.forEach((row) => {
+      map.set(row.label, row.fill);
+    });
+    return map;
+  }, [selectedComparisonData]);
+
+  const tickFontSize = selectedComparisonData.length >= 9 ? 11 : 12;
+
+  const renderCategoryTick = useCallback(
+    ({
+      x,
+      y,
+      payload,
+    }: {
+      x?: number;
+      y?: number;
+      payload?: { value: string };
+    }) => {
+      if (typeof x !== "number" || typeof y !== "number" || !payload?.value) {
+        return <g />;
+      }
+      const segments = payload.value.match(/.{1,6}/g) ?? [payload.value];
+      const baseColor = labelColorMap.get(payload.value);
+      const textColor = baseColor ? solidFill(baseColor, 0.95) : "#1f2937";
+      return (
+        <g transform={`translate(${x},${y})`}>
+          <text
+            x={0}
+            y={0}
+            fill={textColor}
+            fontSize={tickFontSize}
+            fontWeight={600}
+            textAnchor="middle"
+          >
+            {segments.map((segment, index) => (
+              <tspan key={`${payload.value}-${index}`} x={0} dy={index === 0 ? 0 : 13}>
+                {segment}
+              </tspan>
+            ))}
+          </text>
+        </g>
+      );
+    },
+    [labelColorMap, tickFontSize],
+  );
 
   const isEmpty = filteredMapRecords.length === 0;
 
@@ -1983,7 +2047,12 @@ const MapAnalysisPage = () => {
                         </p>
                         <div className="mt-4" style={{ height: `${comparisonChartHeight}px` }}>
                           <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={selectedComparisonData} margin={{ top: 12, right: 24, bottom: 32, left: 32 }} barCategoryGap="30%" barGap={6}>
+                            <BarChart
+                              data={selectedComparisonData}
+                              margin={{ top: 12, right: 24, bottom: 36, left: 32 }}
+                              barCategoryGap={shareBarCategoryGap}
+                              barGap={shareBarGap}
+                            >
                               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                               <XAxis dataKey="label" interval={0} height={60} tick={renderCategoryTick} />
                               <YAxis domain={comparisonShareDomain} tickFormatter={(value: number) => `${value}%`} stroke="#94a3b8" />
@@ -2001,8 +2070,8 @@ const MapAnalysisPage = () => {
                                   dataKey="periodA"
                                   position="top"
                                   formatter={(value) => `${typeof value === "number" ? value.toFixed(1) : value}%`}
-                                  fill="#1f2937"
-                                  fontSize={11}
+                                  fill="#0f172a"
+                                  fontSize={12}
                                 />
                               </Bar>
                               <Bar dataKey="periodB" name={periodBLabel} radius={[6, 6, 0, 0]}>
@@ -2018,8 +2087,8 @@ const MapAnalysisPage = () => {
                                   dataKey="periodB"
                                   position="top"
                                   formatter={(value) => `${typeof value === "number" ? value.toFixed(1) : value}%`}
-                                  fill="#1f2937"
-                                  fontSize={11}
+                                  fill="#0f172a"
+                                  fontSize={12}
                                 />
                               </Bar>
                             </BarChart>
@@ -2032,7 +2101,12 @@ const MapAnalysisPage = () => {
                         <p className="text-[11px] text-slate-500">正の値は増加、負の値は減少を示します。</p>
                         <div className="mt-4" style={{ height: `${diffChartHeight}px` }}>
                           <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={selectedComparisonData} margin={{ top: 12, right: 32, bottom: 32, left: 32 }} barCategoryGap="35%" barGap={6}>
+                            <BarChart
+                              data={selectedComparisonData}
+                              margin={{ top: 12, right: 32, bottom: 36, left: 32 }}
+                              barCategoryGap={diffBarCategoryGap}
+                              barGap={diffBarGap}
+                            >
                               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                               <XAxis dataKey="label" interval={0} height={60} tick={renderCategoryTick} />
                               <YAxis domain={comparisonDiffDomain} tickFormatter={(value: number) => `${value}%`} stroke="#94a3b8" />
@@ -2109,13 +2183,16 @@ const MapAnalysisPage = () => {
       {selectionFeedback && (
         <div
           key={selectionFeedback.key}
-          className={`selection-feedback fixed bottom-8 right-6 z-40 flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-xl ${selectionFeedback.action === "added" ? "bg-emerald-600/90" : "bg-slate-900/85"}`}
+          className={`selection-feedback fixed bottom-8 right-6 z-40 flex max-w-sm items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-xl ${
+            selectionFeedback.tone === "added"
+              ? "bg-emerald-600/90"
+              : selectionFeedback.tone === "removed"
+                ? "bg-slate-900/85"
+                : "bg-amber-500/95"
+          }`}
         >
           <MapPin className="h-4 w-4" />
-          <span>{selectionFeedback.label}</span>
-          <span className="text-[10px] uppercase tracking-wide">
-            {selectionFeedback.action === "added" ? "追加" : "削除"}
-          </span>
+          <span className="leading-snug">{selectionFeedback.message}</span>
         </div>
       )}
 
