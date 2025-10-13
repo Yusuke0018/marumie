@@ -201,7 +201,11 @@ type AreaSelectionMeta = {
 };
 
 const MAX_SELECTED_AREAS = 10;
-const SHARE_DIFF_THRESHOLD = 0.002;
+const SHARE_RATIO_THRESHOLD = 0.002;
+
+const KATAKANA_LABEL_REGEX = /^[\u30A0-\u30FFー･・\s]+$/u;
+
+const isCorporateLabel = (label: string) => KATAKANA_LABEL_REGEX.test(label.trim());
 
 type ComparisonSelectionPreset =
   | "recommended"
@@ -1084,6 +1088,13 @@ const MapAnalysisPage = () => {
       if (/^[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+$/u.test(label)) {
         return false;
       }
+      if (isCorporateLabel(label)) {
+        return false;
+      }
+      const shareMax = Math.max(row.shareA, row.shareB);
+      if (shareMax < SHARE_RATIO_THRESHOLD) {
+        return false;
+      }
       return true;
     });
     return validRows.slice(0, 8);
@@ -1099,7 +1110,18 @@ const MapAnalysisPage = () => {
       return [] as ComparisonRow[];
     }
     return validComparison.rows
-      .filter((row) => row.diffShare >= SHARE_DIFF_THRESHOLD)
+      .filter((row) => {
+        if (Math.max(row.shareA, row.shareB) < SHARE_RATIO_THRESHOLD) {
+          return false;
+        }
+        if (row.diffShare <= 0) {
+          return false;
+        }
+        if (isCorporateLabel(row.label.trim())) {
+          return false;
+        }
+        return true;
+      })
       .sort((a, b) => b.diffShare - a.diffShare);
   }, [validComparison]);
 
@@ -1108,7 +1130,18 @@ const MapAnalysisPage = () => {
       return [] as ComparisonRow[];
     }
     return validComparison.rows
-      .filter((row) => row.diffShare <= -SHARE_DIFF_THRESHOLD)
+      .filter((row) => {
+        if (Math.max(row.shareA, row.shareB) < SHARE_RATIO_THRESHOLD) {
+          return false;
+        }
+        if (row.diffShare >= 0) {
+          return false;
+        }
+        if (isCorporateLabel(row.label.trim())) {
+          return false;
+        }
+        return true;
+      })
       .sort((a, b) => a.diffShare - b.diffShare);
   }, [validComparison]);
 
@@ -1229,10 +1262,10 @@ const MapAnalysisPage = () => {
       {
         value: "custom" as const,
         label: "手動選択（保持）",
-        disabled: selectionPreset !== "custom",
+        disabled: false,
       },
     ],
-    [selectionPreset, selectionPresetMap],
+    [selectionPresetMap],
   );
 
   const selectedComparisonData = useMemo(() => {
