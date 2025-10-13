@@ -213,6 +213,8 @@ type ValueViewMode = "count" | "diff" | "ratio";
 type FocusDimension = "area" | "age";
 type AgeViewMode = "count" | "ratio";
 
+const HIDDEN_AREA_LABEL = "住所未設定";
+
 type AreaSeriesPoint = {
   month: string;
   count: number;
@@ -537,12 +539,12 @@ const buildSummaryEntries = (
   });
 
   const increases = areaEntries
-    .filter((entry) => entry.diff > 0)
+    .filter((entry) => entry.diff > 0 && entry.label !== HIDDEN_AREA_LABEL)
     .sort((a, b) => b.diff - a.diff)
     .slice(0, 3);
 
   const decreases = areaEntries
-    .filter((entry) => entry.diff < 0)
+    .filter((entry) => entry.diff < 0 && entry.label !== HIDDEN_AREA_LABEL)
     .sort((a, b) => a.diff - b.diff)
     .slice(0, 3);
 
@@ -865,6 +867,11 @@ const MapAnalysisPage = () => {
     [filteredMapRecords, filteredMonths],
   );
 
+  const visibleAreaSeries = useMemo(
+    () => areaSeries.filter((series) => series.label !== HIDDEN_AREA_LABEL),
+    [areaSeries],
+  );
+
   const ageSeries = useMemo(
     () => buildAgeSeries(filteredMapRecords, filteredMonths),
     [filteredMapRecords, filteredMonths],
@@ -934,15 +941,15 @@ const MapAnalysisPage = () => {
 
   const HEATMAP_LIMIT = 12;
   const topAreaSeries = useMemo(
-    () => areaSeries.slice(0, HEATMAP_LIMIT),
-    [areaSeries],
+    () => visibleAreaSeries.slice(0, HEATMAP_LIMIT),
+    [visibleAreaSeries],
   );
 
   const monthlyTotals = useMemo(() => {
     return filteredMonths.map((_, monthIndex) =>
-      areaSeries.reduce((acc, series) => acc + (series.totals[monthIndex]?.count ?? 0), 0),
+      visibleAreaSeries.reduce((acc, series) => acc + (series.totals[monthIndex]?.count ?? 0), 0),
     );
-  }, [areaSeries, filteredMonths]);
+  }, [visibleAreaSeries, filteredMonths]);
 
   const heatmapMaxCount = useMemo(() => {
     let max = 0;
@@ -1034,8 +1041,8 @@ const MapAnalysisPage = () => {
     if (!focusedAreaId) {
       return null;
     }
-    return areaSeries.find((series) => series.id === focusedAreaId) ?? null;
-  }, [areaSeries, focusedAreaId]);
+    return visibleAreaSeries.find((series) => series.id === focusedAreaId) ?? null;
+  }, [visibleAreaSeries, focusedAreaId]);
 
   const focusedAreaTrend = useMemo(() => {
     if (!focusedAreaSeries) {
@@ -1080,7 +1087,7 @@ const MapAnalysisPage = () => {
 
   const areaRankingPerMonth = useMemo(() => {
     return filteredMonths.map((month, monthIndex) =>
-      areaSeries
+      visibleAreaSeries
         .map((series) => ({
           id: series.id,
           label: series.label,
@@ -1088,7 +1095,7 @@ const MapAnalysisPage = () => {
         }))
         .sort((a, b) => b.value - a.value),
     );
-  }, [areaSeries, filteredMonths]);
+  }, [visibleAreaSeries, filteredMonths]);
 
   const areaRankSeries = useMemo(() => {
     const candidateIds = new Set<string>();
@@ -1098,7 +1105,7 @@ const MapAnalysisPage = () => {
     const ids = Array.from(candidateIds);
     return ids
       .map((id) => {
-        const series = areaSeries.find((item) => item.id === id);
+        const series = visibleAreaSeries.find((item) => item.id === id);
         if (!series) {
           return null;
         }
@@ -1121,7 +1128,7 @@ const MapAnalysisPage = () => {
         label: string;
         points: { month: string; rank: number | null }[];
       } => Boolean(value));
-  }, [areaRankingPerMonth, areaSeries, filteredMonths]);
+  }, [areaRankingPerMonth, visibleAreaSeries, filteredMonths]);
 
   const ageRankingPerMonth = useMemo(() => {
     return filteredMonths.map((month, monthIndex) =>
