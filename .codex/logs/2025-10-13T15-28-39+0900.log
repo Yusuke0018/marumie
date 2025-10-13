@@ -1,0 +1,10 @@
+timestamp: 2025-10-13T15-28-39+0900
+branch: main
+commit: 91bf94de6429bc89045c25f9b62a8ea7e2b88501
+summary: docs更新(analytics spec)
+changes: docs/20_spec.md (listing/correlation/patients/survey仕様追記)
+  docs/30_coding-rules.md (ローカルストレージ運用とフィルタ共通化ルール)
+  docs/70_changelog.md (分析ページ追加履歴)
+tests:
+  - not run (docs only)
+push: pending
