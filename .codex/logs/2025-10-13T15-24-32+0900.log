@@ -1,0 +1,9 @@
+timestamp: 2025-10-13T15-24-32+0900
+branch: main
+commit: afa92c4e4b279c1a0d7030b9381a82ae3add9c7c
+summary: remove患者視点インサイトと住所未設定除外
+changes: src/app/map-analysis/page.tsx (remove age insight UI, skip hidden areas)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: origin/main (success)
