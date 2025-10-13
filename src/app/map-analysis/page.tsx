@@ -764,6 +764,10 @@ const MapAnalysisPage = () => {
   const [rangeA, setRangeA] = useState<ComparisonRange>({ start: null, end: null });
   const [rangeB, setRangeB] = useState<ComparisonRange>({ start: null, end: null });
   const [isAreaPickerOpen, setAreaPickerOpen] = useState(false);
+  const [areaLabelMap, setAreaLabelMap] = useState<Record<string, string>>({});
+  const [selectionFeedback, setSelectionFeedback] = useState<
+    { key: number; label: string; action: "added" | "removed" } | null
+  >(null);
 
   useEffect(() => {
     setHighlightedAgeBand(null);
@@ -783,6 +787,16 @@ const MapAnalysisPage = () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [isAreaPickerOpen]);
+
+  useEffect(() => {
+    if (!selectionFeedback) {
+      return;
+    }
+    const timer = window.setTimeout(() => setSelectionFeedback(null), 2200);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [selectionFeedback]);
 
   const areaSeries = useMemo(
     () => buildAreaSeries(filteredMapRecords, filteredMonths),
@@ -1124,17 +1138,74 @@ const MapAnalysisPage = () => {
       (id, index, array) => array.indexOf(id) === index,
     );
     return orderedUnique
-      .map((id) => dataMap.get(id))
+      .map((id, index) => {
+        const existing = dataMap.get(id);
+        if (existing) {
+          return existing;
+        }
+        const label = areaLabelMap[id];
+        if (!label) {
+          return null;
+        }
+        const { fill, accent } = AREA_COLOR_PALETTE[index % AREA_COLOR_PALETTE.length];
+        return {
+          id,
+          label,
+          periodA: 0,
+          periodB: 0,
+          diff: 0,
+          fill,
+          accent,
+        };
+      })
       .filter((row): row is (typeof comparisonBarData)[number] => Boolean(row));
-  }, [comparisonBarData, selectedAreaIds, defaultAreaIds]);
+  }, [comparisonBarData, selectedAreaIds, defaultAreaIds, areaLabelMap]);
 
-  const areaOptions = useMemo(
-    () =>
-      comparisonBarData.map((row) => ({
-        id: row.id,
-        label: row.label,
-      })),
-    [comparisonBarData],
+  const areaOptions = useMemo(() => {
+    const options = comparisonBarData.map((row) => ({
+      id: row.id,
+      label: row.label,
+    }));
+    const knownIds = new Set(options.map((option) => option.id));
+    Object.entries(areaLabelMap).forEach(([id, label]) => {
+      if (!knownIds.has(id)) {
+        options.push({ id, label });
+      }
+    });
+    return options.sort((a, b) => a.label.localeCompare(b.label, "ja"));
+  }, [comparisonBarData, areaLabelMap]);
+
+  const handleAddArea = useCallback(
+    (areaId: string) => {
+      if (!areaId) {
+        return;
+      }
+      const option = areaOptions.find((candidate) => candidate.id === areaId);
+      if (!option) {
+        return;
+      }
+      setHasCustomSelection(true);
+      setAreaLabelMap((prev) => {
+        if (prev[areaId]) {
+          return prev;
+        }
+        return { ...prev, [areaId]: option.label };
+      });
+      setSelectedAreaIds((prev) => {
+        if (prev.includes(areaId)) {
+          return prev;
+        }
+        let next = [...prev, areaId];
+        if (next.length > MAX_SELECTED_AREAS) {
+          next = next.slice(next.length - MAX_SELECTED_AREAS);
+        }
+        setSelectionFeedback({ key: Date.now(), label: option.label, action: "added" });
+        return next;
+      });
+      setFocusAreaId(areaId);
+      setPendingAreaId("");
+    },
+    [areaOptions],
   );
 
   const comparisonChartHeight = Math.max(280, selectedComparisonData.length * 68);
@@ -1186,33 +1257,21 @@ const MapAnalysisPage = () => {
       setRangeB((prev) => ({ ...prev, [field]: value }));
     };
 
-  const handleAddArea = (areaId: string) => {
-    if (!areaId) {
-      return;
-    }
-    const available = comparisonBarData.find((row) => row.id === areaId);
-    if (!available) {
-      return;
-    }
+  const handleRemoveArea = (areaId: string) => {
     setHasCustomSelection(true);
     setSelectedAreaIds((prev) => {
-      if (prev.includes(areaId)) {
+      if (!prev.includes(areaId)) {
         return prev;
       }
-      const next = [...prev, areaId];
-      if (next.length > MAX_SELECTED_AREAS) {
-        next.shift();
+      const next = prev.filter((id) => id !== areaId);
+      const lastId = next[next.length - 1] ?? null;
+      setFocusAreaId(lastId);
+      const label = areaLabelMap[areaId];
+      if (label) {
+        setSelectionFeedback({ key: Date.now(), label, action: "removed" });
       }
       return next;
     });
-    setFocusAreaId(areaId);
-    setPendingAreaId("");
-  };
-
-  const handleRemoveArea = (areaId: string) => {
-    setHasCustomSelection(true);
-    setSelectedAreaIds((prev) => prev.filter((id) => id !== areaId));
-    setFocusAreaId((current) => (current === areaId ? null : current));
   };
 
   const handleResetAreas = () => {
@@ -1244,6 +1303,21 @@ const MapAnalysisPage = () => {
     Number.isInteger(value)
       ? value.toLocaleString("ja-JP")
       : value.toFixed(1);
+
+  const handleRegisterAreas = useCallback((areas: AreaSelectionMeta[]) => {
+    setAreaLabelMap((prev) => {
+      let updated = false;
+      const next = { ...prev };
+      for (const area of areas) {
+        if (!next[area.id]) {
+          next[area.id] = area.label;
+          updated = true;
+        }
+      }
+      return updated ? next : prev;
+    });
+  }, []);
+
   const handleSummaryAreaClick = (areaId: string) => {
     if (!areaId) {
       return;
@@ -1276,20 +1350,31 @@ const MapAnalysisPage = () => {
 
   const handleToggleAreaFromMap = useCallback((area: AreaSelectionMeta) => {
     setHasCustomSelection(true);
+    setAreaLabelMap((prev) => {
+      if (prev[area.id]) {
+        return prev;
+      }
+      return { ...prev, [area.id]: area.label };
+    });
     setSelectedAreaIds((prev) => {
+      const exists = prev.includes(area.id);
       let next: string[];
-      if (prev.includes(area.id)) {
+      let nextFocus: string | null;
+      let action: "added" | "removed";
+      if (exists) {
+        action = "removed";
         next = prev.filter((id) => id !== area.id);
-        setFocusAreaId((current) =>
-          current === area.id ? next[next.length - 1] ?? null : current,
-        );
+        nextFocus = next[next.length - 1] ?? null;
       } else {
+        action = "added";
         next = [...prev, area.id];
         if (next.length > MAX_SELECTED_AREAS) {
           next = next.slice(next.length - MAX_SELECTED_AREAS);
         }
-        setFocusAreaId(area.id);
+        nextFocus = area.id;
       }
+      setFocusAreaId(nextFocus);
+      setSelectionFeedback({ key: Date.now(), label: area.label, action });
       return next;
     });
   }, []);
@@ -1472,6 +1557,7 @@ const MapAnalysisPage = () => {
                 selectedAreaIds={selectedAreaIds}
                 focusAreaId={focusAreaId}
                 onToggleArea={handleToggleAreaFromMap}
+                onRegisterAreas={handleRegisterAreas}
               />
             </section>
 
@@ -2020,6 +2106,19 @@ const MapAnalysisPage = () => {
         </div>
       </main>
 
+      {selectionFeedback && (
+        <div
+          key={selectionFeedback.key}
+          className={`selection-feedback fixed bottom-8 right-6 z-40 flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-xl ${selectionFeedback.action === "added" ? "bg-emerald-600/90" : "bg-slate-900/85"}`}
+        >
+          <MapPin className="h-4 w-4" />
+          <span>{selectionFeedback.label}</span>
+          <span className="text-[10px] uppercase tracking-wide">
+            {selectionFeedback.action === "added" ? "追加" : "削除"}
+          </span>
+        </div>
+      )}
+
       {isAreaPickerOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 backdrop-blur-sm"
@@ -2045,15 +2144,17 @@ const MapAnalysisPage = () => {
                 閉じる
               </button>
             </div>
-            <div className="mt-4 h-[520px] rounded-2xl border border-slate-200 bg-slate-50/40">
-              <GeoDistributionMap
-                reservations={filteredMapRecords}
-                periodLabel={mapPeriodLabel}
-                selectedAreaIds={selectedAreaIds}
-                focusAreaId={focusAreaId}
-                onToggleArea={handleToggleAreaFromMap}
-              />
-            </div>
+          <div className="mt-4 h-[520px] rounded-2xl border border-slate-200 bg-slate-50/40">
+            <GeoDistributionMap
+              reservations={filteredMapRecords}
+              periodLabel={mapPeriodLabel}
+              selectedAreaIds={selectedAreaIds}
+              focusAreaId={focusAreaId}
+              onToggleArea={handleToggleAreaFromMap}
+              onRegisterAreas={handleRegisterAreas}
+              pickerMode
+            />
+          </div>
             <p className="mt-3 text-xs text-slate-500">
               ダブルクリックで拡大、右下のコントロールでズーム／リセットができます。
             </p>

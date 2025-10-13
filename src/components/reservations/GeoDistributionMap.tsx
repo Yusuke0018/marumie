@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { MapContainer, TileLayer, CircleMarker, Tooltip, Marker } from "react-leaflet";
-import { divIcon, type LatLngExpression, type Map as LeafletMap } from "leaflet";
+import { MapContainer, TileLayer, CircleMarker, Tooltip, Marker, useMapEvents } from "react-leaflet";
+import { divIcon, latLngBounds, type LatLngExpression, type Map as LeafletMap } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 type GeoDistributionMapProps = {
@@ -12,6 +12,7 @@ type GeoDistributionMapProps = {
   onToggleArea?: (area: AreaSelectionPayload) => void;
   onRegisterAreas?: (areas: AreaSelectionPayload[]) => void;
   focusAreaId?: string | null;
+  pickerMode?: boolean;
 };
 
 type MapVisualizationRecord = {
@@ -595,6 +596,7 @@ const GeoDistributionMapComponent = ({
   onToggleArea,
   onRegisterAreas,
   focusAreaId,
+  pickerMode = false,
 }: GeoDistributionMapProps) => {
   const departmentOptions = useMemo(() => {
     const unique = new Set<string>();
@@ -633,6 +635,7 @@ const GeoDistributionMapComponent = ({
   const [currentZoom, setCurrentZoom] = useState<number>(12);
 
   const mapRef = useRef<LeafletMap | null>(null);
+  const mapInitialFitRef = useRef(false);
   const departmentInitializedRef = useRef(false);
 
   const clinicIcon = useMemo(
@@ -996,6 +999,72 @@ const GeoDistributionMapComponent = ({
     return { mappedPoints: result, unmatchedCount: unmatchedTotals };
   }, [coordinateIndex, groupedLocations, municipalityIndex, selectedAgeBand, currentZoom]);
 
+  const dataPointIds = useMemo(
+    () => new Set(mappedPoints.map((point) => point.id)),
+    [mappedPoints],
+  );
+
+  const pickerPoints = useMemo(() => {
+    if (!pickerMode || !townMaster) {
+      return [];
+    }
+    const unique = new Map<string, AreaSelectionPayload>();
+    for (const item of townMaster) {
+      const normalizedPrefecture = item.prefecture.replace(/\s+/g, "");
+      const normalizedCity = item.city.replace(/\s+/g, "");
+      if (normalizedPrefecture !== "大阪府" || !normalizedCity.startsWith("大阪市")) {
+        continue;
+      }
+      const normalizedTown =
+        standardizeTownLabel(item.town) ?? item.town.replace(/\s+/g, "");
+      const id =
+        makeLocationKey(normalizedPrefecture, normalizedCity, normalizedTown) ??
+        `${normalizedCity}|${normalizedTown}`;
+      if (!unique.has(id)) {
+        unique.set(id, {
+          id,
+          label: `${item.city}${normalizedTown}`,
+          latitude: item.latitude,
+          longitude: item.longitude,
+          city: normalizedCity,
+          town: normalizedTown,
+          prefecture: normalizedPrefecture,
+        });
+      }
+    }
+    return Array.from(unique.values());
+  }, [pickerMode, townMaster]);
+
+  const pickerBounds = useMemo(() => {
+    if (!pickerMode || pickerPoints.length === 0) {
+      return null;
+    }
+    return latLngBounds(
+      pickerPoints.map((point) => [point.latitude, point.longitude] as [number, number]),
+    );
+  }, [pickerMode, pickerPoints]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+    if (pickerMode) {
+      if (pickerBounds) {
+        map.fitBounds(pickerBounds.pad(0.08), { animate: true });
+      }
+      return;
+    }
+    if (mapInitialFitRef.current || mappedPoints.length === 0) {
+      return;
+    }
+    const bounds = latLngBounds(
+      mappedPoints.map((point) => [point.latitude, point.longitude] as [number, number]),
+    );
+    map.fitBounds(bounds.pad(0.08), { animate: false });
+    mapInitialFitRef.current = true;
+  }, [pickerMode, pickerBounds, mappedPoints]);
+
 
   useEffect(() => {
     if (!onRegisterAreas) {
@@ -1142,6 +1211,7 @@ const GeoDistributionMapComponent = ({
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)]">
         <div className="relative z-0 h-[520px] w-full overflow-hidden rounded-3xl border border-slate-200 shadow-inner">
           <MapContainer
+            key={pickerMode ? "picker-map" : "main-map"}
             center={DEFAULT_CENTER}
             zoom={12}
             scrollWheelZoom
@@ -1161,6 +1231,38 @@ const GeoDistributionMapComponent = ({
                 </div>
               </Tooltip>
             </Marker>
+            {pickerMode &&
+              pickerPoints
+                .filter((point) => !dataPointIds.has(point.id))
+                .map((point) => (
+                  <CircleMarker
+                    key={`picker-${point.id}`}
+                    center={[point.latitude, point.longitude]}
+                    radius={3}
+                    pathOptions={{
+                      color: "#fb7185",
+                      weight: 1,
+                      fillColor: "#fda4af",
+                      fillOpacity: 0.35,
+                      className: onToggleArea ? "picker-area-marker cursor-pointer" : "picker-area-marker",
+                    }}
+                    eventHandlers=
+                      {onToggleArea
+                        ? {
+                            click: () =>
+                              onToggleArea({
+                                id: point.id,
+                                label: point.label,
+                                latitude: point.latitude,
+                                longitude: point.longitude,
+                                city: point.city,
+                                town: point.town,
+                                prefecture: point.prefecture,
+                              }),
+                          }
+                        : undefined}
+                  />
+                ))}
             {mappedPoints.map((point) => {
               const ageColor =
                 selectedAgeBand === ALL_AGE_BAND
@@ -1184,6 +1286,14 @@ const GeoDistributionMapComponent = ({
               const adjustedFillOpacity = isSelected ? Math.min(0.95, baseFillOpacity + 0.2) : baseFillOpacity;
               const markerRadius = point.radius + (isFocused ? 6 : isSelected ? 2 : 0);
               const pie = buildAgePie(point.ageBreakdown);
+              const markerClassName = [
+                "geo-area-marker",
+                onToggleArea ? "cursor-pointer" : null,
+                isSelected ? "geo-area-marker--selected" : null,
+                isFocused ? "geo-area-marker--focused" : null,
+              ]
+                .filter(Boolean)
+                .join(" ");
 
               const ageDetails = AGE_BANDS.filter(
                 (band) => point.ageBreakdown[band.id] > 0,
@@ -1206,7 +1316,7 @@ const GeoDistributionMapComponent = ({
                     fillOpacity: adjustedFillOpacity,
                     lineCap: "round",
                     lineJoin: "round",
-                    className: onToggleArea ? "cursor-pointer" : undefined,
+                    className: markerClassName,
                   }}
                   eventHandlers={
                     onToggleArea
@@ -1283,6 +1393,35 @@ const GeoDistributionMapComponent = ({
                 </CircleMarker>
               );
             })}
+            {pickerMode && (
+              <MapClickBridge
+                onSelect={(lat, lng) => {
+                  if (!onToggleArea || pickerPoints.length === 0) {
+                    return;
+                  }
+                  let nearest: AreaSelectionPayload | null = null;
+                  let minDistance = Number.POSITIVE_INFINITY;
+                  for (const point of pickerPoints) {
+                    const distance = Math.hypot(point.latitude - lat, point.longitude - lng);
+                    if (distance < minDistance) {
+                      minDistance = distance;
+                      nearest = point;
+                    }
+                  }
+                  if (nearest && minDistance < 0.05) {
+                    onToggleArea({
+                      id: nearest.id,
+                      label: nearest.label,
+                      latitude: nearest.latitude,
+                      longitude: nearest.longitude,
+                      city: nearest.city,
+                      town: nearest.town,
+                      prefecture: nearest.prefecture,
+                    });
+                  }
+                }}
+              />
+            )}
           </MapContainer>
           {geoLoading && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-white/60 text-sm font-medium text-slate-600">
@@ -1487,6 +1626,15 @@ const GeoDistributionMapComponent = ({
       </div>
     </div>
   );
+};
+
+const MapClickBridge = ({ onSelect }: { onSelect?: (lat: number, lng: number) => void }) => {
+  useMapEvents({
+    click(event) {
+      onSelect?.(event.latlng.lat, event.latlng.lng);
+    },
+  });
+  return null;
 };
 
 export const GeoDistributionMap = memo(GeoDistributionMapComponent);
