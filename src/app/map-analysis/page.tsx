@@ -201,7 +201,7 @@ type AreaSelectionMeta = {
 };
 
 const MAX_SELECTED_AREAS = 10;
-const SHARE_RATIO_THRESHOLD = 0.002;
+const SHARE_RATIO_THRESHOLD = 0.001;
 
 const KATAKANA_LABEL_REGEX = /^[\u30A0-\u30FFー･・\s]+$/u;
 
@@ -482,12 +482,30 @@ const buildSummaryEntries = (
   });
 
   const increases = areaEntries
-    .filter((entry) => entry.diff > 0 && entry.label !== HIDDEN_AREA_LABEL)
+    .filter(
+      (entry) =>
+        entry.diff > 0 &&
+        entry.label !== HIDDEN_AREA_LABEL &&
+        !isCorporateLabel(entry.label) &&
+        entry.share >= SHARE_RATIO_THRESHOLD,
+    )
     .sort((a, b) => b.diff - a.diff)
     .slice(0, 3);
 
   const decreases = areaEntries
-    .filter((entry) => entry.diff < 0 && entry.label !== HIDDEN_AREA_LABEL)
+    .filter((entry) => {
+      if (entry.diff >= 0) {
+        return false;
+      }
+      if (entry.label === HIDDEN_AREA_LABEL) {
+        return false;
+      }
+      if (isCorporateLabel(entry.label)) {
+        return false;
+      }
+      const startShare = totalStart > 0 && entry.comparison ? entry.comparison / totalStart : 0;
+      return Math.max(entry.share, startShare) >= SHARE_RATIO_THRESHOLD;
+    })
     .sort((a, b) => a.diff - b.diff)
     .slice(0, 3);
 
@@ -1091,8 +1109,8 @@ const MapAnalysisPage = () => {
       if (isCorporateLabel(label)) {
         return false;
       }
-      const shareMax = Math.max(row.shareA, row.shareB);
-      if (shareMax < SHARE_RATIO_THRESHOLD) {
+      const prominentShare = Math.max(row.shareA, row.shareB);
+      if (prominentShare < SHARE_RATIO_THRESHOLD) {
         return false;
       }
       return true;
@@ -1111,16 +1129,15 @@ const MapAnalysisPage = () => {
     }
     return validComparison.rows
       .filter((row) => {
-        if (Math.max(row.shareA, row.shareB) < SHARE_RATIO_THRESHOLD) {
+        const label = row.label.trim();
+        if (isCorporateLabel(label)) {
           return false;
         }
         if (row.diffShare <= 0) {
           return false;
         }
-        if (isCorporateLabel(row.label.trim())) {
-          return false;
-        }
-        return true;
+        const prominentShare = Math.max(row.shareA, row.shareB);
+        return prominentShare >= SHARE_RATIO_THRESHOLD;
       })
       .sort((a, b) => b.diffShare - a.diffShare);
   }, [validComparison]);
@@ -1131,16 +1148,15 @@ const MapAnalysisPage = () => {
     }
     return validComparison.rows
       .filter((row) => {
-        if (Math.max(row.shareA, row.shareB) < SHARE_RATIO_THRESHOLD) {
+        const label = row.label.trim();
+        if (isCorporateLabel(label)) {
           return false;
         }
         if (row.diffShare >= 0) {
           return false;
         }
-        if (isCorporateLabel(row.label.trim())) {
-          return false;
-        }
-        return true;
+        const prominentShare = Math.max(row.shareA, row.shareB);
+        return prominentShare >= SHARE_RATIO_THRESHOLD;
       })
       .sort((a, b) => a.diffShare - b.diffShare);
   }, [validComparison]);
@@ -1246,17 +1262,17 @@ const MapAnalysisPage = () => {
       },
       {
         value: "increaseTop10" as const,
-        label: "増加順 TOP10（0.2%以上）",
+        label: "増加順 TOP10（0.1%以上）",
         disabled: selectionPresetMap.increaseTop10.length === 0,
       },
       {
         value: "decreaseTop10" as const,
-        label: "減少順 TOP10（0.2%以上）",
+        label: "減少順 TOP10（0.1%以上）",
         disabled: selectionPresetMap.decreaseTop10.length === 0,
       },
       {
         value: "mixedTop5" as const,
-        label: "増加TOP5 + 減少TOP5（0.2%以上）",
+        label: "増加TOP5 + 減少TOP5（0.1%以上）",
         disabled: selectionPresetMap.mixedTop5.length === 0,
       },
       {
