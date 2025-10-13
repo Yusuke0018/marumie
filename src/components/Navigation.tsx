@@ -71,23 +71,33 @@ export default function Navigation() {
   return (
     <>
       <nav className="sticky top-0 z-50 border-b border-brand-100/70 bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/70">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 sm:px-6">
-          <div className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <h1 className="text-lg sm:text-xl font-bold tracking-wide text-brand-600">
-                マルミエ
-              </h1>
-            </div>
-            {showPeriodBadge && (
-              <div className="flex justify-start sm:justify-end">
-                <span className="inline-flex items-center gap-3 rounded-full border-2 border-brand-500 bg-white px-5 py-2 text-sm font-semibold text-brand-600 shadow-lg shadow-brand-500/30 sm:text-base">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-white shadow-inner">
-                    <CalendarRange className="h-4 w-4 sm:h-5 sm:w-5" />
-                  </span>
-                  <span className="tracking-wide">表示期間 {analysisPeriodLabel}</span>
-                </span>
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 sm:px-6">
+          <div className="flex flex-col gap-4 py-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                <div className="flex items-center gap-3">
+                  <h1 className="text-lg sm:text-xl font-bold tracking-wide text-brand-600">
+                    マルミエ
+                  </h1>
+                </div>
+                {isFilterablePage && (
+                  <div
+                    id={ANALYSIS_FILTER_SLOT_ID}
+                    className="w-full rounded-2xl border border-brand-200 bg-white/95 px-4 py-3 shadow-sm sm:w-auto sm:min-w-[320px]"
+                  />
+                )}
               </div>
-            )}
+              {showPeriodBadge && (
+                <div className="flex justify-start sm:justify-end">
+                  <span className="inline-flex items-center gap-3 rounded-full border-2 border-brand-500 bg-white px-5 py-2 text-sm font-semibold text-brand-600 shadow-lg shadow-brand-500/30 sm:text-base">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-white shadow-inner">
+                      <CalendarRange className="h-4 w-4 sm:h-5 sm:w-5" />
+                    </span>
+                    <span className="tracking-wide">表示期間 {analysisPeriodLabel}</span>
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center justify-between gap-6 pb-2">
@@ -183,25 +193,6 @@ export default function Navigation() {
         <div className="h-1 bg-gradient-to-r from-brand-500/80 via-accent-400/80 to-brand-500/80" />
       </nav>
 
-      {showPeriodBadge && (
-        <div className="sm:hidden px-4 pb-2">
-          <span className="inline-flex w-full items-center justify-center gap-3 rounded-full border-2 border-brand-500 bg-white px-4 py-2 text-xs font-semibold text-brand-600 shadow-lg shadow-brand-500/30">
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-500 text-white shadow-inner">
-              <CalendarRange className="h-3.5 w-3.5" />
-            </span>
-            <span className="tracking-wide">表示期間 {analysisPeriodLabel}</span>
-          </span>
-        </div>
-      )}
-
-      {isFilterablePage && (
-        <div className="mx-auto w-full max-w-6xl px-4 pb-3 sm:px-6 md:px-6 lg:px-8">
-          <div
-            id={ANALYSIS_FILTER_SLOT_ID}
-            className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-sm"
-          />
-        </div>
-      )}
     </>
   );
 }

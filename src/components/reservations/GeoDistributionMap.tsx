@@ -125,7 +125,6 @@ const DASH_REGEX = /[－―ーｰ‐]/g;
 const FULL_WIDTH_DIGITS = /[０-９]/g;
 
 const ALL_DEPARTMENT = "__all_department__";
-const ALL_PERIOD = "__all_period__";
 const ALL_AGE_BAND = "all" as const;
 
 type AgeFilterValue = AgeBandId | typeof ALL_AGE_BAND;
@@ -517,16 +516,6 @@ const computeRadius = (count: number, zoom: number): number => {
   return Math.min(80, Math.max(minRadius, adjustedRadius));
 };
 
-const formatMonthLabel = (value: string): string => {
-  const [yearRaw, monthRaw] = value.split("-");
-  const year = Number.parseInt(yearRaw ?? "", 10);
-  const month = Number.parseInt(monthRaw ?? "", 10);
-  if (!Number.isFinite(year) || !Number.isFinite(month)) {
-    return value;
-  }
-  return `${year}年${month}月`;
-};
-
 const formatTopDepartments = (point: LocationAggregation): string => {
   const sorted = Array.from(point.departmentBreakdown.entries()).sort(
     (a, b) => b[1] - a[1],
@@ -628,20 +617,6 @@ const GeoDistributionMapComponent = ({
     ];
   }, [reservations]);
 
-  const periodOptions = useMemo(() => {
-    const unique = new Set<string>();
-    reservations.forEach((reservation) => {
-      if (reservation.reservationMonth) {
-        unique.add(reservation.reservationMonth);
-      }
-    });
-    const sorted = Array.from(unique).sort();
-    return [
-      { value: ALL_PERIOD, label: "全期間" },
-      ...sorted.map((month) => ({ value: month, label: formatMonthLabel(month) })),
-    ];
-  }, [reservations]);
-
   const ageFilterOptions = useMemo(
     () => [
       { value: ALL_AGE_BAND, label: "全ての年代" },
@@ -652,7 +627,6 @@ const GeoDistributionMapComponent = ({
 
   const [selectedDepartment, setSelectedDepartment] =
     useState<string>(ALL_DEPARTMENT);
-  const [selectedPeriod, setSelectedPeriod] = useState<string>(ALL_PERIOD);
   const [selectedAgeBand, setSelectedAgeBand] =
     useState<AgeFilterValue>(ALL_AGE_BAND);
   const [colorMode, setColorMode] = useState<ColorMode>("age");
@@ -660,16 +634,6 @@ const GeoDistributionMapComponent = ({
 
   const mapRef = useRef<LeafletMap | null>(null);
   const departmentInitializedRef = useRef(false);
-
-  const latestMonth = useMemo(() => {
-    const months = reservations
-      .map((reservation) => reservation.reservationMonth)
-      .filter((value): value is string => Boolean(value));
-    if (months.length === 0) {
-      return null;
-    }
-    return months.sort((a, b) => b.localeCompare(a))[0] ?? null;
-  }, [reservations]);
 
   const clinicIcon = useMemo(
     () =>
@@ -719,22 +683,6 @@ const GeoDistributionMapComponent = ({
     }
   }, [departmentOptions]);
 
-  useEffect(() => {
-    if (!periodOptions.some((option) => option.value === selectedPeriod)) {
-      if (latestMonth) {
-        setSelectedPeriod(latestMonth);
-      } else {
-        setSelectedPeriod(ALL_PERIOD);
-      }
-    }
-  }, [periodOptions, selectedPeriod, latestMonth]);
-
-  useEffect(() => {
-    if (latestMonth && (selectedPeriod === ALL_PERIOD || selectedPeriod === "")) {
-      setSelectedPeriod(latestMonth);
-    }
-  }, [latestMonth, selectedPeriod]);
-
   const enrichedRecords = useMemo(() => {
     return reservations.map((reservation) => ({
       reservation,
@@ -747,12 +695,6 @@ const GeoDistributionMapComponent = ({
   const filteredRecords = useMemo(() => {
     return enrichedRecords.filter(({ reservation, ageBand }) => {
       if (
-        selectedPeriod !== ALL_PERIOD &&
-        reservation.reservationMonth !== selectedPeriod
-      ) {
-        return false;
-      }
-      if (
         selectedDepartment !== ALL_DEPARTMENT &&
         reservation.department !== selectedDepartment
       ) {
@@ -763,7 +705,7 @@ const GeoDistributionMapComponent = ({
       }
       return true;
     });
-  }, [enrichedRecords, selectedDepartment, selectedPeriod, selectedAgeBand]);
+  }, [enrichedRecords, selectedDepartment, selectedAgeBand]);
 
   const municipalityIndex = useMemo(() => {
     if (!municipalities) {
@@ -1119,9 +1061,6 @@ const GeoDistributionMapComponent = ({
   const selectedDepartmentLabel =
     departmentOptions.find((option) => option.value === selectedDepartment)
       ?.label ?? "すべての診療科";
-  const selectedMonthLabel =
-    periodOptions.find((option) => option.value === selectedPeriod)?.label ??
-    "全期間";
   const selectedAgeLabel =
     ageFilterOptions.find((option) => option.value === selectedAgeBand)?.label ??
     "全ての年代";
@@ -1176,22 +1115,6 @@ const GeoDistributionMapComponent = ({
             }
           >
             {ageFilterOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            集計月
-          </span>
-          <select
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-            value={selectedPeriod}
-            onChange={(event) => setSelectedPeriod(event.target.value)}
-          >
-            {periodOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -1385,7 +1308,7 @@ const GeoDistributionMapComponent = ({
                 期間
               </p>
               <p className="mt-1 text-sm font-semibold text-slate-900">
-                {periodLabel}（{selectedMonthLabel}）
+                {periodLabel}
               </p>
             </div>
             <div>
