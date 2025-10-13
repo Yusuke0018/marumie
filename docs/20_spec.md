@@ -3,6 +3,10 @@
 予約分析(`/reservations`)は予約CSVをアップロードしてLocalStorageへ保持し、時間帯・曜日・診療科ごとのグラフと差分を表示します。[src/app/reservations/page.tsx:720-1045]
 マップ分析(`/map-analysis`)はカルテ記録をロードして町丁目別・年代別のヒートマップと統計サマリを描画します。[src/app/map-analysis/page.tsx:96-360]
 期間比較ビューは町丁目ごとの期間A・期間Bの割合を縦棒グラフで並置し、地図クリックで地区を追加しつつ差分バーと破線基準線で増減率を明示します。[src/app/map-analysis/page.tsx:960-1140]
+リスティング分析(`/listing`)は広告CSVをカテゴリ別に取り込み、金額・CV推移と時間帯別CVを可視化します。[src/app/listing/page.tsx:1-360][src/lib/listingData.ts:1-200]
+広告と予約の相関分析(`/correlation`)はListingデータと予約データを読み込み、Pearson相関と散布図・時間帯比較で関係性を評価します。[src/app/correlation/page.tsx:1-360]
+患者分析(`/patients`)はカルテ・予約・診断・アンケート・リスティングを統合し、月次トレンドや診療科別指標、データ共有を提供します。[src/app/patients/page.tsx:1-460]
+アンケート分析(`/survey`)は流入チャネル別の円グラフと比較ビューでアンケート回答を分析します。[src/app/survey/page.tsx:1-240]
 Cloudflare Worker は `/api/upload` と `/api/data/:id` を提供し、R2バケットでデータ共有を行います。[cloudflare-worker/src/index.ts:48-134]
 地図表示は大阪府町丁目データと全国市区町村座標を組み合わせ、町丁目未特定の場合は市区町村代表点を描画します。[public/data/osaka_towns.json:1][public/data/municipalities.json:1][src/components/reservations/GeoDistributionMap.tsx:538-940]
 
