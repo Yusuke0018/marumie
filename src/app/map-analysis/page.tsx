@@ -793,6 +793,7 @@ const MapAnalysisPage = () => {
   const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>([]);
   const [selectionPreset, setSelectionPreset] = useState<ComparisonSelectionPreset>("recommended");
   const [comparisonMetric, setComparisonMetric] = useState<"share" | "count">("share");
+  const isShareMetric = comparisonMetric === "share";
   const [focusAreaId, setFocusAreaId] = useState<string | null>(null);
   const [pendingAreaId, setPendingAreaId] = useState<string>("");
   const [rangeA, setRangeA] = useState<ComparisonRange>({ start: null, end: null });
@@ -1172,7 +1173,7 @@ const MapAnalysisPage = () => {
     () =>
       pickIds(
         [...filteredComparisonRows].sort(
-          (a, b) => Math.abs(b.diffCount) - Math.abs(a.diffCount),
+          (a, b) => Math.abs(b.diff) - Math.abs(a.diff),
         ),
         MAX_SELECTED_AREAS,
       ),
@@ -1183,8 +1184,8 @@ const MapAnalysisPage = () => {
     () =>
       pickIds(
         filteredComparisonRows
-          .filter((row) => row.diffCount > 0)
-          .sort((a, b) => b.diffCount - a.diffCount),
+          .filter((row) => row.diff > 0)
+          .sort((a, b) => b.diff - a.diff),
         MAX_SELECTED_AREAS,
       ),
     [filteredComparisonRows, pickIds],
@@ -1194,8 +1195,8 @@ const MapAnalysisPage = () => {
     () =>
       pickIds(
         filteredComparisonRows
-          .filter((row) => row.diffCount < 0)
-          .sort((a, b) => a.diffCount - b.diffCount),
+          .filter((row) => row.diff < 0)
+          .sort((a, b) => a.diff - b.diff),
         MAX_SELECTED_AREAS,
       ),
     [filteredComparisonRows, pickIds],
@@ -1229,10 +1230,10 @@ const MapAnalysisPage = () => {
           if (isShareMetric) {
             return Math.abs(b.diffShare) - Math.abs(a.diffShare);
           }
-          return Math.abs(b.diffCount) - Math.abs(a.diffCount);
+          return Math.abs(b.diff) - Math.abs(a.diff);
         }),
-      MAX_SELECTED_AREAS,
-    );
+        MAX_SELECTED_AREAS,
+      );
   }, [decreasePresetIds, filteredComparisonRows, increasePresetIds, isShareMetric, pickIds]);
 
   const selectionPresetMap = useMemo(
@@ -1474,7 +1475,6 @@ const MapAnalysisPage = () => {
   const shareBarGap = isExpandedComparison ? 4 : 6;
   const diffBarCategoryGap = isExpandedComparison ? "24%" : "32%";
   const diffBarGap = isExpandedComparison ? 4 : 6;
-  const isShareMetric = comparisonMetric === "share";
   const metricUnitLabel = isShareMetric ? "%" : "件";
   const primaryComparisonTitle = isShareMetric ? "来院割合の比較" : "来院人数の比較";
   const primaryComparisonSubtitle = `淡色が${periodALabel}、濃色が${periodBLabel}です（単位: ${metricUnitLabel}）。`;
