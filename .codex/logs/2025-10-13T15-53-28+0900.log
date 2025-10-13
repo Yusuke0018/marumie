@@ -1,0 +1,10 @@
+timestamp: 2025-10-13T15-53-28+0900
+branch: main
+commit: 343897fcae23288a7180032ec9766cebbf388fed
+summary: 表示期間アイコンにパルス追加
+changes: src/app/globals.css (period-pulseキーフレーム)
+  src/components/Navigation.tsx (パルスクラス適用)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: pending
