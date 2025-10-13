@@ -237,3 +237,114 @@ export function aggregateKarteMonthly(records: KarteRecord[]): KarteMonthlyStat[
         bucket.ageCount > 0 ? clampToOneDecimal(bucket.ageSum / bucket.ageCount) : null,
     }));
 }
+
+// 年代区分を定義
+export type AgeGroup = "10代以下" | "20代" | "30代" | "40代" | "50代" | "60代" | "70代" | "80代以上" | "不明";
+
+export const AGE_GROUPS: AgeGroup[] = [
+  "10代以下",
+  "20代",
+  "30代",
+  "40代",
+  "50代",
+  "60代",
+  "70代",
+  "80代以上",
+  "不明",
+];
+
+// 年齢から年代区分を取得
+export function getAgeGroup(age: number | null): AgeGroup {
+  if (age === null || age < 0) {
+    return "不明";
+  }
+  if (age < 20) return "10代以下";
+  if (age < 30) return "20代";
+  if (age < 40) return "30代";
+  if (age < 50) return "40代";
+  if (age < 60) return "50代";
+  if (age < 70) return "60代";
+  if (age < 80) return "70代";
+  return "80代以上";
+}
+
+// 年代別月次統計
+export type AgeGroupMonthlyStat = {
+  month: string;
+  ageGroups: Record<AgeGroup, number>;
+  total: number;
+};
+
+// 年代別データを月次で集計
+export function aggregateKarteByAgeGroup(
+  records: KarteRecord[],
+  department?: string | null
+): AgeGroupMonthlyStat[] {
+  if (records.length === 0) {
+    return [];
+  }
+
+  // 診療科目でフィルタリング
+  let filteredRecords = records;
+  if (department && department !== "全体") {
+    filteredRecords = records.filter((r) => r.department === department);
+  }
+
+  const monthStats = new Map<string, Record<AgeGroup, number>>();
+
+  for (const record of filteredRecords) {
+    const monthKey = record.monthKey;
+    if (!monthStats.has(monthKey)) {
+      monthStats.set(monthKey, {
+        "10代以下": 0,
+        "20代": 0,
+        "30代": 0,
+        "40代": 0,
+        "50代": 0,
+        "60代": 0,
+        "70代": 0,
+        "80代以上": 0,
+        "不明": 0,
+      });
+    }
+
+    const bucket = monthStats.get(monthKey)!;
+
+    if (record.birthDateIso) {
+      const birthDate = toDateFromIso(record.birthDateIso);
+      const visitDate = toDateFromIso(record.dateIso);
+      if (birthDate && visitDate) {
+        const age = calcAge(birthDate, visitDate);
+        if (age >= 0 && age < 120) {
+          const ageGroup = getAgeGroup(age);
+          bucket[ageGroup] += 1;
+        } else {
+          bucket["不明"] += 1;
+        }
+      } else {
+        bucket["不明"] += 1;
+      }
+    } else {
+      bucket["不明"] += 1;
+    }
+  }
+
+  return Array.from(monthStats.entries())
+    .sort((a, b) => MONTH_SORT(a[0], b[0]))
+    .map(([month, ageGroups]) => ({
+      month,
+      ageGroups,
+      total: Object.values(ageGroups).reduce((sum, count) => sum + count, 0),
+    }));
+}
+
+// 診療科目の一覧を取得
+export function getDepartmentList(records: KarteRecord[]): string[] {
+  const departments = new Set<string>();
+  for (const record of records) {
+    if (record.department) {
+      departments.add(record.department);
+    }
+  }
+  return ["全体", ...Array.from(departments).sort((a, b) => a.localeCompare(b, "ja"))];
+}

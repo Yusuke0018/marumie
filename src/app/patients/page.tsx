@@ -129,6 +129,11 @@ const DiagnosisMonthlyChart = lazy(() =>
     default: m.DiagnosisMonthlyChart,
   })),
 );
+const AgeGroupAnalysisSection = lazy(() =>
+  import("@/components/patients/AgeGroupAnalysisSection").then((m) => ({
+    default: m.AgeGroupAnalysisSection,
+  })),
+);
 const DiagnosisCategoryChart = lazy(() =>
   import("@/components/patients/DiagnosisCategoryChart").then((m) => ({
     default: m.DiagnosisCategoryChart,
@@ -3763,6 +3768,19 @@ function PatientAnalysisPageContent() {
                       </div>
                     )}
                   </SectionCard>
+                )}
+
+                {/* 年代別分析セクション */}
+                {records.length > 0 && (
+                  <Suspense
+                    fallback={
+                      <div className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white/60 py-10">
+                        <RefreshCw className="h-6 w-6 animate-spin text-brand-600" />
+                      </div>
+                    }
+                  >
+                    <AgeGroupAnalysisSection records={periodFilteredRecords} />
+                  </Suspense>
                 )}
               </>
             ) : (
