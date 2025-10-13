@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useCallback, type ChangeEvent } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { RefreshCw, ArrowLeft, Target, Plus, X } from "lucide-react";
+import { RefreshCw, ArrowLeft, Target, Plus, X, MapPin } from "lucide-react";
 import { type KarteRecord } from "@/lib/karteAnalytics";
 import { getCompressedItem } from "@/lib/storageCompression";
 import { KARTE_STORAGE_KEY, KARTE_TIMESTAMP_KEY } from "@/lib/storageKeys";
@@ -763,10 +763,26 @@ const MapAnalysisPage = () => {
   const [pendingAreaId, setPendingAreaId] = useState<string>("");
   const [rangeA, setRangeA] = useState<ComparisonRange>({ start: null, end: null });
   const [rangeB, setRangeB] = useState<ComparisonRange>({ start: null, end: null });
+  const [isAreaPickerOpen, setAreaPickerOpen] = useState(false);
 
   useEffect(() => {
     setHighlightedAgeBand(null);
   }, [filteredMonths.length]);
+
+  useEffect(() => {
+    if (!isAreaPickerOpen) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setAreaPickerOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isAreaPickerOpen]);
 
   const areaSeries = useMemo(
     () => buildAreaSeries(filteredMapRecords, filteredMonths),
@@ -1015,6 +1031,9 @@ const MapAnalysisPage = () => {
     };
   }, [rangeA, rangeB]);
 
+  const periodALabel = rangeDescription.a;
+  const periodBLabel = rangeDescription.b;
+
   const topDiffRows = useMemo<ComparisonRow[]>(() => {
     if (!validComparison) {
       return [];
@@ -1243,6 +1262,14 @@ const MapAnalysisPage = () => {
     setFocusAreaId(areaId);
   };
 
+  const openAreaPicker = () => {
+    setAreaPickerOpen(true);
+  };
+
+  const closeAreaPicker = () => {
+    setAreaPickerOpen(false);
+  };
+
   const handleSummaryAgeClick = (ageBandId: AgeBandId) => {
     setHighlightedAgeBand(ageBandId);
   };
@@ -1283,11 +1310,19 @@ const MapAnalysisPage = () => {
     return (
       <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
         {safeLabel && <p className="mb-1 font-semibold text-slate-700">{safeLabel}</p>}
-        {payload.map((entry) => (
-          <p key={entry.name ?? entry.dataKey?.toString()} className="text-slate-600">
-            {entry.name ?? entry.dataKey}: {typeof entry.value === "number" ? entry.value.toFixed(1) : entry.value}%
-          </p>
-        ))}
+        {payload.map((entry) => {
+          const key = entry.dataKey?.toString() ?? entry.name?.toString() ?? "value";
+          const seriesLabel = entry.dataKey === "periodA"
+            ? periodALabel
+            : entry.dataKey === "periodB"
+              ? periodBLabel
+              : entry.name ?? entry.dataKey;
+          return (
+            <p key={key} className="text-slate-600">
+              {seriesLabel}: {typeof entry.value === "number" ? entry.value.toFixed(1) : entry.value}%
+            </p>
+          );
+        })}
       </div>
     );
   };
@@ -1372,8 +1407,9 @@ const MapAnalysisPage = () => {
   const isEmpty = filteredMapRecords.length === 0;
 
   return (
-    <main className="min-h-screen bg-background">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-12">
+    <>
+      <main className="min-h-screen bg-background">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-12">
         <section className="relative overflow-hidden rounded-3xl border border-emerald-200 bg-gradient-to-br from-white via-emerald-50 to-sky-100 p-8 shadow-card">
           <div className="pointer-events-none absolute -right-16 top-0 h-48 w-48 rounded-full bg-gradient-to-br from-emerald-200/50 via-sky-200/40 to-purple-200/40 blur-3xl" />
           <div className="pointer-events-none absolute -left-20 bottom-0 h-52 w-52 rounded-full bg-gradient-to-br from-sky-200/45 via-emerald-200/30 to-white/0 blur-3xl" />
@@ -1721,9 +1757,19 @@ const MapAnalysisPage = () => {
                 </div>
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-slate-500">
-                <span>期間A: {rangeDescription.a}</span>
-                <span>期間B: {rangeDescription.b}</span>
+              <div className="mt-3 flex flex-wrap gap-3 text-[11px]">
+                <span className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 font-semibold text-indigo-600">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-indigo-200 text-[10px] font-bold text-indigo-700">
+                    A
+                  </span>
+                  {periodALabel}
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-600">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-200 text-[10px] font-bold text-emerald-700">
+                    B
+                  </span>
+                  {periodBLabel}
+                </span>
               </div>
 
               {invalidRange ? (
@@ -1736,13 +1782,13 @@ const MapAnalysisPage = () => {
                 <div className="mt-6 space-y-6">
                   <div className="grid gap-4 md:grid-cols-3">
                     <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
-                      <p className="text-xs font-semibold text-indigo-500">期間A 件数</p>
+                      <p className="text-xs font-semibold text-indigo-500">{periodALabel}</p>
                       <p className="mt-2 text-2xl font-bold text-indigo-700">
                         {validComparison.totalA.toLocaleString("ja-JP")}件
                       </p>
                     </div>
                     <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
-                      <p className="text-xs font-semibold text-emerald-500">期間B 件数</p>
+                      <p className="text-xs font-semibold text-emerald-500">{periodBLabel}</p>
                       <p className="mt-2 text-2xl font-bold text-emerald-700">
                         {validComparison.totalB.toLocaleString("ja-JP")}件
                       </p>
@@ -1753,7 +1799,7 @@ const MapAnalysisPage = () => {
                         <div className="mt-2 text-sm text-slate-800">
                           <p className="font-semibold">{leadingDiff.label}</p>
                           <p className="text-xs text-slate-500">
-                            期間A {formatPercent(leadingDiff.shareA)} → 期間B {formatPercent(leadingDiff.shareB)}
+                            {periodALabel} {formatPercent(leadingDiff.shareA)} → {periodBLabel} {formatPercent(leadingDiff.shareB)}
                           </p>
                         </div>
                       ) : (
@@ -1767,17 +1813,27 @@ const MapAnalysisPage = () => {
                       <div>
                         <h3 className="text-sm font-semibold text-slate-800">比較する地区を選択</h3>
                         <p className="text-[11px] text-slate-500">
-                          地図をクリックすると地区を追加・削除できます。最大{MAX_SELECTED_AREAS}件まで表示可能です。
+                          ページ上部の地図、または「地図から選ぶ」を使って地区を追加・削除できます。最大{MAX_SELECTED_AREAS}件まで表示可能です。
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleResetAreas}
-                        className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
-                      >
-                        <Target className="h-3.5 w-3.5" />
-                        推薦にリセット
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleResetAreas}
+                          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-indigo-200 hover:text-indigo-600"
+                        >
+                          <Target className="h-3.5 w-3.5" />
+                          推薦にリセット
+                        </button>
+                        <button
+                          type="button"
+                          onClick={openAreaPicker}
+                          className="inline-flex items-center gap-2 rounded-full border border-accent-200 bg-accent-50 px-3 py-1.5 text-xs font-semibold text-accent-600 shadow-sm transition hover:border-accent-300 hover:bg-white"
+                        >
+                          <MapPin className="h-3.5 w-3.5" />
+                          地図から選ぶ
+                        </button>
+                      </div>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {selectedComparisonData.length > 0 ? (
@@ -1836,7 +1892,9 @@ const MapAnalysisPage = () => {
                     <div className="space-y-4">
                       <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-inner">
                         <h3 className="text-sm font-semibold text-slate-800">来院割合の比較</h3>
-                        <p className="text-[11px] text-slate-500">淡色が期間A、濃色が期間Bです。</p>
+                        <p className="text-[11px] text-slate-500">
+                          淡色が{periodALabel}、濃色が{periodBLabel}です。
+                        </p>
                         <div className="mt-4" style={{ height: `${comparisonChartHeight}px` }}>
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={selectedComparisonData} margin={{ top: 12, right: 24, bottom: 32, left: 32 }} barCategoryGap="30%" barGap={6}>
@@ -1844,7 +1902,7 @@ const MapAnalysisPage = () => {
                               <XAxis dataKey="label" interval={0} height={60} tick={renderCategoryTick} />
                               <YAxis domain={comparisonShareDomain} tickFormatter={(value: number) => `${value}%`} stroke="#94a3b8" />
                               <RechartsTooltip content={<ComparisonTooltipContent />} />
-                              <Bar dataKey="periodA" name="期間A" radius={[6, 6, 0, 0]}>
+                              <Bar dataKey="periodA" name={periodALabel} radius={[6, 6, 0, 0]}>
                                 {selectedComparisonData.map((row) => (
                                   <Cell
                                     key={`periodA-${row.id}`}
@@ -1861,7 +1919,7 @@ const MapAnalysisPage = () => {
                                   fontSize={11}
                                 />
                               </Bar>
-                              <Bar dataKey="periodB" name="期間B" radius={[6, 6, 0, 0]}>
+                              <Bar dataKey="periodB" name={periodBLabel} radius={[6, 6, 0, 0]}>
                                 {selectedComparisonData.map((row) => (
                                   <Cell
                                     key={`periodB-${row.id}`}
@@ -1884,7 +1942,7 @@ const MapAnalysisPage = () => {
                       </div>
 
                       <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-inner">
-                        <h3 className="text-sm font-semibold text-slate-800">増減率（期間B - 期間A）</h3>
+                        <h3 className="text-sm font-semibold text-slate-800">増減率（{periodBLabel} - {periodALabel}）</h3>
                         <p className="text-[11px] text-slate-500">正の値は増加、負の値は減少を示します。</p>
                         <div className="mt-4" style={{ height: `${diffChartHeight}px` }}>
                           <ResponsiveContainer width="100%" height="100%">
@@ -1923,8 +1981,8 @@ const MapAnalysisPage = () => {
                         <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                           <tr>
                             <th className="px-3 py-2 text-left">年代</th>
-                            <th className="px-3 py-2 text-right">期間A</th>
-                            <th className="px-3 py-2 text-right">期間B</th>
+                            <th className="px-3 py-2 text-right">{periodALabel}</th>
+                            <th className="px-3 py-2 text-right">{periodBLabel}</th>
                             <th className="px-3 py-2 text-right">差分</th>
                           </tr>
                         </thead>
@@ -1959,8 +2017,50 @@ const MapAnalysisPage = () => {
             </section>
           </section>
         )}
-      </div>
-    </main>
+        </div>
+      </main>
+
+      {isAreaPickerOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 backdrop-blur-sm"
+          onClick={closeAreaPicker}
+        >
+          <div
+            className="mx-4 w-full max-w-5xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">地図から比較エリアを選ぶ</h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  追加したい地区をクリックすると選択が切り替わります。選択状態はすぐ下の一覧へ反映されます。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeAreaPicker}
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm transition hover:border-rose-200 hover:text-rose-600"
+              >
+                <X className="h-4 w-4" />
+                閉じる
+              </button>
+            </div>
+            <div className="mt-4 h-[520px] rounded-2xl border border-slate-200 bg-slate-50/40">
+              <GeoDistributionMap
+                reservations={filteredMapRecords}
+                periodLabel={mapPeriodLabel}
+                selectedAreaIds={selectedAreaIds}
+                focusAreaId={focusAreaId}
+                onToggleArea={handleToggleAreaFromMap}
+              />
+            </div>
+            <p className="mt-3 text-xs text-slate-500">
+              ダブルクリックで拡大、右下のコントロールでズーム／リセットができます。
+            </p>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 
