@@ -136,7 +136,7 @@ const GeoDistributionMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-[520px] items-center justify-center rounded-3xl border border-slate-200 bg-white text-slate-500">
+      <div className="flex h-[360px] items-center justify-center rounded-3xl border border-slate-200 bg-white text-slate-500 sm:h-[520px]">
         地図コンポーネントを読み込み中です...
       </div>
     ),
@@ -216,6 +216,27 @@ type ComparisonSelectionPreset =
 
 const arraysEqual = (a: string[], b: string[]) =>
   a.length === b.length && a.every((value, index) => value === b[index]);
+
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const mediaQuery = window.matchMedia("(max-width: 640px)");
+    const update = () => setIsMobile(mediaQuery.matches);
+    update();
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", update);
+      return () => mediaQuery.removeEventListener("change", update);
+    }
+    mediaQuery.addListener(update);
+    return () => mediaQuery.removeListener(update);
+  }, []);
+
+  return isMobile;
+};
 
 const HIDDEN_AREA_LABEL = "住所未設定";
 
@@ -723,6 +744,8 @@ const MapAnalysisPage = () => {
     setEndMonth: setMapEndMonth,
     resetPeriod: resetMapPeriod,
   } = useAnalysisPeriodRange(sortedMonths, { autoSelectLatest: false });
+
+  const isMobile = useIsMobile();
 
   const mapRecords = useMemo<MapRecord[]>(() => {
     if (karteRecords.length === 0) {
@@ -1469,12 +1492,31 @@ const MapAnalysisPage = () => {
   );
 
   const isExpandedComparison = selectedComparisonData.length >= 8;
-  const comparisonChartHeight = Math.max(320, selectedComparisonData.length * 72);
-  const diffChartHeight = Math.max(260, selectedComparisonData.length * 64);
-  const shareBarCategoryGap = isExpandedComparison ? "18%" : "26%";
-  const shareBarGap = isExpandedComparison ? 4 : 6;
-  const diffBarCategoryGap = isExpandedComparison ? "24%" : "32%";
-  const diffBarGap = isExpandedComparison ? 4 : 6;
+  const comparisonChartHeight = Math.max(
+    isMobile ? 240 : 320,
+    selectedComparisonData.length * (isMobile ? 64 : 72),
+  );
+  const diffChartHeight = Math.max(
+    isMobile ? 220 : 260,
+    selectedComparisonData.length * (isMobile ? 56 : 64),
+  );
+  const shareBarCategoryGap = isExpandedComparison
+    ? isMobile
+      ? "12%"
+      : "18%"
+    : isMobile
+      ? "20%"
+      : "26%";
+  const shareBarGap = isExpandedComparison ? (isMobile ? 2 : 4) : isMobile ? 3 : 6;
+  const diffBarCategoryGap = isExpandedComparison
+    ? isMobile
+      ? "18%"
+      : "24%"
+    : isMobile
+      ? "22%"
+      : "32%";
+  const diffBarGap = isExpandedComparison ? (isMobile ? 2 : 4) : isMobile ? 3 : 6;
+  const geoMapHeight = isMobile ? 360 : 520;
   const metricUnitLabel = isShareMetric ? "%" : "件";
   const primaryComparisonTitle = isShareMetric ? "来院割合の比較" : "来院人数の比較";
   const primaryComparisonSubtitle = `淡色が${periodALabel}、濃色が${periodBLabel}です（単位: ${metricUnitLabel}）。`;
@@ -1974,15 +2016,20 @@ const MapAnalysisPage = () => {
           </section>
         ) : (
           <section className="space-y-8">
-            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
-              <GeoDistributionMap
-                reservations={filteredMapRecords}
-                periodLabel={mapPeriodLabel}
-                selectedAreaIds={selectedAreaIds}
-                focusAreaId={focusAreaId}
-                onToggleArea={handleToggleAreaFromMap}
-                onRegisterAreas={handleRegisterAreas}
-              />
+            <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-card sm:p-6">
+              <div
+                className="rounded-2xl border border-slate-200 bg-slate-50/40"
+                style={{ height: `${geoMapHeight}px` }}
+              >
+                <GeoDistributionMap
+                  reservations={filteredMapRecords}
+                  periodLabel={mapPeriodLabel}
+                  selectedAreaIds={selectedAreaIds}
+                  focusAreaId={focusAreaId}
+                  onToggleArea={handleToggleAreaFromMap}
+                  onRegisterAreas={handleRegisterAreas}
+                />
+              </div>
             </section>
 
             <section className="rounded-3xl border border-indigo-200 bg-white/85 p-6 shadow-sm">
@@ -2645,7 +2692,10 @@ const MapAnalysisPage = () => {
                 閉じる
               </button>
             </div>
-          <div className="mt-4 h-[520px] rounded-2xl border border-slate-200 bg-slate-50/40">
+          <div
+            className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/40"
+            style={{ height: `${geoMapHeight}px` }}
+          >
             <GeoDistributionMap
               reservations={filteredMapRecords}
               periodLabel={mapPeriodLabel}
