@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useCallback, type ChangeEvent } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { RefreshCw, ArrowLeft, MapPin, Target, Plus, X } from "lucide-react";
+import { RefreshCw, ArrowLeft, Target, Plus, X } from "lucide-react";
 import { type KarteRecord } from "@/lib/karteAnalytics";
 import { getCompressedItem } from "@/lib/storageCompression";
 import { KARTE_STORAGE_KEY, KARTE_TIMESTAMP_KEY } from "@/lib/storageKeys";
@@ -14,6 +14,7 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  ComposedChart,
   CartesianGrid,
   XAxis,
   YAxis,
@@ -21,6 +22,11 @@ import {
   Cell,
   ReferenceLine,
   LabelList,
+  AreaChart,
+  Area,
+  LineChart,
+  Line,
+  Legend,
 } from "recharts";
 
 const KANJI_DIGITS = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"] as const;
@@ -202,6 +208,352 @@ type AreaSelectionMeta = {
 
 const MAX_SELECTED_AREAS = 8;
 
+type SummaryMode = "single" | "rolling3" | "yoy";
+type ValueViewMode = "count" | "diff" | "ratio";
+type FocusDimension = "area" | "age";
+type AgeViewMode = "count" | "ratio";
+
+type AreaSeriesPoint = {
+  month: string;
+  count: number;
+  diff: number;
+};
+
+type AreaSeries = {
+  id: string;
+  label: string;
+  city: string | null;
+  town: string | null;
+  totals: AreaSeriesPoint[];
+  totalCount: number;
+};
+
+type AgeSeriesPoint = {
+  month: string;
+  count: number;
+  diff: number;
+};
+
+type AgeSeries = {
+  id: AgeBandId;
+  label: string;
+  totals: AgeSeriesPoint[];
+  totalCount: number;
+};
+
+type SummaryEntry = {
+  id: string;
+  label: string;
+  current: number;
+  comparison: number | null;
+  diff: number;
+  ratio: number | null;
+  share: number;
+  contribution: number | null;
+  city?: string | null;
+  town?: string | null;
+  type: "area" | "age";
+};
+
+const SUMMARY_MODE_LABEL: Record<SummaryMode, string> = {
+  single: "単月",
+  rolling3: "3ヶ月平均",
+  yoy: "前年同月",
+};
+
+const VALUE_VIEW_LABEL: Record<ValueViewMode, string> = {
+  count: "実数",
+  diff: "差分",
+  ratio: "比率",
+};
+
+const buildAreaSeries = (
+  records: MapRecord[],
+  months: string[],
+): AreaSeries[] => {
+  const monthIndex = new Map(months.map((month, index) => [month, index]));
+  const areaMap = new Map<
+    string,
+    {
+      label: string;
+      city: string | null;
+      town: string | null;
+      counts: number[];
+    }
+  >();
+
+  records.forEach((record) => {
+    const index = monthIndex.get(record.reservationMonth);
+    if (index === undefined) {
+      return;
+    }
+    const keyParts = [
+      record.patientPrefecture ?? "",
+      record.patientCity ?? "",
+      record.patientTown ?? record.patientBaseTown ?? "",
+    ];
+    const key = keyParts.join("|");
+    const labelParts = [record.patientCity, record.patientTown].filter(
+      (part): part is string => Boolean(part && part.length > 0),
+    );
+    const label =
+      labelParts.length > 0
+        ? labelParts.join("")
+        : record.patientCity ??
+          record.patientPrefecture ??
+          "住所未設定";
+
+    let entry = areaMap.get(key);
+    if (!entry) {
+      entry = {
+        label,
+        city: record.patientCity ?? null,
+        town: record.patientTown ?? record.patientBaseTown ?? null,
+        counts: Array(months.length).fill(0),
+      };
+      areaMap.set(key, entry);
+    }
+    entry.counts[index] += 1;
+  });
+
+  const result: AreaSeries[] = [];
+  for (const [id, entry] of areaMap.entries()) {
+    const totals: AreaSeriesPoint[] = entry.counts.map((count, idx) => {
+      const prev = idx > 0 ? entry.counts[idx - 1] : 0;
+      return {
+        month: months[idx]!,
+        count,
+        diff: count - prev,
+      };
+    });
+    const totalCount = entry.counts.reduce((acc, value) => acc + value, 0);
+    if (totalCount === 0) {
+      continue;
+    }
+    result.push({
+      id,
+      label: entry.label,
+      city: entry.city,
+      town: entry.town,
+      totals,
+      totalCount,
+    });
+  }
+
+  result.sort((a, b) => b.totalCount - a.totalCount);
+  return result;
+};
+
+const buildAgeSeries = (records: MapRecord[], months: string[]): AgeSeries[] => {
+  const monthIndex = new Map(months.map((month, index) => [month, index]));
+  const seriesMap = new Map<
+    AgeBandId,
+    {
+      counts: number[];
+    }
+  >();
+
+  AGE_BANDS.forEach((band) => {
+    seriesMap.set(band.id, { counts: Array(months.length).fill(0) });
+  });
+
+  records.forEach((record) => {
+    const index = monthIndex.get(record.reservationMonth);
+    if (index === undefined) {
+      return;
+    }
+    const bandId = classifyAgeBandId(record.patientAge);
+    const entry = seriesMap.get(bandId);
+    if (!entry) {
+      return;
+    }
+    entry.counts[index] += 1;
+  });
+
+  return AGE_BANDS.map((band) => {
+    const entry = seriesMap.get(band.id)!;
+    const totals: AgeSeriesPoint[] = entry.counts.map((count, idx) => {
+      const prev = idx > 0 ? entry.counts[idx - 1] : 0;
+      return {
+        month: months[idx]!,
+        count,
+        diff: count - prev,
+      };
+    });
+    const totalCount = entry.counts.reduce((acc, value) => acc + value, 0);
+    return {
+      id: band.id,
+      label: band.label,
+      totals,
+      totalCount,
+    };
+  });
+};
+
+const computeWindowMetrics = (
+  values: number[],
+  index: number,
+  mode: SummaryMode,
+): { current: number; comparison: number | null } => {
+  if (mode === "single") {
+    const comparison = index > 0 ? values[index - 1] : null;
+    return { current: values[index] ?? 0, comparison };
+  }
+
+  if (mode === "rolling3") {
+    const end = index;
+    const start = Math.max(0, end - 2);
+    const currentWindow = values.slice(start, end + 1);
+    const current =
+      currentWindow.reduce((acc, value) => acc + value, 0) /
+      currentWindow.length;
+
+    const prevEnd = start - 1;
+    if (prevEnd < 0) {
+      return { current, comparison: null };
+    }
+    const prevStart = Math.max(0, prevEnd - 2);
+    const previousWindow = values.slice(prevStart, prevEnd + 1);
+    if (previousWindow.length === 0) {
+      return { current, comparison: null };
+    }
+    const comparison =
+      previousWindow.reduce((acc, value) => acc + value, 0) /
+      previousWindow.length;
+    return { current, comparison };
+  }
+
+  const compareIndex = index - 12;
+  const comparison =
+    compareIndex >= 0 ? values[compareIndex] ?? 0 : null;
+  return { current: values[index] ?? 0, comparison };
+};
+
+const buildSummaryEntries = (
+  areaSeries: AreaSeries[],
+  ageSeries: AgeSeries[],
+  months: string[],
+  mode: SummaryMode,
+): {
+  increases: SummaryEntry[];
+  decreases: SummaryEntry[];
+  ages: SummaryEntry[];
+} => {
+  if (months.length === 0) {
+    return { increases: [], decreases: [], ages: [] };
+  }
+  const latestIndex = months.length - 1;
+
+  const areaEntries: SummaryEntry[] = areaSeries.map((series) => {
+    const counts = series.totals.map((point) => point.count);
+    const { current, comparison } = computeWindowMetrics(
+      counts,
+      latestIndex,
+      mode,
+    );
+    const diff =
+      comparison === null ? current : current - comparison;
+    const ratio =
+      comparison && comparison !== 0
+        ? (current - comparison) / comparison
+        : comparison === 0 && current > 0
+          ? 1
+          : null;
+    return {
+      id: series.id,
+      label: series.label,
+      current,
+      comparison,
+      diff,
+      ratio,
+      share: 0,
+      contribution: null,
+      city: series.city,
+      town: series.town,
+      type: "area",
+    };
+  });
+
+  const ageEntries: SummaryEntry[] = ageSeries.map((series) => {
+    const counts = series.totals.map((point) => point.count);
+    const { current, comparison } = computeWindowMetrics(
+      counts,
+      latestIndex,
+      mode,
+    );
+    const diff =
+      comparison === null ? current : current - comparison;
+    const ratio =
+      comparison && comparison !== 0
+        ? (current - comparison) / comparison
+        : comparison === 0 && current > 0
+          ? 1
+          : null;
+    return {
+      id: series.id,
+      label: series.label,
+      current,
+      comparison,
+      diff,
+      ratio,
+      share: 0,
+      contribution: null,
+      type: "age",
+    };
+  });
+
+  const totalCurrent = areaEntries.reduce(
+    (acc, entry) => acc + entry.current,
+    0,
+  );
+  const totalComparison = areaEntries.reduce((acc, entry) => {
+    if (entry.comparison === null) {
+      return acc;
+    }
+    return acc + entry.comparison;
+  }, 0);
+  const totalDiff = totalCurrent - totalComparison;
+
+  areaEntries.forEach((entry) => {
+    entry.share =
+      totalCurrent > 0 ? entry.current / totalCurrent : 0;
+    entry.contribution =
+      totalDiff !== 0 && entry.comparison !== null
+        ? (entry.diff / totalDiff) * 100
+        : null;
+  });
+
+  const ageTotalCurrent = ageEntries.reduce(
+    (acc, entry) => acc + entry.current,
+    0,
+  );
+  ageEntries.forEach((entry) => {
+    entry.share =
+      ageTotalCurrent > 0 ? entry.current / ageTotalCurrent : 0;
+    entry.contribution =
+      totalDiff !== 0 && entry.comparison !== null
+        ? (entry.diff / totalDiff) * 100
+        : null;
+  });
+
+  const increases = areaEntries
+    .filter((entry) => entry.diff > 0)
+    .sort((a, b) => b.diff - a.diff)
+    .slice(0, 3);
+
+  const decreases = areaEntries
+    .filter((entry) => entry.diff < 0)
+    .sort((a, b) => a.diff - b.diff)
+    .slice(0, 3);
+
+  const ages = ageEntries
+    .filter((entry) => entry.diff > 0)
+    .sort((a, b) => b.diff - a.diff)
+    .slice(0, 3);
+
+  return { increases, decreases, ages };
+};
+
 type AreaColor = { fill: string; accent: string };
 
 // エリアごとの淡色パレットとアクセント色
@@ -215,6 +567,15 @@ const AREA_COLOR_PALETTE: AreaColor[] = [
   { fill: "#0ea5e9", accent: "#0284c7" }, // sky
   { fill: "#ea580c", accent: "#c2410c" }, // orange
 ];
+
+const AGE_BAND_COLOR_MAP: Record<AgeBandId, string> = {
+  "0-19": "#0ea5e9",
+  "20-39": "#10b981",
+  "40-59": "#6366f1",
+  "60-79": "#f97316",
+  "80+": "#ef4444",
+  unknown: "#94a3b8",
+};
 
 const toTransparentColor = (hex: string, alpha: number) => {
   const sanitized = hex.replace("#", "");
@@ -473,14 +834,352 @@ const MapAnalysisPage = () => {
     }
   }, [filteredMonths.length, mapPeriodLabel]);
 
-  type ComparisonRange = { start: string | null; end: string | null };
-  const [rangeA, setRangeA] = useState<ComparisonRange>({ start: null, end: null });
-  const [rangeB, setRangeB] = useState<ComparisonRange>({ start: null, end: null });
+  const [summaryMode, setSummaryMode] = useState<SummaryMode>("single");
+  const [valueViewMode, setValueViewMode] =
+    useState<ValueViewMode>("diff");
+  const [focusDimension, setFocusDimension] =
+    useState<FocusDimension>("area");
+  const [selectedAgeMonthIndex, setSelectedAgeMonthIndex] = useState(() =>
+    filteredMonths.length > 0 ? filteredMonths.length - 1 : 0,
+  );
+  const [highlightedAgeBand, setHighlightedAgeBand] =
+    useState<AgeBandId | null>(null);
+  const [ageViewMode, setAgeViewMode] = useState<AgeViewMode>("ratio");
   const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>([]);
   const [hasCustomSelection, setHasCustomSelection] = useState(false);
   const [focusAreaId, setFocusAreaId] = useState<string | null>(null);
   const [pendingAreaId, setPendingAreaId] = useState<string>("");
-  const [areaMetadata, setAreaMetadata] = useState<Record<string, AreaSelectionMeta>>({});
+
+  useEffect(() => {
+    setSelectedAgeMonthIndex(
+      filteredMonths.length > 0 ? filteredMonths.length - 1 : 0,
+    );
+  }, [filteredMonths.length]);
+
+  useEffect(() => {
+    setHighlightedAgeBand(null);
+  }, [filteredMonths.length]);
+
+  const areaSeries = useMemo(
+    () => buildAreaSeries(filteredMapRecords, filteredMonths),
+    [filteredMapRecords, filteredMonths],
+  );
+
+  const ageSeries = useMemo(
+    () => buildAgeSeries(filteredMapRecords, filteredMonths),
+    [filteredMapRecords, filteredMonths],
+  );
+
+  const summary = useMemo(
+    () => buildSummaryEntries(areaSeries, ageSeries, filteredMonths, summaryMode),
+    [areaSeries, ageSeries, filteredMonths, summaryMode],
+  );
+
+  const formatDiffValue = (value: number) => {
+    if (value === 0) {
+      return "±0件";
+    }
+    return `${value > 0 ? "+" : ""}${value.toLocaleString("ja-JP")}件`;
+  };
+
+  const formatRatioValue = (value: number | null) => {
+    if (value === null) {
+      return "—";
+    }
+    return `${(value * 100).toFixed(1)}%`;
+  };
+
+  const formatContributionValue = (value: number | null) => {
+    if (value === null) {
+      return "—";
+    }
+    return `${value.toFixed(1)}%`;
+  };
+
+  const formatMetricValue = (value: number) => {
+    if (summaryMode === "rolling3") {
+      return value.toFixed(1);
+    }
+    return Number.isInteger(value)
+      ? value.toLocaleString("ja-JP")
+      : value.toFixed(1);
+  };
+
+  const getHeatmapCellColor = (
+    count: number,
+    diff: number,
+    monthIndex: number,
+  ) => {
+    if (valueViewMode === "count") {
+      const intensity = Math.min(count / heatmapMaxCount, 1);
+      const alpha = 0.15 + intensity * 0.65;
+      return `rgba(30, 64, 175, ${alpha.toFixed(2)})`; // blue
+    }
+    if (valueViewMode === "ratio") {
+      const total = monthlyTotals[monthIndex] || 1;
+      const share = total > 0 ? count / total : 0;
+      const alpha = 0.15 + share * 0.75;
+      return `rgba(5, 150, 105, ${alpha.toFixed(2)})`; // emerald
+    }
+    if (diff === 0) {
+      return "rgba(148, 163, 184, 0.15)";
+    }
+    const intensity = Math.min(Math.abs(diff) / heatmapMaxDiff, 1);
+    const alpha = 0.2 + intensity * 0.7;
+    if (diff > 0) {
+      return `rgba(220, 38, 38, ${alpha.toFixed(2)})`; // red
+    }
+    return `rgba(37, 99, 235, ${alpha.toFixed(2)})`; // blue
+  };
+
+  const HEATMAP_LIMIT = 12;
+  const topAreaSeries = useMemo(
+    () => areaSeries.slice(0, HEATMAP_LIMIT),
+    [areaSeries],
+  );
+
+  const monthlyTotals = useMemo(() => {
+    return filteredMonths.map((_, monthIndex) =>
+      areaSeries.reduce((acc, series) => acc + (series.totals[monthIndex]?.count ?? 0), 0),
+    );
+  }, [areaSeries, filteredMonths]);
+
+  const heatmapMaxCount = useMemo(() => {
+    let max = 0;
+    topAreaSeries.forEach((series) => {
+      series.totals.forEach((point) => {
+        max = Math.max(max, point.count);
+      });
+    });
+    return max || 1;
+  }, [topAreaSeries]);
+
+  const heatmapMaxDiff = useMemo(() => {
+    let max = 0;
+    topAreaSeries.forEach((series) => {
+      series.totals.forEach((point) => {
+        max = Math.max(max, Math.abs(point.diff));
+      });
+    });
+    return max || 1;
+  }, [topAreaSeries]);
+
+  const ageChartData = useMemo(() => {
+    return filteredMonths.map((month, index) => {
+      const row: Record<string, number | string> = { month };
+      ageSeries.forEach((series) => {
+        row[series.id] = series.totals[index]?.count ?? 0;
+      });
+      return row;
+    });
+  }, [filteredMonths, ageSeries]);
+
+  const ageRatioChartData = useMemo(() => {
+    return filteredMonths.map((month, index) => {
+      const totalForMonth = ageSeries.reduce(
+        (acc, series) => acc + (series.totals[index]?.count ?? 0),
+        0,
+      );
+      const row: Record<string, number | string> = { month };
+      ageSeries.forEach((series) => {
+        const count = series.totals[index]?.count ?? 0;
+        row[series.id] = totalForMonth > 0 ? count / totalForMonth : 0;
+      });
+      return row;
+    });
+  }, [filteredMonths, ageSeries]);
+
+  const ageSnapshot = useMemo(() => {
+    if (filteredMonths.length === 0) {
+      return [];
+    }
+    const clampedIndex = Math.min(
+      Math.max(selectedAgeMonthIndex, 0),
+      filteredMonths.length - 1,
+    );
+    return ageSeries
+      .map((series) => {
+        const point = series.totals[clampedIndex];
+        const totalForMonth = ageSeries.reduce((acc, s) => {
+          return acc + (s.totals[clampedIndex]?.count ?? 0);
+        }, 0);
+        const share =
+          totalForMonth > 0
+            ? (point?.count ?? 0) / totalForMonth
+            : 0;
+        return {
+          id: series.id,
+          label: series.label,
+          count: point?.count ?? 0,
+          share,
+        };
+      })
+      .sort((a, b) => b.count - a.count);
+  }, [ageSeries, filteredMonths.length, selectedAgeMonthIndex]);
+
+  const focusedAreaId = useMemo(() => {
+    if (focusAreaId) {
+      return focusAreaId;
+    }
+    if (selectedAreaIds.length > 0) {
+      return selectedAreaIds[0];
+    }
+    if (summary.increases.length > 0) {
+      return summary.increases[0]?.id ?? null;
+    }
+    return null;
+  }, [focusAreaId, selectedAreaIds, summary.increases]);
+
+  const focusedAreaSeries = useMemo(() => {
+    if (!focusedAreaId) {
+      return null;
+    }
+    return areaSeries.find((series) => series.id === focusedAreaId) ?? null;
+  }, [areaSeries, focusedAreaId]);
+
+  const focusedAreaTrend = useMemo(() => {
+    if (!focusedAreaSeries) {
+      return [];
+    }
+    return focusedAreaSeries.totals.map((point) => ({
+      month: point.month,
+      件数: point.count,
+      差分: point.diff,
+    }));
+  }, [focusedAreaSeries]);
+
+  const tileMapData = useMemo(() => {
+    if (filteredMonths.length === 0) {
+      return [];
+    }
+    const latestIndex = filteredMonths.length - 1;
+    const totalLatest = topAreaSeries.reduce(
+      (acc, series) => acc + (series.totals[latestIndex]?.count ?? 0),
+      0,
+    );
+    return topAreaSeries.map((series) => {
+      const point = series.totals[latestIndex];
+      const count = point?.count ?? 0;
+      const diff = point?.diff ?? 0;
+      const share = totalLatest > 0 ? count / totalLatest : 0;
+      return {
+        id: series.id,
+        label: series.label,
+        count,
+        diff,
+        share,
+        city: series.city,
+        town: series.town,
+      };
+    });
+  }, [filteredMonths.length, topAreaSeries]);
+
+  const maxTileCount = useMemo(() => {
+    return tileMapData.reduce((acc, item) => Math.max(acc, item.count), 0) || 1;
+  }, [tileMapData]);
+
+  const areaRankingPerMonth = useMemo(() => {
+    return filteredMonths.map((month, monthIndex) =>
+      areaSeries
+        .map((series) => ({
+          id: series.id,
+          label: series.label,
+          value: series.totals[monthIndex]?.count ?? 0,
+        }))
+        .sort((a, b) => b.value - a.value),
+    );
+  }, [areaSeries, filteredMonths]);
+
+  const areaRankSeries = useMemo(() => {
+    const candidateIds = new Set<string>();
+    areaRankingPerMonth.forEach((ranking) => {
+      ranking.slice(0, 6).forEach((row) => candidateIds.add(row.id));
+    });
+    const ids = Array.from(candidateIds);
+    return ids
+      .map((id) => {
+        const series = areaSeries.find((item) => item.id === id);
+        if (!series) {
+          return null;
+        }
+        const points = filteredMonths.map((month, monthIndex) => {
+          const ranking = areaRankingPerMonth[monthIndex];
+          const rankIndex = ranking.findIndex((row) => row.id === id);
+          return {
+            month,
+            rank: rankIndex >= 0 ? rankIndex + 1 : null,
+          };
+        });
+        return {
+          id,
+          label: series.label,
+          points,
+        };
+      })
+      .filter((value): value is {
+        id: string;
+        label: string;
+        points: { month: string; rank: number | null }[];
+      } => Boolean(value));
+  }, [areaRankingPerMonth, areaSeries, filteredMonths]);
+
+  const ageRankingPerMonth = useMemo(() => {
+    return filteredMonths.map((month, monthIndex) =>
+      ageSeries
+        .map((series) => ({
+          id: series.id,
+          label: series.label,
+          value: series.totals[monthIndex]?.count ?? 0,
+        }))
+        .sort((a, b) => b.value - a.value),
+    );
+  }, [ageSeries, filteredMonths]);
+
+  const ageRankSeries = useMemo(() => {
+    return ageSeries.map((series) => {
+      const points = filteredMonths.map((month, monthIndex) => {
+        const ranking = ageRankingPerMonth[monthIndex];
+        const rankIndex = ranking.findIndex((row) => row.id === series.id);
+        return {
+          month,
+          rank: rankIndex >= 0 ? rankIndex + 1 : null,
+        };
+      });
+      return {
+        id: series.id,
+        label: series.label,
+        points,
+      };
+    });
+  }, [ageRankingPerMonth, ageSeries, filteredMonths]);
+
+  const areaRankChartData = useMemo(() => {
+    return filteredMonths.map((month, monthIndex) => {
+      const row: Record<string, number | string | null> = {
+        month,
+      };
+      areaRankSeries.forEach((series) => {
+        row[series.id] = series.points[monthIndex]?.rank ?? null;
+      });
+      return row;
+    });
+  }, [areaRankSeries, filteredMonths]);
+
+  const ageRankChartData = useMemo(() => {
+    return filteredMonths.map((month, monthIndex) => {
+      const row: Record<string, number | string | null> = {
+        month,
+      };
+      ageRankSeries.forEach((series) => {
+        row[series.id] = series.points[monthIndex]?.rank ?? null;
+      });
+      return row;
+    });
+  }, [ageRankSeries, filteredMonths]);
+
+  type ComparisonRange = { start: string | null; end: string | null };
+  const [rangeA, setRangeA] = useState<ComparisonRange>({ start: null, end: null });
+  const [rangeB, setRangeB] = useState<ComparisonRange>({ start: null, end: null });
 
   useEffect(() => {
     if (sortedMonths.length === 0) {
@@ -734,48 +1433,6 @@ const MapAnalysisPage = () => {
     });
   }, [defaultAreaIds, hasCustomSelection]);
 
-  const topIncrease = useMemo(() => {
-    if (!validComparison) {
-      return [];
-    }
-    // 住所未設定や異常な住所を除外
-    const validRows = validComparison.rows.filter((row) => {
-      const label = row.label.trim();
-      if (label === "住所未設定" || label === "" || label === "未設定") {
-        return false;
-      }
-      if (label.length < 2 || /^[\d\-]+$/.test(label)) {
-        return false;
-      }
-      if (/^[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+$/u.test(label)) {
-        return false;
-      }
-      return row.diffShare > 0;
-    });
-    return validRows.slice(0, 5);
-  }, [validComparison]);
-
-  const topDecrease = useMemo(() => {
-    if (!validComparison) {
-      return [];
-    }
-    // 住所未設定や異常な住所を除外
-    const validRows = validComparison.rows.filter((row) => {
-      const label = row.label.trim();
-      if (label === "住所未設定" || label === "" || label === "未設定") {
-        return false;
-      }
-      if (label.length < 2 || /^[\d\-]+$/.test(label)) {
-        return false;
-      }
-      if (/^[^\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]+$/u.test(label)) {
-        return false;
-      }
-      return row.diffShare < 0;
-    });
-    return validRows.slice(0, 5);
-  }, [validComparison]);
-
   const comparisonBarData = useMemo<
     Array<{ id: string; label: string; periodA: number; periodB: number; diff: number; fill: string; accent: string }>
   >(() => {
@@ -883,16 +1540,6 @@ const MapAnalysisPage = () => {
     setRangeB((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleRegisterAreas = useCallback((areas: AreaSelectionMeta[]) => {
-    setAreaMetadata(() => {
-      const registry: Record<string, AreaSelectionMeta> = {};
-      areas.forEach((area) => {
-        registry[area.id] = area;
-      });
-      return registry;
-    });
-  }, []);
-
   const handleAddArea = (areaId: string) => {
     if (!areaId) {
       return;
@@ -956,18 +1603,14 @@ const MapAnalysisPage = () => {
     setPendingAreaId(event.target.value);
   };
 
-  const resolveAreaLocation = (areaId: string): string | null => {
-    const meta = areaMetadata[areaId];
-    if (!meta) {
-      return null;
-    }
-    const parts = [meta.prefecture, meta.city, meta.town].filter(
-      (part): part is string => Boolean(part && part.length > 0),
-    );
-    if (parts.length === 0) {
-      return meta.label;
-    }
-    return parts.join("");
+  const handleSummaryAreaClick = (areaId: string) => {
+    setFocusDimension("area");
+    handleFocusArea(areaId, true);
+  };
+
+  const handleSummaryAgeClick = (ageBandId: AgeBandId) => {
+    setFocusDimension("age");
+    setHighlightedAgeBand(ageBandId);
   };
 
   const ComparisonTooltipContent = ({
@@ -1131,50 +1774,673 @@ const MapAnalysisPage = () => {
             </p>
           </section>
         ) : (
-          <section className="space-y-6">
-            <div className="rounded-3xl border border-indigo-200 bg-white/80 p-6 text-slate-700 shadow-sm">
-              <h2 className="text-base font-semibold text-slate-900">分析サマリ</h2>
-              <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-3">
-                  <p className="text-xs font-semibold text-indigo-500">
-                    期間サマリ
-                  </p>
-                  <p className="mt-1 text-lg font-bold text-indigo-800">
-                    {mapPeriodLabel}
-                  </p>
+          <section className="space-y-8">
+            <div className="rounded-3xl border border-indigo-200 bg-white/85 p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-2">
+                  {(Object.entries(SUMMARY_MODE_LABEL) as Array<[SummaryMode, string]>).map(([mode, label]) => {
+                    const active = summaryMode === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setSummaryMode(mode)}
+                        className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                          active
+                            ? "border-indigo-500 bg-indigo-500 text-white shadow"
+                            : "border-indigo-100 bg-indigo-50 text-indigo-600 hover:border-indigo-300"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
                 </div>
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3">
-                  <p className="text-xs font-semibold text-emerald-500">
-                    カルテ件数
-                  </p>
-                  <p className="mt-1 text-lg font-bold text-emerald-700">
-                    {filteredMapRecords.length.toLocaleString("ja-JP")}件
-                  </p>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                  <span className="font-semibold">フォーカス</span>
+                  <button
+                    type="button"
+                    onClick={() => setFocusDimension("area")}
+                    className={`rounded-full border px-3 py-1.5 font-semibold transition ${
+                      focusDimension === "area"
+                        ? "border-indigo-500 bg-indigo-500 text-white"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-indigo-300"
+                    }`}
+                  >
+                    地区
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFocusDimension("age")}
+                    className={`rounded-full border px-3 py-1.5 font-semibold transition ${
+                      focusDimension === "age"
+                        ? "border-emerald-500 bg-emerald-500 text-white"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300"
+                    }`}
+                  >
+                    年代
+                  </button>
                 </div>
-                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                  <p className="text-xs font-semibold text-slate-500">
-                    最終更新
-                  </p>
-                  <p className="mt-1 text-lg font-bold text-slate-700">
-                    {lastUpdated
-                      ? new Date(lastUpdated).toLocaleDateString("ja-JP")
-                      : "不明"}
-                  </p>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+                <span>
+                  表示期間: <strong className="font-semibold text-slate-700">{mapPeriodLabel}</strong>
+                </span>
+                <span>
+                  データ件数: <strong className="font-semibold text-slate-700">{filteredMapRecords.length.toLocaleString("ja-JP")}件</strong>
+                </span>
+                {lastUpdated && (
+                  <span>
+                    最終更新: <strong className="font-semibold text-slate-700">{new Date(lastUpdated).toLocaleString("ja-JP")}</strong>
+                  </span>
+                )}
+              </div>
+              <div className="mt-6 grid gap-4 lg:grid-cols-3">
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-emerald-600">増加した地区 Top3</h3>
+                  {summary.increases.length === 0 ? (
+                    <p className="rounded-2xl border border-emerald-100 bg-emerald-50/80 px-4 py-3 text-xs text-emerald-700">
+                      増加した地区が見つかりません。
+                    </p>
+                  ) : (
+                    summary.increases.map((entry) => {
+                      const active = focusedAreaId === entry.id;
+                      const location = entry.town ?? entry.city ?? null;
+                      return (
+                        <button
+                          key={`increase-${entry.id}`}
+                          type="button"
+                          onClick={() => handleSummaryAreaClick(entry.id)}
+                          className={`w-full rounded-2xl border px-4 py-3 text-left shadow-sm transition ${
+                            active
+                              ? "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-200"
+                              : "border-emerald-100 bg-white hover:border-emerald-300 hover:shadow-lg"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800">{entry.label}</p>
+                              {location && (
+                                <p className="text-[11px] text-emerald-700">地点: {location}</p>
+                              )}
+                            </div>
+                            <span className="text-xs font-semibold text-emerald-600">
+                              {formatDiffValue(entry.diff)}
+                            </span>
+                          </div>
+                          <dl className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
+                            <div>
+                              <dt className="font-semibold uppercase tracking-wide text-slate-400">件数</dt>
+                              <dd className="text-sm font-semibold text-slate-800">
+                                {formatMetricValue(entry.current)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold uppercase tracking-wide text-slate-400">前月比</dt>
+                              <dd className="text-sm font-semibold text-slate-800">
+                                {formatRatioValue(entry.ratio)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold uppercase tracking-wide text-slate-400">構成比</dt>
+                              <dd className="font-semibold text-slate-800">
+                                {formatPercent(entry.share)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold uppercase tracking-wide text-slate-400">寄与度</dt>
+                              <dd className="font-semibold text-slate-800">
+                                {formatContributionValue(entry.contribution)}
+                              </dd>
+                            </div>
+                          </dl>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-rose-600">減少した地区 Top3</h3>
+                  {summary.decreases.length === 0 ? (
+                    <p className="rounded-2xl border border-rose-100 bg-rose-50/80 px-4 py-3 text-xs text-rose-600">
+                      減少した地区が見つかりません。
+                    </p>
+                  ) : (
+                    summary.decreases.map((entry) => {
+                      const active = focusedAreaId === entry.id;
+                      const location = entry.town ?? entry.city ?? null;
+                      return (
+                        <button
+                          key={`decrease-${entry.id}`}
+                          type="button"
+                          onClick={() => handleSummaryAreaClick(entry.id)}
+                          className={`w-full rounded-2xl border px-4 py-3 text-left shadow-sm transition ${
+                            active
+                              ? "border-rose-400 bg-rose-50 ring-2 ring-rose-200"
+                              : "border-rose-100 bg-white hover:border-rose-300 hover:shadow-lg"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800">{entry.label}</p>
+                              {location && (
+                                <p className="text-[11px] text-rose-600">地点: {location}</p>
+                              )}
+                            </div>
+                            <span className="text-xs font-semibold text-rose-600">
+                              {formatDiffValue(entry.diff)}
+                            </span>
+                          </div>
+                          <dl className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
+                            <div>
+                              <dt className="font-semibold uppercase tracking-wide text-slate-400">件数</dt>
+                              <dd className="text-sm font-semibold text-slate-800">
+                                {formatMetricValue(entry.current)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold uppercase tracking-wide text-slate-400">前月比</dt>
+                              <dd className="text-sm font-semibold text-slate-800">
+                                {formatRatioValue(entry.ratio)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold uppercase tracking-wide text-slate-400">構成比</dt>
+                              <dd className="font-semibold text-slate-800">
+                                {formatPercent(entry.share)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold uppercase tracking-wide text-slate-400">寄与度</dt>
+                              <dd className="font-semibold text-slate-800">
+                                {formatContributionValue(entry.contribution)}
+                              </dd>
+                            </div>
+                          </dl>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-indigo-600">伸びた年代 Top3</h3>
+                  {summary.ages.length === 0 ? (
+                    <p className="rounded-2xl border border-indigo-100 bg-indigo-50/80 px-4 py-3 text-xs text-indigo-600">
+                      増加した年代が見つかりません。
+                    </p>
+                  ) : (
+                    summary.ages.map((entry) => {
+                      const active = highlightedAgeBand === (entry.id as AgeBandId);
+                      return (
+                        <button
+                          key={`age-${entry.id}`}
+                          type="button"
+                          onClick={() => handleSummaryAgeClick(entry.id as AgeBandId)}
+                          className={`w-full rounded-2xl border px-4 py-3 text-left shadow-sm transition ${
+                            active
+                              ? "border-indigo-400 bg-indigo-50 ring-2 ring-indigo-200"
+                              : "border-indigo-100 bg-white hover:border-indigo-300 hover:shadow-lg"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <p className="text-sm font-semibold text-slate-800">{entry.label}</p>
+                            <span className="text-xs font-semibold text-indigo-600">
+                              {formatDiffValue(entry.diff)}
+                            </span>
+                          </div>
+                          <dl className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
+                            <div>
+                              <dt className="font-semibold uppercase tracking-wide text-slate-400">件数</dt>
+                              <dd className="text-sm font-semibold text-slate-800">
+                                {formatMetricValue(entry.current)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold uppercase tracking-wide text-slate-400">前月比</dt>
+                              <dd className="text-sm font-semibold text-slate-800">
+                                {formatRatioValue(entry.ratio)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold uppercase tracking-wide text-slate-400">構成比</dt>
+                              <dd className="font-semibold text-slate-800">
+                                {formatPercent(entry.share)}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold uppercase tracking-wide text-slate-400">寄与度</dt>
+                              <dd className="font-semibold text-slate-800">
+                                {formatContributionValue(entry.contribution)}
+                              </dd>
+                            </div>
+                          </dl>
+                        </button>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             </div>
 
-            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
-              <GeoDistributionMap
-                reservations={filteredMapRecords}
-                periodLabel={mapPeriodLabel}
-                selectedAreaIds={selectedAreaIds}
-                focusAreaId={focusAreaId}
-                onToggleArea={handleToggleAreaFromMap}
-                onRegisterAreas={handleRegisterAreas}
-              />
-            </section>
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1.1fr)]">
+              <div
+                className={`space-y-4 ${
+                  focusDimension === "area" ? "xl:rounded-3xl xl:ring-2 xl:ring-indigo-200" : ""
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-base font-semibold text-slate-900">地区の増減</h2>
+                    <p className="text-xs text-slate-500">セルをクリックすると推移グラフに反映されます。</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(Object.entries(VALUE_VIEW_LABEL) as Array<[ValueViewMode, string]>).map(([mode, label]) => {
+                      const active = valueViewMode === mode;
+                      return (
+                        <button
+                          key={`value-mode-${mode}`}
+                          type="button"
+                          onClick={() => setValueViewMode(mode)}
+                          className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                            active
+                              ? "border-amber-500 bg-amber-500 text-white"
+                              : "border-slate-200 bg-white text-slate-600 hover:border-amber-400"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-inner">
+                  <table className="min-w-full table-fixed text-xs">
+                    <thead className="bg-slate-50 text-slate-500">
+                      <tr>
+                        <th className="sticky left-0 z-10 w-40 px-3 py-2 text-left font-semibold text-slate-600">
+                          地区
+                        </th>
+                        {filteredMonths.map((month) => (
+                          <th key={`heatmap-head-${month}`} className="px-3 py-2 text-center font-semibold">
+                            {formatMonthLabel(month)}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topAreaSeries.map((series) => {
+                        const active = focusedAreaId === series.id;
+                        return (
+                          <tr key={`heatmap-row-${series.id}`} className="border-t border-slate-100">
+                            <th
+                              className={`sticky left-0 z-10 bg-white px-3 py-2 text-left text-sm font-semibold ${
+                                active ? "text-indigo-600" : "text-slate-700"
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => handleSummaryAreaClick(series.id)}
+                                className="inline-flex flex-col items-start gap-1"
+                              >
+                                <span>{series.label}</span>
+                                <span className="text-[10px] font-medium text-slate-500">
+                                  合計 {series.totalCount.toLocaleString("ja-JP")}件
+                                </span>
+                              </button>
+                            </th>
+                            {series.totals.map((point, idx) => {
+                              const share = monthlyTotals[idx] > 0 ? point.count / monthlyTotals[idx] : 0;
+                              const displayValue =
+                                valueViewMode === "count"
+                                  ? `${point.count.toLocaleString("ja-JP")}件`
+                                  : valueViewMode === "ratio"
+                                    ? formatPercent(share)
+                                    : formatDiffValue(point.diff);
+                              const tooltip = `${series.label}\n${formatMonthLabel(point.month)}\n件数: ${point.count.toLocaleString("ja-JP")}件\n前月差: ${formatDiffValue(point.diff)}\n構成比: ${formatPercent(share)}`;
+                              return (
+                                <td key={`heatmap-cell-${series.id}-${point.month}`} className="px-1 py-1 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSummaryAreaClick(series.id)}
+                                    title={tooltip}
+                                    className={`flex h-12 w-full items-center justify-center rounded-lg text-[11px] font-semibold transition ${
+                                      active ? "ring-2 ring-indigo-200" : "ring-0"
+                                    }`}
+                                    style={{
+                                      backgroundColor: getHeatmapCellColor(point.count, point.diff, idx),
+                                      color: "#0f172a",
+                                    }}
+                                  >
+                                    {displayValue}
+                                  </button>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-inner">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-slate-800">選択地区の推移</h3>
+                      {focusedAreaSeries && (
+                        <span className="text-[11px] text-slate-500">{focusedAreaSeries.label}</span>
+                      )}
+                    </div>
+                    <div className="mt-4 h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={focusedAreaTrend} margin={{ top: 12, right: 28, bottom: 8, left: 12 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                          <XAxis dataKey="month" tickFormatter={formatMonthLabel} stroke="#94a3b8" />
+                          <YAxis yAxisId="count" stroke="#2563eb" allowDecimals={false} />
+                          <YAxis yAxisId="diff" orientation="right" stroke="#dc2626" />
+                          <RechartsTooltip
+                            formatter={(value: number, name) => [
+                              typeof value === "number" ? value.toLocaleString("ja-JP") : value,
+                              name,
+                            ]}
+                            labelFormatter={(label) => formatMonthLabel(String(label))}
+                          />
+                          <Legend verticalAlign="top" height={24} iconType="circle" />
+                          <Area
+                            yAxisId="count"
+                            type="monotone"
+                            dataKey="件数"
+                            stroke="#2563eb"
+                            fill="rgba(37,99,235,0.35)"
+                            strokeWidth={2.2}
+                            activeDot={{ r: 4 }}
+                          />
+                          <Line
+                            yAxisId="diff"
+                            type="monotone"
+                            dataKey="差分"
+                            stroke="#dc2626"
+                            strokeWidth={2}
+                            dot={{ r: 3 }}
+                          />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-inner">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-slate-800">タイル地図（面積=件数 / 色=増減）</h3>
+                      <span className="text-[11px] text-slate-500">最新月基準</span>
+                    </div>
+                    <div className="mt-4 grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                      {tileMapData.map((tile) => (
+                        <button
+                          key={`tile-${tile.id}`}
+                          type="button"
+                          onClick={() => handleSummaryAreaClick(tile.id)}
+                          className={`flex flex-col gap-1 rounded-xl border px-3 py-3 text-left text-xs shadow-sm transition ${
+                            focusedAreaId === tile.id
+                              ? "border-indigo-400 bg-indigo-50"
+                              : "border-slate-200 bg-white hover:border-indigo-200"
+                          }`}
+                          style={{ minHeight: `${Math.round(72 + (tile.count / maxTileCount) * 48)}px` }}
+                        >
+                          <span className="text-sm font-semibold text-slate-800">{tile.label}</span>
+                          {(tile.city || tile.town) && (
+                            <span className="text-[10px] text-slate-500">{tile.city ?? tile.town}</span>
+                          )}
+                          <span className="text-[11px] font-semibold text-slate-700">
+                            {tile.count.toLocaleString("ja-JP")}件
+                          </span>
+                          <span className={`text-[11px] font-semibold ${tile.diff >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                            {formatDiffValue(tile.diff)}
+                          </span>
+                          <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                            <div
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${Math.max(tile.share * 100, 6)}%`,
+                                backgroundColor:
+                                  tile.diff >= 0 ? "rgba(16,185,129,0.8)" : "rgba(220,38,38,0.8)",
+                              }}
+                            />
+                          </div>
+                        </button>
+                      ))}
+                      {tileMapData.length === 0 && (
+                        <p className="col-span-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-4 text-center text-xs text-slate-500">
+                          表示可能な地区がありません。
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
+                  <GeoDistributionMap
+                    reservations={filteredMapRecords}
+                    periodLabel={mapPeriodLabel}
+                    selectedAreaIds={selectedAreaIds}
+                    focusAreaId={focusAreaId}
+                    onToggleArea={handleToggleAreaFromMap}
+                  />
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-inner">
+                  <h3 className="text-sm font-semibold text-slate-800">地区順位の推移</h3>
+                  <p className="text-[11px] text-slate-500">上位エリアの順位変化を折れ線で表示します（1位が最上段）。</p>
+                  <div className="mt-4 h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={areaRankChartData} margin={{ top: 12, right: 16, bottom: 8, left: 32 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="month" tickFormatter={formatMonthLabel} stroke="#94a3b8" />
+                        <YAxis
+                          domain={[1, Math.max(6, areaRankSeries.length)]}
+                          allowDecimals={false}
+                          reversed
+                          stroke="#94a3b8"
+                        />
+                        <RechartsTooltip
+                          formatter={(value: number, name) => [
+                            typeof value === "number" ? `${value}位` : value,
+                            name,
+                          ]}
+                          labelFormatter={(label) => formatMonthLabel(String(label))}
+                        />
+                        {areaRankSeries.map((series, index) => (
+                          <Line
+                            key={`area-rank-${series.id}`}
+                            type="monotone"
+                            dataKey={series.id}
+                            name={series.label}
+                            stroke={AREA_COLOR_PALETTE[index % AREA_COLOR_PALETTE.length]?.fill ?? "#6366f1"}
+                            strokeWidth={2}
+                            dot={false}
+                            connectNulls
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                className={`space-y-4 ${
+                  focusDimension === "age" ? "xl:rounded-3xl xl:ring-2 xl:ring-emerald-200" : ""
+                }`}
+              >
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-inner">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h2 className="text-base font-semibold text-slate-900">年代構成の変化</h2>
+                      <p className="text-xs text-slate-500">面積が大きいほど存在感が高い年代です。</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {["count", "ratio"].map((mode) => {
+                        const typed = mode as AgeViewMode;
+                        const active = ageViewMode === typed;
+                        return (
+                          <button
+                            key={`age-mode-${mode}`}
+                            type="button"
+                            onClick={() => setAgeViewMode(typed)}
+                            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                              active
+                                ? "border-violet-500 bg-violet-500 text-white"
+                                : "border-slate-200 bg-white text-slate-600 hover:border-violet-400"
+                            }`}
+                          >
+                            {mode === "count" ? "実数" : "比率"}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="mt-4 h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart
+                        data={ageViewMode === "ratio" ? ageRatioChartData : ageChartData}
+                        margin={{ top: 12, right: 24, bottom: 8, left: 0 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="month" tickFormatter={formatMonthLabel} stroke="#94a3b8" />
+                        <YAxis
+                          stroke="#94a3b8"
+                          tickFormatter={(value: number) =>
+                            ageViewMode === "ratio"
+                              ? `${Math.round(value * 100)}%`
+                              : value.toLocaleString("ja-JP")
+                          }
+                        />
+                        <RechartsTooltip
+                          formatter={(value: number, name) => [
+                            ageViewMode === "ratio"
+                              ? formatPercent(value)
+                              : `${value.toLocaleString("ja-JP")}件`,
+                            name,
+                          ]}
+                          labelFormatter={(label) => formatMonthLabel(String(label))}
+                        />
+                        <Legend verticalAlign="top" height={24} iconType="circle" />
+                        {AGE_BANDS.map((band) => {
+                          const highlighted = highlightedAgeBand === null || highlightedAgeBand === band.id;
+                          return (
+                            <Area
+                              key={`age-area-${band.id}`}
+                              type="monotone"
+                              dataKey={band.id}
+                              stackId="1"
+                              name={band.label}
+                              stroke={AGE_BAND_COLOR_MAP[band.id]}
+                              fill={AGE_BAND_COLOR_MAP[band.id]}
+                              fillOpacity={highlighted ? 0.7 : 0.2}
+                              strokeWidth={highlighted ? 2.5 : 1.5}
+                              activeDot={{ r: 3 }}
+                            />
+                          );
+                        })}
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-inner">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-slate-800">年代の構成比（スライダーで月を切り替え）</h3>
+                    <span className="text-[11px] text-slate-500">
+                      選択月: {filteredMonths[selectedAgeMonthIndex] ? formatMonthLabel(filteredMonths[selectedAgeMonthIndex]!) : "—"}
+                    </span>
+                  </div>
+                  <div className="mt-3">
+                    <input
+                      type="range"
+                      min={0}
+                      max={Math.max(filteredMonths.length - 1, 0)}
+                      value={Math.min(selectedAgeMonthIndex, Math.max(filteredMonths.length - 1, 0))}
+                      onChange={(event) => setSelectedAgeMonthIndex(Number(event.target.value))}
+                      className="w-full"
+                    />
+                  </div>
+                  <div className="mt-4 space-y-2">
+                    {ageSnapshot.map((row) => {
+                      const highlighted = highlightedAgeBand === null || highlightedAgeBand === row.id;
+                      return (
+                        <button
+                          key={`age-snapshot-${row.id}`}
+                          type="button"
+                          onClick={() => handleSummaryAgeClick(row.id as AgeBandId)}
+                          className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-left transition ${
+                            highlighted
+                              ? "border-emerald-400 bg-emerald-50"
+                              : "border-slate-200 bg-white hover:border-emerald-200"
+                          }`}
+                        >
+                          <span className="w-16 text-xs font-semibold text-slate-700">{row.label}</span>
+                          <div className="flex-1">
+                            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                              <div
+                                className="h-full rounded-full"
+                                style={{
+                                  width: `${Math.max(row.share * 100, 5)}%`,
+                                  backgroundColor: AGE_BAND_COLOR_MAP[row.id],
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <span className="w-16 text-right text-xs font-semibold text-slate-700">
+                            {row.count.toLocaleString("ja-JP")}件
+                          </span>
+                          <span className="text-[11px] font-semibold text-slate-500">
+                            {formatPercent(row.share)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-inner">
+                  <h3 className="text-sm font-semibold text-slate-800">年代順位の推移</h3>
+                  <p className="text-[11px] text-slate-500">年代ごとの順位変化を折れ線で表示します（1位が最上段）。</p>
+                  <div className="mt-4 h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={ageRankChartData} margin={{ top: 12, right: 16, bottom: 8, left: 32 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="month" tickFormatter={formatMonthLabel} stroke="#94a3b8" />
+                        <YAxis
+                          domain={[1, Math.max(AGE_BANDS.length, 5)]}
+                          allowDecimals={false}
+                          reversed
+                          stroke="#94a3b8"
+                        />
+                        <RechartsTooltip
+                          formatter={(value: number, name) => [
+                            typeof value === "number" ? `${value}位` : value,
+                            name,
+                          ]}
+                          labelFormatter={(label) => formatMonthLabel(String(label))}
+                        />
+                        {ageRankSeries.map((series) => (
+                          <Line
+                            key={`age-rank-${series.id}`}
+                            type="monotone"
+                            dataKey={series.id}
+                            name={series.label}
+                            stroke={AGE_BAND_COLOR_MAP[series.id]}
+                            strokeWidth={highlightedAgeBand === null || highlightedAgeBand === series.id ? 2.2 : 1.2}
+                            strokeDasharray={highlightedAgeBand && highlightedAgeBand !== series.id ? "4 4" : undefined}
+                            dot={false}
+                            connectNulls
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            </div>
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
               <div className="flex flex-col gap-6">
                 <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -1439,80 +2705,6 @@ const MapAnalysisPage = () => {
                       </div>
                     )}
 
-                    <div className="grid gap-4 lg:grid-cols-2">
-                      <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 shadow-sm">
-                        <h3 className="text-sm font-semibold text-emerald-700">増加したエリア</h3>
-                        {topIncrease.length > 0 ? (
-                          <ul className="mt-3 space-y-2 text-xs text-emerald-700">
-                            {topIncrease.map((row) => {
-                              const location = resolveAreaLocation(row.id);
-                              return (
-                                <li key={`inc-${row.id}`} className="flex flex-col gap-1 rounded-xl border border-emerald-100 bg-white/70 p-3 shadow-sm">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="font-semibold text-emerald-800">{row.label}</span>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleFocusArea(row.id, true)}
-                                      className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-700"
-                                    >
-                                      <MapPin className="h-3 w-3" />
-                                      地図で表示
-                                    </button>
-                                  </div>
-                                  {location && (
-                                    <span className="text-[11px] text-emerald-600">地点: {location}</span>
-                                  )}
-                                  <span className="text-[11px]">
-                                    {formatPercent(row.shareA)} → {formatPercent(row.shareB)}
-                                    <span className="ml-2 font-semibold text-emerald-600">
-                                      (+{formatPercent(row.diffShare)})
-                                    </span>
-                                  </span>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        ) : (
-                          <p className="mt-2 text-xs text-emerald-700">増加したエリアはありません。</p>
-                        )}
-                      </div>
-                      <div className="rounded-2xl border border-rose-100 bg-rose-50/60 p-4 shadow-sm">
-                        <h3 className="text-sm font-semibold text-rose-700">減少したエリア</h3>
-                        {topDecrease.length > 0 ? (
-                          <ul className="mt-3 space-y-2 text-xs text-rose-700">
-                            {topDecrease.map((row) => {
-                              const location = resolveAreaLocation(row.id);
-                              return (
-                                <li key={`dec-${row.id}`} className="flex flex-col gap-1 rounded-xl border border-rose-100 bg-white/70 p-3 shadow-sm">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="font-semibold text-rose-700">{row.label}</span>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleFocusArea(row.id, true)}
-                                      className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-500 px-2 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-rose-600"
-                                    >
-                                      <MapPin className="h-3 w-3" />
-                                      地図で表示
-                                    </button>
-                                  </div>
-                                  {location && (
-                                    <span className="text-[11px] text-rose-600">地点: {location}</span>
-                                  )}
-                                  <span className="text-[11px]">
-                                    {formatPercent(row.shareA)} → {formatPercent(row.shareB)}
-                                    <span className="ml-2 font-semibold text-rose-600">
-                                      ({formatPercent(row.diffShare)})
-                                    </span>
-                                  </span>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        ) : (
-                          <p className="mt-2 text-xs text-rose-700">減少したエリアはありません。</p>
-                        )}
-                      </div>
-                    </div>
                     <div className="rounded-2xl border border-slate-100 bg-white p-4">
                       <h3 className="text-sm font-semibold text-slate-800">年代構成の比較</h3>
                       <div className="mt-3 overflow-x-auto">
