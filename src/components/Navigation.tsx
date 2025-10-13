@@ -70,7 +70,7 @@ export default function Navigation() {
 
   return (
     <>
-      <nav className="sticky top-0 z-50 border-b border-brand-100/70 bg-white/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/70">
+      <nav className="z-50 border-b border-brand-100/70 bg-white shadow-sm md:sticky md:top-0 md:bg-white/95 md:backdrop-blur supports-[backdrop-filter]:md:bg-white/70">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 sm:px-6">
           <div className="flex flex-col gap-4 py-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
