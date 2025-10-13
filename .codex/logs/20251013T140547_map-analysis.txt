@@ -1,0 +1,9 @@
+[log]
+timestamp: 2025-10-13 14:05:47 JST
+branch: main
+commit: e88626f8417afb53fe39dfa0275bee8b3b63fedd
+summary:
+  - src/app/map-analysis/page.tsx: 期間比較モードの棒グラフと比較テーブルを復元
+lint_and_tests:
+  - npm run build (pass)
+push: origin/main (pending)
