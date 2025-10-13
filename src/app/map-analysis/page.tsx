@@ -2233,43 +2233,6 @@ const MapAnalysisPage = () => {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-inner">
-                  <h3 className="text-sm font-semibold text-slate-800">地区順位の推移</h3>
-                  <p className="text-[11px] text-slate-500">上位エリアの順位変化を折れ線で表示します（1位が最上段）。</p>
-                  <div className="mt-4 h-56">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={areaRankChartData} margin={{ top: 12, right: 16, bottom: 8, left: 32 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="month" tickFormatter={formatMonthLabel} stroke="#94a3b8" />
-                        <YAxis
-                          domain={[1, Math.max(6, areaRankSeries.length)]}
-                          allowDecimals={false}
-                          reversed
-                          stroke="#94a3b8"
-                        />
-                        <RechartsTooltip
-                          formatter={(value: number, name) => [
-                            typeof value === "number" ? `${value}位` : value,
-                            name,
-                          ]}
-                          labelFormatter={(label) => formatMonthLabel(String(label))}
-                        />
-                        {areaRankSeries.map((series, index) => (
-                          <Line
-                            key={`area-rank-${series.id}`}
-                            type="monotone"
-                            dataKey={series.id}
-                            name={series.label}
-                            stroke={AREA_COLOR_PALETTE[index % AREA_COLOR_PALETTE.length]?.fill ?? "#6366f1"}
-                            strokeWidth={2}
-                            dot={false}
-                            connectNulls
-                          />
-                        ))}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
               </div>
 
               <div
@@ -2437,6 +2400,44 @@ const MapAnalysisPage = () => {
                             stroke={AGE_BAND_COLOR_MAP[series.id]}
                             strokeWidth={highlightedAgeBand === null || highlightedAgeBand === series.id ? 2.2 : 1.2}
                             strokeDasharray={highlightedAgeBand && highlightedAgeBand !== series.id ? "4 4" : undefined}
+                            dot={false}
+                            connectNulls
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-inner">
+                  <h3 className="text-sm font-semibold text-slate-800">地区順位の推移</h3>
+                  <p className="text-[11px] text-slate-500">上位エリアの順位変化を折れ線で表示します（1位が最上段）。</p>
+                  <div className="mt-4 h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={areaRankChartData} margin={{ top: 12, right: 16, bottom: 8, left: 32 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="month" tickFormatter={formatMonthLabel} stroke="#94a3b8" />
+                        <YAxis
+                          domain={[1, Math.max(6, areaRankSeries.length)]}
+                          allowDecimals={false}
+                          reversed
+                          stroke="#94a3b8"
+                        />
+                        <RechartsTooltip
+                          formatter={(value: number, name) => [
+                            typeof value === "number" ? `${value}位` : value,
+                            name,
+                          ]}
+                          labelFormatter={(label) => formatMonthLabel(String(label))}
+                        />
+                        {areaRankSeries.map((series, index) => (
+                          <Line
+                            key={`area-rank-${series.id}`}
+                            type="monotone"
+                            dataKey={series.id}
+                            name={series.label}
+                            stroke={AREA_COLOR_PALETTE[index % AREA_COLOR_PALETTE.length]?.fill ?? "#6366f1"}
+                            strokeWidth={2}
                             dot={false}
                             connectNulls
                           />
