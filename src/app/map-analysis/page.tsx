@@ -792,6 +792,7 @@ const MapAnalysisPage = () => {
     useState<AgeBandId | null>(null);
   const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>([]);
   const [selectionPreset, setSelectionPreset] = useState<ComparisonSelectionPreset>("recommended");
+  const [comparisonMetric, setComparisonMetric] = useState<"share" | "count">("share");
   const [focusAreaId, setFocusAreaId] = useState<string | null>(null);
   const [pendingAreaId, setPendingAreaId] = useState<string>("");
   const [rangeA, setRangeA] = useState<ComparisonRange>({ start: null, end: null });
@@ -1194,7 +1195,18 @@ const MapAnalysisPage = () => {
   }, [defaultAreaIds, decreaseComparisonRows, increaseComparisonRows]);
 
   const comparisonBarData = useMemo<
-    Array<{ id: string; label: string; periodA: number; periodB: number; diff: number; fill: string; accent: string }>
+    Array<{
+      id: string;
+      label: string;
+      shareA: number;
+      shareB: number;
+      diffShare: number;
+      countA: number;
+      countB: number;
+      diffCount: number;
+      fill: string;
+      accent: string;
+    }>
   >(() => {
     if (!validComparison || topDiffRows.length === 0) {
       return [];
@@ -1202,12 +1214,18 @@ const MapAnalysisPage = () => {
     const palette = AREA_COLOR_PALETTE;
     return topDiffRows.map((row, index) => {
       const { fill, accent } = palette[index % palette.length];
+      const shareA = Number((row.shareA * 100).toFixed(1));
+      const shareB = Number((row.shareB * 100).toFixed(1));
+      const diffShare = Number((row.diffShare * 100).toFixed(1));
       return {
         id: row.id,
         label: row.label,
-        periodA: Number((row.shareA * 100).toFixed(1)),
-        periodB: Number((row.shareB * 100).toFixed(1)),
-        diff: Number((row.diffShare * 100).toFixed(1)),
+        shareA,
+        shareB,
+        diffShare,
+        countA: row.countA,
+        countB: row.countB,
+        diffCount: row.diff,
         fill,
         accent,
       };
@@ -1308,15 +1326,29 @@ const MapAnalysisPage = () => {
         return {
           id,
           label,
-          periodA: 0,
-          periodB: 0,
-          diff: 0,
+          shareA: 0,
+          shareB: 0,
+          diffShare: 0,
+          countA: 0,
+          countB: 0,
+          diffCount: 0,
           fill,
           accent,
         };
       })
       .filter((row): row is (typeof comparisonBarData)[number] => Boolean(row));
   }, [comparisonBarData, selectedAreaIds, areaLabelMap, selectionPresetMap]);
+
+  const displayComparisonData = useMemo(
+    () =>
+      selectedComparisonData.map((row) => ({
+        ...row,
+        periodA: comparisonMetric === "share" ? row.shareA : row.countA,
+        periodB: comparisonMetric === "share" ? row.shareB : row.countB,
+        diffValue: comparisonMetric === "share" ? row.diffShare : row.diffCount,
+      })),
+    [comparisonMetric, selectedComparisonData],
+  );
 
   const areaOptions = useMemo(() => {
     const options = comparisonBarData.map((row) => ({
@@ -1379,26 +1411,63 @@ const MapAnalysisPage = () => {
   const shareBarGap = isExpandedComparison ? 4 : 6;
   const diffBarCategoryGap = isExpandedComparison ? "24%" : "32%";
   const diffBarGap = isExpandedComparison ? 4 : 6;
+  const isShareMetric = comparisonMetric === "share";
+  const metricUnitLabel = isShareMetric ? "%" : "件";
+  const primaryComparisonTitle = isShareMetric ? "来院割合の比較" : "来院人数の比較";
+  const primaryComparisonSubtitle = `淡色が${periodALabel}、濃色が${periodBLabel}です（単位: ${metricUnitLabel}）。`;
+  const diffChartTitle = isShareMetric
+    ? `増減率（${periodBLabel} - ${periodALabel}）`
+    : `増減件数（${periodBLabel} - ${periodALabel}）`;
+  const diffChartSubtitle = isShareMetric
+    ? "正の値は増加、負の値は減少を示します。"
+    : "正の値は人数が増加、負の値は人数が減少したことを示します。";
 
   const comparisonShareDomain = useMemo<[number, number]>(() => {
-    if (comparisonBarData.length === 0) {
+    if (selectedComparisonData.length === 0) {
       return [0, 100];
     }
     const maxShare = Math.max(
-      ...comparisonBarData.map((row) => Math.max(row.periodA, row.periodB)),
       5,
+      ...selectedComparisonData.map((row) => Math.max(row.shareA, row.shareB)),
     );
     return [0, Math.min(100, Math.ceil(maxShare + 1))];
-  }, [comparisonBarData]);
+  }, [selectedComparisonData]);
 
-  const comparisonDiffDomain = useMemo<[number, number]>(() => {
-    if (comparisonBarData.length === 0) {
+  const comparisonDiffShareDomain = useMemo<[number, number]>(() => {
+    if (selectedComparisonData.length === 0) {
       return [-10, 10];
     }
-    const maxAbs = Math.max(...comparisonBarData.map((row) => Math.abs(row.diff)), 1);
+    const maxAbs = Math.max(
+      1,
+      ...selectedComparisonData.map((row) => Math.abs(row.diffShare)),
+    );
     const padding = Math.ceil(maxAbs + 1);
     return [-padding, padding];
-  }, [comparisonBarData]);
+  }, [selectedComparisonData]);
+
+  const comparisonCountDomain = useMemo<[number, number]>(() => {
+    if (selectedComparisonData.length === 0) {
+      return [0, 1];
+    }
+    const maxCount = Math.max(
+      1,
+      ...selectedComparisonData.map((row) => Math.max(row.countA, row.countB)),
+    );
+    const upper = Math.ceil(maxCount * 1.1);
+    return [0, upper];
+  }, [selectedComparisonData]);
+
+  const comparisonDiffCountDomain = useMemo<[number, number]>(() => {
+    if (selectedComparisonData.length === 0) {
+      return [-1, 1];
+    }
+    const maxAbs = Math.max(
+      1,
+      ...selectedComparisonData.map((row) => Math.abs(row.diffCount)),
+    );
+    const padding = Math.ceil(maxAbs * 1.1);
+    return [-padding, padding];
+  }, [selectedComparisonData]);
 
   const invalidRange = useMemo(() => Boolean(comparisonData?.invalid), [comparisonData]);
 
@@ -1599,6 +1668,23 @@ const MapAnalysisPage = () => {
       return null;
     }
     const safeLabel = typeof label === "string" ? label : "";
+    const formatValue = (dataKey: string | number | undefined, raw: unknown): string => {
+      if (typeof raw !== "number") {
+        if (raw === null || raw === undefined) {
+          return "—";
+        }
+        return String(raw);
+      }
+      const key = dataKey?.toString() ?? "";
+      if (key === "diffValue" || key === "periodA" || key === "periodB") {
+        return isShareMetric
+          ? `${raw.toFixed(1)}%`
+          : `${Math.round(raw).toLocaleString("ja-JP")}件`;
+      }
+      return isShareMetric
+        ? `${raw.toFixed(1)}%`
+        : `${Math.round(raw).toLocaleString("ja-JP")}件`;
+    };
     return (
       <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
         {safeLabel && <p className="mb-1 font-semibold text-slate-700">{safeLabel}</p>}
@@ -1611,7 +1697,7 @@ const MapAnalysisPage = () => {
               : entry.name ?? entry.dataKey;
           return (
             <p key={key} className="text-slate-600">
-              {seriesLabel}: {typeof entry.value === "number" ? entry.value.toFixed(1) : entry.value}%
+              {seriesLabel}: {formatValue(entry.dataKey, entry.value)}
             </p>
           );
         })}
@@ -1627,7 +1713,7 @@ const MapAnalysisPage = () => {
     value?: number | string;
   };
 
-  const DiffLabel = ({ x, y, width, height, value }: LabelGeometry) => {
+  const DiffLabelShare = ({ x, y, width, height, value }: LabelGeometry) => {
     const toNumber = (input?: number | string) => {
       if (typeof input === "number") {
         return input;
@@ -1666,6 +1752,50 @@ const MapAnalysisPage = () => {
         textAnchor="middle"
       >
         {`${isPositive ? "+" : ""}${numericValue.toFixed(1)}%`}
+      </text>
+    );
+  };
+
+  const DiffLabelCount = ({ x, y, width, height, value }: LabelGeometry) => {
+    const toNumber = (input?: number | string) => {
+      if (typeof input === "number") {
+        return input;
+      }
+      if (typeof input === "string") {
+        const parsed = Number.parseFloat(input);
+        return Number.isFinite(parsed) ? parsed : undefined;
+      }
+      return undefined;
+    };
+    const xCoord = toNumber(x);
+    const yCoord = toNumber(y);
+    const barWidth = toNumber(width);
+    const barHeight = toNumber(height);
+    const numericValue = toNumber(value);
+    if (
+      typeof xCoord !== "number" ||
+      typeof yCoord !== "number" ||
+      typeof barWidth !== "number" ||
+      typeof barHeight !== "number" ||
+      typeof numericValue !== "number"
+    ) {
+      return <g />;
+    }
+    const isPositive = numericValue >= 0;
+    const anchorX = xCoord + barWidth / 2;
+    const anchorY = isPositive ? yCoord - 8 : yCoord + barHeight + 14;
+    const textColor = isPositive ? "#047857" : "#b91c1c";
+    const displayValue = Math.round(numericValue).toLocaleString("ja-JP");
+    return (
+      <text
+        x={anchorX}
+        y={anchorY}
+        fill={textColor}
+        fontSize={11}
+        fontWeight={600}
+        textAnchor="middle"
+      >
+        {`${isPositive ? "+" : ""}${displayValue}件`}
       </text>
     );
   };
@@ -2148,6 +2278,30 @@ const MapAnalysisPage = () => {
                             ))}
                           </select>
                         </div>
+                        <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-1 py-1 text-xs shadow-sm">
+                          <button
+                            type="button"
+                            onClick={() => setComparisonMetric("share")}
+                            className={`rounded-full px-3 py-1 font-semibold transition ${
+                              isShareMetric
+                                ? "bg-brand-500 text-white shadow-sm"
+                                : "text-slate-600 hover:bg-brand-50 hover:text-brand-600"
+                            }`}
+                          >
+                            割合
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setComparisonMetric("count")}
+                            className={`rounded-full px-3 py-1 font-semibold transition ${
+                              !isShareMetric
+                                ? "bg-brand-500 text-white shadow-sm"
+                                : "text-slate-600 hover:bg-brand-50 hover:text-brand-600"
+                            }`}
+                          >
+                            人数
+                          </button>
+                        </div>
                         <button
                           type="button"
                           onClick={handleResetAreas}
@@ -2222,24 +2376,30 @@ const MapAnalysisPage = () => {
                   {selectedComparisonData.length > 0 ? (
                     <div className="space-y-4">
                       <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-inner">
-                        <h3 className="text-sm font-semibold text-slate-800">来院割合の比較</h3>
-                        <p className="text-[11px] text-slate-500">
-                          淡色が{periodALabel}、濃色が{periodBLabel}です。
-                        </p>
+                        <h3 className="text-sm font-semibold text-slate-800">{primaryComparisonTitle}</h3>
+                        <p className="text-[11px] text-slate-500">{primaryComparisonSubtitle}</p>
                         <div className="mt-4" style={{ height: `${comparisonChartHeight}px` }}>
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart
-                              data={selectedComparisonData}
+                              data={displayComparisonData}
                               margin={{ top: 12, right: 24, bottom: 36, left: 32 }}
                               barCategoryGap={shareBarCategoryGap}
                               barGap={shareBarGap}
                             >
                               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                               <XAxis dataKey="label" interval={0} height={72} tick={renderCategoryTick} />
-                              <YAxis domain={comparisonShareDomain} tickFormatter={(value: number) => `${value}%`} stroke="#94a3b8" />
+                              <YAxis
+                                domain={isShareMetric ? comparisonShareDomain : comparisonCountDomain}
+                                tickFormatter={(value: number) =>
+                                  isShareMetric
+                                    ? `${value}%`
+                                    : Math.round(value).toLocaleString("ja-JP")
+                                }
+                                stroke="#94a3b8"
+                              />
                               <RechartsTooltip content={<ComparisonTooltipContent />} />
                               <Bar dataKey="periodA" name={periodALabel} radius={[6, 6, 0, 0]}>
-                                {selectedComparisonData.map((row) => (
+                                {displayComparisonData.map((row) => (
                                   <Cell
                                     key={`periodA-${row.id}`}
                                     fill={translucentFill(row.fill, 0.5)}
@@ -2250,13 +2410,19 @@ const MapAnalysisPage = () => {
                                 <LabelList
                                   dataKey="periodA"
                                   position="top"
-                                  formatter={(value) => `${typeof value === "number" ? value.toFixed(1) : value}%`}
+                                  formatter={(value) =>
+                                    typeof value === "number"
+                                      ? isShareMetric
+                                        ? `${value.toFixed(1)}%`
+                                        : `${Math.round(value).toLocaleString("ja-JP")}件`
+                                      : `${value}`
+                                  }
                                   fill="#0f172a"
                                   fontSize={12}
                                 />
                               </Bar>
                               <Bar dataKey="periodB" name={periodBLabel} radius={[6, 6, 0, 0]}>
-                                {selectedComparisonData.map((row) => (
+                                {displayComparisonData.map((row) => (
                                   <Cell
                                     key={`periodB-${row.id}`}
                                     fill={solidFill(row.fill, 0.85)}
@@ -2267,7 +2433,13 @@ const MapAnalysisPage = () => {
                                 <LabelList
                                   dataKey="periodB"
                                   position="top"
-                                  formatter={(value) => `${typeof value === "number" ? value.toFixed(1) : value}%`}
+                                  formatter={(value) =>
+                                    typeof value === "number"
+                                      ? isShareMetric
+                                        ? `${value.toFixed(1)}%`
+                                        : `${Math.round(value).toLocaleString("ja-JP")}件`
+                                      : `${value}`
+                                  }
                                   fill="#0f172a"
                                   fontSize={12}
                                 />
@@ -2278,31 +2450,39 @@ const MapAnalysisPage = () => {
                       </div>
 
                       <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-inner">
-                        <h3 className="text-sm font-semibold text-slate-800">増減率（{periodBLabel} - {periodALabel}）</h3>
-                        <p className="text-[11px] text-slate-500">正の値は増加、負の値は減少を示します。</p>
+                        <h3 className="text-sm font-semibold text-slate-800">{diffChartTitle}</h3>
+                        <p className="text-[11px] text-slate-500">{diffChartSubtitle}</p>
                         <div className="mt-4" style={{ height: `${diffChartHeight}px` }}>
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart
-                              data={selectedComparisonData}
+                              data={displayComparisonData}
                               margin={{ top: 12, right: 32, bottom: 36, left: 32 }}
                               barCategoryGap={diffBarCategoryGap}
                               barGap={diffBarGap}
                             >
                               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                               <XAxis dataKey="label" interval={0} height={72} tick={renderCategoryTick} />
-                              <YAxis domain={comparisonDiffDomain} tickFormatter={(value: number) => `${value}%`} stroke="#94a3b8" />
+                              <YAxis
+                                domain={isShareMetric ? comparisonDiffShareDomain : comparisonDiffCountDomain}
+                                tickFormatter={(value: number) =>
+                                  isShareMetric
+                                    ? `${value}%`
+                                    : `${Math.round(value).toLocaleString("ja-JP")}件`
+                                }
+                                stroke="#94a3b8"
+                              />
                               <RechartsTooltip content={<ComparisonTooltipContent />} />
                               <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
-                              <Bar dataKey="diff" name="増減率" radius={[6, 6, 6, 6]}>
-                                {selectedComparisonData.map((row) => (
+                              <Bar dataKey="diffValue" name={isShareMetric ? "増減率" : "増減件数"} radius={[6, 6, 6, 6]}>
+                                {displayComparisonData.map((row) => (
                                   <Cell
                                     key={`diff-${row.id}`}
-                                    fill={row.diff >= 0 ? solidFill("#16a34a", 0.75) : solidFill("#dc2626", 0.8)}
-                                    stroke={row.diff >= 0 ? "#15803d" : "#b91c1c"}
+                                    fill={row.diffValue >= 0 ? solidFill("#16a34a", 0.75) : solidFill("#dc2626", 0.8)}
+                                    stroke={row.diffValue >= 0 ? "#15803d" : "#b91c1c"}
                                     strokeWidth={1.1}
                                   />
                                 ))}
-                                <LabelList content={DiffLabel} />
+                                <LabelList content={isShareMetric ? DiffLabelShare : DiffLabelCount} />
                               </Bar>
                             </BarChart>
                           </ResponsiveContainer>
