@@ -1,0 +1,11 @@
+timestamp: 2025-10-13T17-43-33+0900
+branch: main
+commit: 405b17bbc91bb06e8fac4bdb65e325c2f36d8d71
+summary: マップ比較モードのUX改善
+changes: src/app/map-analysis/page.tsx (地図モーダル・期間ラベル更新・選択フィードバック)
+  src/components/reservations/GeoDistributionMap.tsx (大阪市全域をフィット・ピッカーポイント追加)
+  src/app/globals.css (マーカー/トーストアニメーション追加)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: pending
