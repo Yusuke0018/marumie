@@ -16,9 +16,6 @@ import {
   XAxis,
   YAxis,
   Tooltip as RechartsTooltip,
-  AreaChart,
-  Area,
-  Legend,
   BarChart,
   Bar,
   Cell,
@@ -204,7 +201,6 @@ type AreaSelectionMeta = {
 };
 
 const MAX_SELECTED_AREAS = 8;
-type AgeViewMode = "count" | "ratio";
 
 const HIDDEN_AREA_LABEL = "住所未設定";
 
@@ -488,15 +484,6 @@ const buildSummaryEntries = (
   return { increases, decreases, ages };
 };
 
-const AGE_BAND_COLOR_MAP: Record<AgeBandId, string> = {
-  "0-19": "#0ea5e9",
-  "20-39": "#10b981",
-  "40-59": "#6366f1",
-  "60-79": "#f97316",
-  "80+": "#ef4444",
-  unknown: "#94a3b8",
-};
-
 const AREA_COLOR_PALETTE: Array<{ fill: string; accent: string }> = [
   { fill: "#2563eb", accent: "#1d4ed8" },
   { fill: "#0f766e", accent: "#0b5f59" },
@@ -768,24 +755,14 @@ const MapAnalysisPage = () => {
     }
   }, [filteredMonths.length, mapPeriodLabel]);
 
-  const [selectedAgeMonthIndex, setSelectedAgeMonthIndex] = useState(() =>
-    filteredMonths.length > 0 ? filteredMonths.length - 1 : 0,
-  );
   const [highlightedAgeBand, setHighlightedAgeBand] =
     useState<AgeBandId | null>(null);
-  const [ageViewMode, setAgeViewMode] = useState<AgeViewMode>("ratio");
   const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>([]);
   const [hasCustomSelection, setHasCustomSelection] = useState(false);
   const [focusAreaId, setFocusAreaId] = useState<string | null>(null);
   const [pendingAreaId, setPendingAreaId] = useState<string>("");
   const [rangeA, setRangeA] = useState<ComparisonRange>({ start: null, end: null });
   const [rangeB, setRangeB] = useState<ComparisonRange>({ start: null, end: null });
-
-  useEffect(() => {
-    setSelectedAgeMonthIndex(
-      filteredMonths.length > 0 ? filteredMonths.length - 1 : 0,
-    );
-  }, [filteredMonths.length]);
 
   useEffect(() => {
     setHighlightedAgeBand(null);
@@ -796,33 +773,10 @@ const MapAnalysisPage = () => {
     [filteredMapRecords, filteredMonths],
   );
 
-  const ageAnalytics = useMemo(() => {
-    const series = buildAgeSeries(filteredMapRecords, filteredMonths);
-    const chartData = filteredMonths.map((month, index) => {
-      const row: Record<string, number | string> = { month };
-      series.forEach((item) => {
-        row[item.id] = item.totals[index]?.count ?? 0;
-      });
-      return row;
-    });
-    const ratioData = filteredMonths.map((month, index) => {
-      const totalForMonth = series.reduce(
-        (acc, item) => acc + (item.totals[index]?.count ?? 0),
-        0,
-      );
-      const row: Record<string, number | string> = { month };
-      series.forEach((item) => {
-        const count = item.totals[index]?.count ?? 0;
-        row[item.id] = totalForMonth > 0 ? count / totalForMonth : 0;
-      });
-      return row;
-    });
-    return { series, chartData, ratioData };
-  }, [filteredMapRecords, filteredMonths]);
-
-  const ageSeries = ageAnalytics.series;
-  const ageChartData = ageAnalytics.chartData;
-  const ageRatioChartData = ageAnalytics.ratioData;
+  const ageSeries = useMemo(
+    () => buildAgeSeries(filteredMapRecords, filteredMonths),
+    [filteredMapRecords, filteredMonths],
+  );
 
   const summary = useMemo(
     () => buildSummaryEntries(areaSeries, ageSeries, filteredMonths),
@@ -852,34 +806,6 @@ const MapAnalysisPage = () => {
       return { start, end };
     });
   }, [sortedMonths]);
-
-  const ageSnapshot = useMemo(() => {
-    if (filteredMonths.length === 0) {
-      return [];
-    }
-    const clampedIndex = Math.min(
-      Math.max(selectedAgeMonthIndex, 0),
-      filteredMonths.length - 1,
-    );
-    return ageSeries
-      .map((series) => {
-        const point = series.totals[clampedIndex];
-        const totalForMonth = ageSeries.reduce((acc, item) => {
-          return acc + (item.totals[clampedIndex]?.count ?? 0);
-        }, 0);
-        const share =
-          totalForMonth > 0
-            ? (point?.count ?? 0) / totalForMonth
-            : 0;
-        return {
-          id: series.id,
-          label: series.label,
-          count: point?.count ?? 0,
-          share,
-        };
-      })
-      .sort((a, b) => b.count - a.count);
-  }, [ageSeries, filteredMonths.length, selectedAgeMonthIndex]);
 
   const startMonthLabel =
     filteredMonths.length > 0 ? formatMonthLabel(filteredMonths[0]!) : null;
@@ -929,16 +855,25 @@ const MapAnalysisPage = () => {
         }
       >();
       const ageTotals = createEmptyAgeBreakdown();
+      let counted = 0;
 
       records.forEach((record) => {
-        const bandId = classifyAgeBandId(record.patientAge);
-        ageTotals[bandId] += 1;
-
         const prefecture = record.patientPrefecture ?? null;
         const city = record.patientCity ?? null;
         const town = record.patientTown ?? record.patientBaseTown ?? null;
         const labelParts = [city, town].filter((part): part is string => Boolean(part));
-        const label = labelParts.length > 0 ? labelParts.join("") : city ?? "住所未設定";
+        const label =
+          labelParts.length > 0
+            ? labelParts.join("")
+            : city ?? prefecture ?? HIDDEN_AREA_LABEL;
+
+        if (label === HIDDEN_AREA_LABEL) {
+          return;
+        }
+
+        const bandId = classifyAgeBandId(record.patientAge);
+        ageTotals[bandId] += 1;
+
         const key = `${prefecture ?? ""}|${city ?? ""}|${town ?? ""}`;
         let entry = areaMap.get(key);
         if (!entry) {
@@ -954,10 +889,11 @@ const MapAnalysisPage = () => {
         }
         entry.total += 1;
         entry.ageBreakdown[bandId] += 1;
+        counted += 1;
       });
 
       return {
-        total: records.length,
+        total: counted,
         areas: areaMap,
         ageTotals,
       };
@@ -1712,143 +1648,6 @@ const MapAnalysisPage = () => {
               </div>
             </section>
 
-            <section className="space-y-6 rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-sm">
-              <header className="space-y-2">
-                <h2 className="text-base font-semibold text-slate-900">患者分析の視点別いんサイト</h2>
-                <p className="text-xs text-slate-500">
-                  期間の開始と終了で年代構成がどう変化したかを確認できます。
-                </p>
-              </header>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-inner">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-800">年代構成の変化</h3>
-                    <p className="text-xs text-slate-500">面積が大きいほど存在感が高い年代です。</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {(["count", "ratio"] as AgeViewMode[]).map((mode) => {
-                      const active = ageViewMode === mode;
-                      return (
-                        <button
-                          key={`age-mode-${mode}`}
-                          type="button"
-                          onClick={() => setAgeViewMode(mode)}
-                          className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                            active
-                              ? "border-violet-500 bg-violet-500 text-white"
-                              : "border-slate-200 bg-white text-slate-600 hover:border-violet-400"
-                          }`}
-                        >
-                          {mode === "count" ? "実数" : "比率"}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div className="mt-4 h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart
-                      data={ageViewMode === "ratio" ? ageRatioChartData : ageChartData}
-                      margin={{ top: 12, right: 24, bottom: 8, left: 0 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="month" tickFormatter={formatMonthLabel} stroke="#94a3b8" />
-                      <YAxis
-                        stroke="#94a3b8"
-                        tickFormatter={(value: number) =>
-                          ageViewMode === "ratio"
-                            ? `${Math.round(value * 100)}%`
-                            : value.toLocaleString("ja-JP")
-                        }
-                      />
-                      <RechartsTooltip
-                        formatter={(value: number, name) => [
-                          ageViewMode === "ratio"
-                            ? formatPercent(value)
-                            : `${value.toLocaleString("ja-JP")}件`,
-                          name,
-                        ]}
-                        labelFormatter={(label) => formatMonthLabel(String(label))}
-                      />
-                      <Legend verticalAlign="top" height={24} iconType="circle" />
-                      {AGE_BANDS.map((band) => {
-                        const highlighted = highlightedAgeBand === null || highlightedAgeBand === band.id;
-                        return (
-                          <Area
-                            key={`age-area-${band.id}`}
-                            type="monotone"
-                            dataKey={band.id}
-                            stackId="1"
-                            name={band.label}
-                            stroke={AGE_BAND_COLOR_MAP[band.id]}
-                            fill={AGE_BAND_COLOR_MAP[band.id]}
-                            fillOpacity={highlighted ? 0.7 : 0.2}
-                            strokeWidth={highlighted ? 2.5 : 1.5}
-                            activeDot={{ r: 3 }}
-                          />
-                        );
-                      })}
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-inner">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-slate-800">年代の構成比（スライダーで月を切り替え）</h3>
-                  <span className="text-[11px] text-slate-500">
-                    選択月: {filteredMonths[selectedAgeMonthIndex] ? formatMonthLabel(filteredMonths[selectedAgeMonthIndex]!) : "—"}
-                  </span>
-                </div>
-                <div className="mt-3">
-                  <input
-                    type="range"
-                    min={0}
-                    max={Math.max(filteredMonths.length - 1, 0)}
-                    value={Math.min(selectedAgeMonthIndex, Math.max(filteredMonths.length - 1, 0))}
-                    onChange={(event) => setSelectedAgeMonthIndex(Number(event.target.value))}
-                    className="w-full"
-                  />
-                </div>
-                <div className="mt-4 space-y-2">
-                  {ageSnapshot.map((row) => {
-                    const highlighted = highlightedAgeBand === null || highlightedAgeBand === row.id;
-                    return (
-                      <button
-                        key={`age-snapshot-${row.id}`}
-                        type="button"
-                        onClick={() => handleSummaryAgeClick(row.id as AgeBandId)}
-                        className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-left transition ${
-                          highlighted
-                            ? "border-emerald-400 bg-emerald-50"
-                            : "border-slate-200 bg-white hover:border-emerald-200"
-                        }`}
-                      >
-                        <span className="w-16 text-xs font-semibold text-slate-700">{row.label}</span>
-                        <div className="flex-1">
-                          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
-                            <div
-                              className="h-full rounded-full"
-                              style={{
-                                width: `${Math.max(row.share * 100, 5)}%`,
-                                backgroundColor: AGE_BAND_COLOR_MAP[row.id],
-                              }}
-                            />
-                          </div>
-                        </div>
-                        <span className="w-16 text-right text-xs font-semibold text-slate-700">
-                          {row.count.toLocaleString("ja-JP")}件
-                        </span>
-                        <span className="text-[11px] font-semibold text-slate-500">
-                          {formatPercent(row.share)}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </section>
 
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
               <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
