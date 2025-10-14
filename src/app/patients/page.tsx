@@ -22,6 +22,7 @@ import {
   Undo2,
   Clock,
   TrendingUp,
+  ChevronDown,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Papa from "papaparse";
@@ -33,6 +34,16 @@ import {
   type KarteRecord,
   type KarteRecordWithCategory,
 } from "@/lib/karteAnalytics";
+import {
+  Area,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import {
   type Reservation,
@@ -145,7 +156,57 @@ const KARTE_MIN_MONTH = "2000-01";
 const LISTING_CATEGORIES: ListingCategory[] = ["内科", "発熱外来", "胃カメラ", "大腸カメラ"];
 const SURVEY_FILE_TYPES: SurveyFileType[] = ["外来", "内視鏡"];
 
-const TARGET_DEPARTMENT_KEYWORDS = ["発熱", "総合診療"];
+type MultivariateSegmentKey = "overall" | "general" | "fever";
+
+const MULTIVARIATE_SEGMENT_ENTRIES: Array<{
+  id: MultivariateSegmentKey;
+  label: string;
+  gradientClass: string;
+  ringClass: string;
+  chipClass: string;
+  barColor: string;
+  lineColor: string;
+}> = [
+  {
+    id: "overall",
+    label: "全体",
+    gradientClass: "from-sky-500 via-cyan-400 to-sky-600",
+    ringClass: "ring-sky-200",
+    chipClass: "bg-sky-500/20 text-white",
+    barColor: "#0ea5e9",
+    lineColor: "#bae6fd",
+  },
+  {
+    id: "general",
+    label: "総合診療",
+    gradientClass: "from-violet-500 via-fuchsia-500 to-violet-600",
+    ringClass: "ring-violet-200",
+    chipClass: "bg-violet-500/20 text-white",
+    barColor: "#8b5cf6",
+    lineColor: "#d8b4fe",
+  },
+  {
+    id: "fever",
+    label: "発熱外来",
+    gradientClass: "from-rose-500 via-amber-400 to-rose-600",
+    ringClass: "ring-rose-200",
+    chipClass: "bg-rose-500/25 text-white",
+    barColor: "#fb7185",
+    lineColor: "#f9a8d4",
+  },
+];
+
+const MULTIVARIATE_SEGMENT_ORDER = MULTIVARIATE_SEGMENT_ENTRIES.map((entry) => entry.id);
+const MULTIVARIATE_SEGMENT_CONFIG = MULTIVARIATE_SEGMENT_ENTRIES.reduce<
+  Record<MultivariateSegmentKey, (typeof MULTIVARIATE_SEGMENT_ENTRIES)[number]>
+>((acc, entry) => {
+  acc[entry.id] = entry;
+  return acc;
+}, {
+  overall: MULTIVARIATE_SEGMENT_ENTRIES[0]!,
+  general: MULTIVARIATE_SEGMENT_ENTRIES[1]!,
+  fever: MULTIVARIATE_SEGMENT_ENTRIES[2]!,
+});
 
 const MULTIVARIATE_AGE_BANDS = [
   { id: "0-19", label: "0-19歳", min: 0, max: 19 },
@@ -180,7 +241,13 @@ type MultivariateWeekdayGroup = {
   slots: MultivariateSlotStat[];
 };
 
-type MultivariateInsights = {
+type MultivariateLeadingAgeBand =
+  | { id: string; label: string; total: number; avgPoints: number | null }
+  | null;
+
+type MultivariateSegmentInsight = {
+  key: MultivariateSegmentKey;
+  label: string;
   hasData: boolean;
   totalMatches: number;
   unmatchedRecords: number;
@@ -188,8 +255,13 @@ type MultivariateInsights = {
   weekdayGroups: MultivariateWeekdayGroup[];
   topSlot: MultivariateSlotStat | null;
   highestAvgSlot: MultivariateSlotStat | null;
-  leadingAgeBand: { id: string; label: string; total: number; avgPoints: number | null } | null;
+  leadingAgeBand: MultivariateLeadingAgeBand;
   highlights: string[];
+};
+
+type MultivariateInsights = {
+  hasData: boolean;
+  segments: Record<MultivariateSegmentKey, MultivariateSegmentInsight>;
 };
 
 const toHiragana = (value: string) =>
@@ -990,7 +1062,20 @@ const normalizePatientName = (value: string | null | undefined): string | null =
   return normalized.length > 0 ? normalized : null;
 };
 
-const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
+const WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土", "日", "祝日"] as const;
+const WEEKDAY_PRESENTATION = [
+  { weekday: 6, label: "日" },
+  { weekday: 0, label: "月" },
+  { weekday: 1, label: "火" },
+  { weekday: 2, label: "水" },
+  { weekday: 3, label: "木" },
+  { weekday: 4, label: "金" },
+  { weekday: 5, label: "土" },
+  { weekday: 7, label: "祝日" },
+] as const;
+
+const getWeekdayLabel = (weekday: number): string =>
+  WEEKDAY_LABELS[weekday] ?? "—";
 
 const formatHourLabel = (hour: number) => `${hour.toString().padStart(2, "0")}:00`;
 
@@ -1012,8 +1097,17 @@ function PatientAnalysisPageContent() {
   const [showTrendChart, setShowTrendChart] = useState(false);
   const [showDepartmentChart, setShowDepartmentChart] = useState(false);
   const [showWeekdayChart, setShowWeekdayChart] = useState(false);
-  const [showUnitPriceChart, setShowUnitPriceChart] = useState(false);
-  const [insightTab, setInsightTab] = useState<"channel" | "department" | "time">("department");
+const [showUnitPriceChart, setShowUnitPriceChart] = useState(false);
+const [insightTab, setInsightTab] = useState<"channel" | "department" | "time">("department");
+const [selectedInsightSegment, setSelectedInsightSegment] =
+  useState<MultivariateSegmentKey>("overall");
+const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
+  Record<MultivariateSegmentKey, number | null>
+>({
+  overall: null,
+  general: null,
+  fever: null,
+});
   const [isManagementOpen, setIsManagementOpen] = useState(false);
   const [reservationsRecords, setReservationsRecords] = useState<Reservation[]>([]);
   const [selectedShiftDepartment, setSelectedShiftDepartment] = useState<string>("");
@@ -2671,7 +2765,11 @@ function PatientAnalysisPageContent() {
   }, [listingStatus, reservationStatus, surveyStatus]);
 
   const multivariateInsights = useMemo<MultivariateInsights>(() => {
-    const initial: MultivariateInsights = {
+    const createEmptySegmentInsight = (
+      segment: MultivariateSegmentKey,
+    ): MultivariateSegmentInsight => ({
+      key: segment,
+      label: MULTIVARIATE_SEGMENT_CONFIG[segment].label,
       hasData: false,
       totalMatches: 0,
       unmatchedRecords: 0,
@@ -2681,27 +2779,95 @@ function PatientAnalysisPageContent() {
       highestAvgSlot: null,
       leadingAgeBand: null,
       highlights: [],
+    });
+
+    const base: MultivariateInsights = {
+      hasData: false,
+      segments: {
+        overall: createEmptySegmentInsight("overall"),
+        general: createEmptySegmentInsight("general"),
+        fever: createEmptySegmentInsight("fever"),
+      },
     };
 
     if (filteredClassified.length === 0 || reservationsRecords.length === 0) {
-      return initial;
+      return base;
     }
 
-    const isTargetDepartment = (value: string | null | undefined) => {
-      if (!value) {
-        return false;
+    const normalizeDepartment = (value: string | null | undefined) =>
+      value ? value.replace(/[（）()●]/g, "").replace(/\s+/g, "") : "";
+
+    const resolveSegments = (value: string | null | undefined): MultivariateSegmentKey[] => {
+      const normalized = normalizeDepartment(value);
+      const segments: MultivariateSegmentKey[] = [];
+      const isGeneral = normalized.includes("総合診療");
+      const isFever =
+        normalized.includes("発熱") ||
+        normalized.includes("風邪症状");
+      if (!isGeneral && !isFever) {
+        return segments;
       }
-      const normalized = normalizeDepartmentLabel(value);
-      return TARGET_DEPARTMENT_KEYWORDS.some((keyword) => normalized.includes(keyword));
+      segments.push("overall");
+      if (isGeneral) {
+        segments.push("general");
+      }
+      if (isFever) {
+        segments.push("fever");
+      }
+      return segments;
+    };
+
+    type SlotAggregate = {
+      weekday: number;
+      hour: number;
+      total: number;
+      pointsSum: number;
+      pointsCount: number;
+      ageMap: Map<
+        string,
+        { label: string; total: number; pointsSum: number; pointsCount: number }
+      >;
+    };
+
+    type SegmentAggregate = {
+      slotMap: Map<string, SlotAggregate>;
+      ageTotals: Map<
+        string,
+        { label: string; total: number; pointsSum: number; pointsCount: number }
+      >;
+      matchedCount: number;
+      unmatchedRecords: number;
+      unmatchedReservations: number;
+    };
+
+    const createSegmentAggregate = (): SegmentAggregate => ({
+      slotMap: new Map(),
+      ageTotals: new Map(),
+      matchedCount: 0,
+      unmatchedRecords: 0,
+      unmatchedReservations: 0,
+    });
+
+    const segmentAggregates: Record<MultivariateSegmentKey, SegmentAggregate> = {
+      overall: createSegmentAggregate(),
+      general: createSegmentAggregate(),
+      fever: createSegmentAggregate(),
     };
 
     const reservationBuckets = new Map<
       string,
-      Array<Reservation & { weekday: number; hour: number }>
+      Array<
+        Reservation & {
+          weekday: number;
+          hour: number;
+          segments: MultivariateSegmentKey[];
+        }
+      >
     >();
 
     for (const reservation of reservationsRecords) {
-      if (!isTargetDepartment(reservation.department)) {
+      const segments = resolveSegments(reservation.department);
+      if (segments.length === 0) {
         continue;
       }
       const nameKey = normalizeNameForMatching(
@@ -2710,7 +2876,9 @@ function PatientAnalysisPageContent() {
       if (!nameKey) {
         continue;
       }
-      const dateKey = reservation.reservationDate;
+      const dateKey = reservation.appointmentIso
+        ? reservation.appointmentIso.slice(0, 10)
+        : reservation.reservationDate;
       if (!dateKey) {
         continue;
       }
@@ -2725,49 +2893,25 @@ function PatientAnalysisPageContent() {
         ...reservation,
         weekday,
         hour: reservation.reservationHour,
+        segments,
       });
       reservationBuckets.set(bucketKey, bucket);
     }
 
     if (reservationBuckets.size === 0) {
-      return initial;
+      return base;
     }
 
     reservationBuckets.forEach((list) => {
       list.sort((a, b) => a.hour - b.hour);
     });
 
-    const slotMap = new Map<
-      string,
-      {
-        weekday: number;
-        hour: number;
-        total: number;
-        pointsSum: number;
-        pointsCount: number;
-        ageMap: Map<
-          string,
-          { label: string; total: number; pointsSum: number; pointsCount: number }
-        >;
-      }
-    >();
-    const ageTotals = new Map<
-      string,
-      { label: string; total: number; pointsSum: number; pointsCount: number }
-    >();
-
-    let matchedCount = 0;
-    let unmatchedRecords = 0;
-
     const resolveAgeBand = (age: number | null): MultivariateAgeBand => {
       if (age === null) {
         return MULTIVARIATE_AGE_BANDS[MULTIVARIATE_AGE_BANDS.length - 1];
       }
       for (const band of MULTIVARIATE_AGE_BANDS) {
-        if (band.min === null || band.max === null) {
-          continue;
-        }
-        if (age >= band.min && age <= band.max) {
+        if (band.min !== null && band.max !== null && age >= band.min && age <= band.max) {
           return band;
         }
       }
@@ -2778,19 +2922,25 @@ function PatientAnalysisPageContent() {
     };
 
     for (const record of filteredClassified) {
-      if (!isTargetDepartment(record.department ?? null)) {
+      const recordSegments = resolveSegments(record.department ?? null);
+      if (recordSegments.length === 0) {
         continue;
       }
       const nameKey = normalizeNameForMatching(record.patientNameNormalized ?? null);
       if (!nameKey) {
-        unmatchedRecords += 1;
+        recordSegments.forEach((segment) => {
+          segmentAggregates[segment].unmatchedRecords += 1;
+        });
         continue;
       }
+
       const dateKey = record.dateIso;
       const bucketKey = `${nameKey}|${dateKey}`;
       const candidates = reservationBuckets.get(bucketKey);
       if (!candidates || candidates.length === 0) {
-        unmatchedRecords += 1;
+        recordSegments.forEach((segment) => {
+          segmentAggregates[segment].unmatchedRecords += 1;
+        });
         continue;
       }
 
@@ -2799,188 +2949,254 @@ function PatientAnalysisPageContent() {
         reservationBuckets.delete(bucketKey);
       }
 
+      const matchedSegments = reservation.segments.filter((segment) =>
+        recordSegments.includes(segment),
+      );
+      const segmentsToApply =
+        matchedSegments.length > 0 ? matchedSegments : (["overall"] as MultivariateSegmentKey[]);
+
       const age = calculateAge(record.birthDateIso ?? null, record.dateIso);
       const ageBand = resolveAgeBand(age);
-
       const points =
         typeof record.points === "number" && Number.isFinite(record.points)
           ? record.points
           : null;
 
-      const slotKey = `${reservation.weekday}|${reservation.hour}`;
-      if (!slotMap.has(slotKey)) {
-        slotMap.set(slotKey, {
-          weekday: reservation.weekday,
-          hour: reservation.hour,
+      segmentsToApply.forEach((segment) => {
+        const aggregate = segmentAggregates[segment];
+        aggregate.matchedCount += 1;
+
+        const slotKey = `${reservation.weekday}|${reservation.hour}`;
+        let slot = aggregate.slotMap.get(slotKey);
+        if (!slot) {
+          slot = {
+            weekday: reservation.weekday,
+            hour: reservation.hour,
+            total: 0,
+            pointsSum: 0,
+            pointsCount: 0,
+            ageMap: new Map(),
+          };
+          aggregate.slotMap.set(slotKey, slot);
+        }
+        slot.total += 1;
+        if (points !== null) {
+          slot.pointsSum += points;
+          slot.pointsCount += 1;
+        }
+        const ageEntry = slot.ageMap.get(ageBand.id) ?? {
+          label: ageBand.label,
           total: 0,
           pointsSum: 0,
           pointsCount: 0,
-          ageMap: new Map(),
-        });
-      }
-      const slot = slotMap.get(slotKey)!;
-      slot.total += 1;
-      if (points !== null) {
-        slot.pointsSum += points;
-        slot.pointsCount += 1;
-      }
-      const ageEntry = slot.ageMap.get(ageBand.id) ?? {
-        label: ageBand.label,
-        total: 0,
-        pointsSum: 0,
-        pointsCount: 0,
-      };
-      ageEntry.total += 1;
-      if (points !== null) {
-        ageEntry.pointsSum += points;
-        ageEntry.pointsCount += 1;
-      }
-      slot.ageMap.set(ageBand.id, ageEntry);
-
-      const globalAge = ageTotals.get(ageBand.id) ?? {
-        label: ageBand.label,
-        total: 0,
-        pointsSum: 0,
-        pointsCount: 0,
-      };
-      globalAge.total += 1;
-      if (points !== null) {
-        globalAge.pointsSum += points;
-        globalAge.pointsCount += 1;
-      }
-      ageTotals.set(ageBand.id, globalAge);
-
-      matchedCount += 1;
-    }
-
-    const remainingReservations = Array.from(reservationBuckets.values()).reduce(
-      (sum, list) => sum + list.length,
-      0,
-    );
-
-    if (matchedCount === 0) {
-      return {
-        ...initial,
-        unmatchedRecords,
-        unmatchedReservations: remainingReservations,
-      };
-    }
-
-    const slots: MultivariateSlotStat[] = Array.from(slotMap.values())
-      .map((slot) => {
-        const ageBreakdown = Array.from(slot.ageMap.entries())
-          .map(([ageBandId, value]) => ({
-            ageBandId,
-            label: value.label,
-            total: value.total,
-            share: slot.total > 0 ? roundTo1Decimal((value.total / slot.total) * 100) : 0,
-            avgPoints:
-              value.pointsCount > 0
-                ? Math.round((value.pointsSum / value.pointsCount) * 10) / 10
-                : null,
-          }))
-          .sort((a, b) => b.total - a.total);
-
-        return {
-          weekday: slot.weekday,
-          hour: slot.hour,
-          totalPatients: slot.total,
-          avgPoints:
-            slot.pointsCount > 0
-              ? Math.round((slot.pointsSum / slot.pointsCount) * 10) / 10
-              : null,
-          ageBreakdown,
         };
-      })
-      .sort((a, b) => a.weekday - b.weekday || a.hour - b.hour);
+        ageEntry.total += 1;
+        if (points !== null) {
+          ageEntry.pointsSum += points;
+          ageEntry.pointsCount += 1;
+        }
+        slot.ageMap.set(ageBand.id, ageEntry);
 
-    const weekdayGroups: MultivariateWeekdayGroup[] = WEEKDAY_LABELS.map((label, index) => ({
-      weekday: index,
-      label,
-      slots: slots.filter((slot) => slot.weekday === index),
-    })).filter((group) => group.slots.length > 0);
+        const globalAge = aggregate.ageTotals.get(ageBand.id) ?? {
+          label: ageBand.label,
+          total: 0,
+          pointsSum: 0,
+          pointsCount: 0,
+        };
+        globalAge.total += 1;
+        if (points !== null) {
+          globalAge.pointsSum += points;
+          globalAge.pointsCount += 1;
+        }
+        aggregate.ageTotals.set(ageBand.id, globalAge);
+      });
+    }
 
-    const topSlot =
-      slots
-        .slice()
-        .sort(
-          (a, b) =>
-            b.totalPatients - a.totalPatients || a.weekday - b.weekday || a.hour - b.hour,
-        )[0] ?? null;
+    reservationBuckets.forEach((list) => {
+      list.forEach((reservation) => {
+        reservation.segments.forEach((segment) => {
+          segmentAggregates[segment].unmatchedReservations += 1;
+        });
+      });
+    });
 
-    const avgCandidates = slots.filter((slot) => slot.avgPoints !== null && slot.totalPatients >= 3);
-    const highestAvgSlot =
-      avgCandidates
-        .slice()
-        .sort((a, b) => (b.avgPoints ?? 0) - (a.avgPoints ?? 0))[0] ?? null;
-
-    const leadingAgeBandEntry = Array.from(ageTotals.entries())
-      .sort((a, b) => b[1].total - a[1].total)[0];
-    const leadingAgeBand =
-      leadingAgeBandEntry !== undefined
-        ? {
-            id: leadingAgeBandEntry[0],
-            label: leadingAgeBandEntry[1].label,
-            total: leadingAgeBandEntry[1].total,
+    const buildAggregate = (aggregate: SegmentAggregate) => {
+      const slots = Array.from(aggregate.slotMap.values())
+        .map((slot) => {
+          const ageBreakdown = Array.from(slot.ageMap.values())
+            .map((value) => ({
+              ageBandId: value.label,
+              label: value.label,
+              total: value.total,
+              share: slot.total > 0 ? roundTo1Decimal((value.total / slot.total) * 100) : 0,
+              avgPoints:
+                value.pointsCount > 0
+                  ? Math.round((value.pointsSum / value.pointsCount) * 10) / 10
+                  : null,
+            }))
+            .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
+          return {
+            weekday: slot.weekday,
+            hour: slot.hour,
+            totalPatients: slot.total,
             avgPoints:
-              leadingAgeBandEntry[1].pointsCount > 0
+              slot.pointsCount > 0
+                ? Math.round((slot.pointsSum / slot.pointsCount) * 10) / 10
+                : null,
+            ageBreakdown,
+          };
+        })
+        .sort((a, b) => a.weekday - b.weekday || a.hour - b.hour);
+
+      const weekdayGroups: MultivariateWeekdayGroup[] = WEEKDAY_PRESENTATION.map(
+        ({ weekday, label }) => ({
+          weekday,
+          label,
+          slots: slots.filter((slot) => slot.weekday === weekday),
+        }),
+      ).filter((group) => group.slots.length > 0);
+
+      const topSlot =
+        slots
+          .slice()
+          .sort(
+            (a, b) =>
+              b.totalPatients - a.totalPatients || a.weekday - b.weekday || a.hour - b.hour,
+          )[0] ?? null;
+
+      const avgCandidates = slots.filter(
+        (slot) => slot.avgPoints !== null && slot.totalPatients >= 3,
+      );
+      const highestAvgSlot =
+        avgCandidates
+          .slice()
+          .sort((a, b) => (b.avgPoints ?? 0) - (a.avgPoints ?? 0))[0] ?? null;
+
+      const leadingAgeBandEntry = Array.from(aggregate.ageTotals.values()).sort(
+        (a, b) => b.total - a.total,
+      )[0];
+      const leadingAgeBand = leadingAgeBandEntry
+        ? {
+            id: leadingAgeBandEntry.label,
+            label: leadingAgeBandEntry.label,
+            total: leadingAgeBandEntry.total,
+            avgPoints:
+              leadingAgeBandEntry.pointsCount > 0
                 ? Math.round(
-                    (leadingAgeBandEntry[1].pointsSum / leadingAgeBandEntry[1].pointsCount) * 10,
+                    (leadingAgeBandEntry.pointsSum / leadingAgeBandEntry.pointsCount) * 10,
                   ) / 10
                 : null,
           }
         : null;
 
-    const highlights: string[] = [];
-    if (topSlot) {
-      highlights.push(
-        `最も患者数が多いのは${WEEKDAY_LABELS[topSlot.weekday]}曜${formatHourLabel(topSlot.hour)}帯（${topSlot.totalPatients.toLocaleString(
-          "ja-JP",
-        )}名）です。`,
-      );
-      const primaryAge = topSlot.ageBreakdown[0];
-      if (primaryAge) {
+      return {
+        weekdayGroups,
+        topSlot,
+        highestAvgSlot,
+        leadingAgeBand,
+      };
+    };
+
+    MULTIVARIATE_SEGMENT_ORDER.forEach((segment) => {
+      const aggregate = segmentAggregates[segment];
+      const segmentInsight = base.segments[segment];
+
+      segmentInsight.unmatchedRecords = aggregate.unmatchedRecords;
+      segmentInsight.unmatchedReservations = aggregate.unmatchedReservations;
+
+      if (aggregate.matchedCount === 0) {
+        return;
+      }
+
+      const { weekdayGroups, topSlot, highestAvgSlot, leadingAgeBand } = buildAggregate(aggregate);
+
+      segmentInsight.hasData = aggregate.matchedCount > 0;
+      segmentInsight.totalMatches = aggregate.matchedCount;
+      segmentInsight.weekdayGroups = weekdayGroups;
+      segmentInsight.topSlot = topSlot;
+      segmentInsight.highestAvgSlot = highestAvgSlot;
+      segmentInsight.leadingAgeBand = leadingAgeBand;
+
+      const highlights: string[] = [];
+      if (topSlot) {
         highlights.push(
-          `${WEEKDAY_LABELS[topSlot.weekday]}曜${formatHourLabel(topSlot.hour)}は${primaryAge.label}が中心（構成比${formatPercentage(
-            primaryAge.share,
-          )}）です。`,
+          `最も患者数が多いのは${getWeekdayLabel(topSlot.weekday)}曜${formatHourLabel(topSlot.hour)}帯（${topSlot.totalPatients.toLocaleString(
+            "ja-JP",
+          )}名）です。`,
+        );
+        const primaryAge = topSlot.ageBreakdown[0];
+        if (primaryAge) {
+          highlights.push(
+            `${getWeekdayLabel(topSlot.weekday)}曜${formatHourLabel(topSlot.hour)}は${primaryAge.label}が中心（構成比${formatPercentage(
+              primaryAge.share,
+            )}）です。`,
+          );
+        }
+      }
+      if (highestAvgSlot && highestAvgSlot.avgPoints !== null) {
+        highlights.push(
+          `単価が高いのは${getWeekdayLabel(highestAvgSlot.weekday)}曜${formatHourLabel(highestAvgSlot.hour)}帯（平均${Math.round(
+            highestAvgSlot.avgPoints,
+          ).toLocaleString("ja-JP")}点）です。`,
         );
       }
-    }
-    if (highestAvgSlot && highestAvgSlot.avgPoints !== null) {
-      highlights.push(
-        `単価が高いのは${WEEKDAY_LABELS[highestAvgSlot.weekday]}曜${formatHourLabel(highestAvgSlot.hour)}帯（平均${Math.round(
-          highestAvgSlot.avgPoints,
-        ).toLocaleString("ja-JP")}点）です。`,
-      );
-    }
-    if (leadingAgeBand) {
-      highlights.push(
-        `最多年代は${leadingAgeBand.label}（${leadingAgeBand.total.toLocaleString("ja-JP")}名）で、平均${
-          leadingAgeBand.avgPoints !== null
-            ? Math.round(leadingAgeBand.avgPoints).toLocaleString("ja-JP")
-            : "—"
-        }点です。`,
-      );
-    }
-    if (unmatchedRecords > 0 || remainingReservations > 0) {
-      highlights.push(
-        `氏名一致のみで照合しているため、マッチできないレコードがカルテ側${unmatchedRecords}件・予約側${remainingReservations}件あります。`,
-      );
-    }
+      if (leadingAgeBand) {
+        highlights.push(
+          `最多の年代は${leadingAgeBand.label}で、${leadingAgeBand.total.toLocaleString("ja-JP")}名が来院しています。`,
+        );
+      }
+      if (aggregate.unmatchedRecords > 0 || aggregate.unmatchedReservations > 0) {
+        highlights.push(
+          `照合できなかったレコードがカルテ側${aggregate.unmatchedRecords.toLocaleString("ja-JP")}件、予約側${aggregate.unmatchedReservations.toLocaleString("ja-JP")}件あります。`,
+        );
+      }
 
-    return {
-      hasData: true,
-      totalMatches: matchedCount,
-      unmatchedRecords,
-      unmatchedReservations: remainingReservations,
-      weekdayGroups,
-      topSlot,
-      highestAvgSlot,
-      leadingAgeBand,
-      highlights,
-    };
+      segmentInsight.highlights = highlights;
+    });
+
+    base.hasData = MULTIVARIATE_SEGMENT_ORDER.some(
+      (segment) => base.segments[segment].hasData,
+    );
+
+    return base;
   }, [filteredClassified, reservationsRecords]);
+
+  useEffect(() => {
+    if (!multivariateInsights.hasData) {
+      setSelectedInsightSegment("overall");
+      return;
+    }
+    const selected = multivariateInsights.segments[selectedInsightSegment];
+    if (!selected?.hasData) {
+      const fallback = MULTIVARIATE_SEGMENT_ORDER.find(
+        (segment) => multivariateInsights.segments[segment]?.hasData,
+      );
+      if (fallback) {
+        setSelectedInsightSegment(fallback);
+      }
+    }
+  }, [multivariateInsights, selectedInsightSegment]);
+
+  useEffect(() => {
+    const currentSegment = multivariateInsights.segments[selectedInsightSegment];
+    if (!currentSegment?.hasData) {
+      return;
+    }
+    if (expandedWeekdayBySegment[selectedInsightSegment] !== null) {
+      return;
+    }
+    const firstGroup = currentSegment.weekdayGroups[0];
+    if (firstGroup) {
+      setExpandedWeekdayBySegment((prev) => ({
+        ...prev,
+        [selectedInsightSegment]: firstGroup.weekday,
+      }));
+    }
+  }, [expandedWeekdayBySegment, multivariateInsights, selectedInsightSegment]);
+
+  const selectedSegmentInsight =
+    multivariateInsights.segments[selectedInsightSegment];
+  const selectedSegmentStyles = MULTIVARIATE_SEGMENT_CONFIG[selectedInsightSegment];
 
   const hasAnyRecords = records.length > 0;
   const hasPeriodRecords = periodFilteredRecords.length > 0;
@@ -4451,7 +4667,7 @@ function PatientAnalysisPageContent() {
                           <tbody className="divide-y divide-slate-100 bg-white">
                             {shiftRows.map((row) => (
                               <tr key={row.key}>
-                                <td className="px-4 py-3 text-slate-700">{WEEKDAY_LABELS[row.weekday]}</td>
+                                <td className="px-4 py-3 text-slate-700">{getWeekdayLabel(row.weekday)}</td>
                                 <td className="px-4 py-3 text-slate-700">{formatHourLabel(row.hour)}</td>
                                 <td className="px-4 py-3 text-right text-slate-600">
                                   {row.patientCount.toLocaleString("ja-JP")}名
@@ -4554,175 +4770,333 @@ function PatientAnalysisPageContent() {
             )}
             {insightTab === "channel" && (
               <div className="space-y-6">
-                {multivariateInsights.hasData ? (
+                {multivariateInsights.hasData && selectedSegmentInsight?.hasData ? (
                   <>
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                      <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">照合できた来院データ</p>
-                            <p className="mt-1 text-sm font-semibold text-slate-800">総件数</p>
-                          </div>
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                            <Users className="h-4 w-4" />
-                          </span>
-                        </div>
-                        <p className="mt-4 text-3xl font-bold text-slate-900">{multivariateInsights.totalMatches.toLocaleString("ja-JP")}件</p>
-                        <p className="mt-3 text-[11px] text-slate-500">
-                          カルテ未照合 {multivariateInsights.unmatchedRecords.toLocaleString("ja-JP")}件 / 予約未照合 {multivariateInsights.unmatchedReservations.toLocaleString("ja-JP")}件
-                        </p>
-                      </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {MULTIVARIATE_SEGMENT_ORDER.map((segment) => {
+                        const config = MULTIVARIATE_SEGMENT_CONFIG[segment];
+                        const insight = multivariateInsights.segments[segment];
+                        const isActive = segment === selectedInsightSegment;
+                        const isDisabled = !insight?.hasData;
+                        return (
+                          <button
+                            key={segment}
+                            type="button"
+                            onClick={() => setSelectedInsightSegment(segment)}
+                            disabled={isDisabled}
+                            className={[
+                              "rounded-full border px-4 py-2 text-sm font-semibold transition",
+                              isActive
+                                ? `bg-gradient-to-r ${config.gradientClass} text-white shadow-lg ring-2 ${config.ringClass}`
+                                : "bg-white text-slate-600 hover:border-brand-200 hover:text-brand-600",
+                              isDisabled ? "opacity-50 cursor-not-allowed" : "",
+                            ].join(" ")}
+                          >
+                            {config.label}
+                          </button>
+                        );
+                      })}
+                    </div>
 
-                      <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft">
-                        <div className="flex items-center justify-between gap-3">
+                    <div
+                      className={`overflow-hidden rounded-3xl border border-white/20 bg-gradient-to-br ${selectedSegmentStyles.gradientClass} p-6 text-white shadow-xl`}
+                    >
+                      <div className="flex flex-col gap-6">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
                           <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">最多来院枠</p>
-                            <p className="mt-1 text-sm font-semibold text-slate-800">ピーク枠の把握</p>
+                            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/80">
+                              Channel Overview
+                            </p>
+                            <h3 className="text-2xl font-bold">
+                              {selectedSegmentStyles.label}のインサイト
+                            </h3>
                           </div>
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                            <Clock className="h-4 w-4" />
+                          <span
+                            className={`rounded-full px-4 py-1 text-xs font-semibold backdrop-blur ${selectedSegmentStyles.chipClass}`}
+                          >
+                            {selectedSegmentStyles.label}
                           </span>
                         </div>
-                        {multivariateInsights.topSlot ? (
-                          <>
-                            <p className="mt-4 text-xl font-bold text-slate-900">
-                              {WEEKDAY_LABELS[multivariateInsights.topSlot.weekday]}曜 {formatHourLabel(multivariateInsights.topSlot.hour)}
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                          <div className="rounded-2xl bg-white/10 p-5 shadow-inner shadow-black/10">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70">
+                                  照合できた来院データ
+                                </p>
+                                <p className="mt-1 text-sm font-semibold text-white/90">総件数</p>
+                              </div>
+                              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white">
+                                <Users className="h-5 w-5" />
+                              </span>
+                            </div>
+                            <p className="mt-4 text-3xl font-bold">
+                              {selectedSegmentInsight.totalMatches.toLocaleString("ja-JP")}件
                             </p>
-                            <p className="mt-2 text-sm text-slate-600">
-                              {multivariateInsights.topSlot.totalPatients.toLocaleString("ja-JP")}名来院
+                            <p className="mt-3 text-[11px] text-white/80">
+                              カルテ未照合 {selectedSegmentInsight.unmatchedRecords.toLocaleString("ja-JP")}件 / 予約未照合 {selectedSegmentInsight.unmatchedReservations.toLocaleString("ja-JP")}件
                             </p>
-                            {multivariateInsights.topSlot.ageBreakdown[0] && (
-                              <p className="mt-1 text-[11px] text-slate-500">
-                                主要年代: {multivariateInsights.topSlot.ageBreakdown[0].label}
-                                （{formatPercentage(multivariateInsights.topSlot.ageBreakdown[0].share)}）
-                              </p>
-                            )}
-                          </>
-                        ) : (
-                          <p className="mt-4 text-xs text-slate-500">有効なデータがありません。</p>
-                        )}
-                      </div>
+                          </div>
 
-                      <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">高単価枠</p>
-                            <p className="mt-1 text-sm font-semibold text-slate-800">平均点数が高い時間</p>
+                          <div className="rounded-2xl bg-white/10 p-5 shadow-inner shadow-black/10">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70">
+                                  最多来院枠
+                                </p>
+                                <p className="mt-1 text-sm font-semibold text-white/90">ピーク帯</p>
+                              </div>
+                              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white">
+                                <Clock className="h-5 w-5" />
+                              </span>
+                            </div>
+                            <p className="mt-4 text-xl font-bold">
+                              {selectedSegmentInsight.topSlot
+                                ? `${getWeekdayLabel(selectedSegmentInsight.topSlot.weekday)}曜 ${formatHourLabel(selectedSegmentInsight.topSlot.hour)}`
+                                : "データ不足"}
+                            </p>
+                            <p className="mt-2 text-sm text-white/80">
+                              {selectedSegmentInsight.topSlot
+                                ? `${selectedSegmentInsight.topSlot.totalPatients.toLocaleString("ja-JP")}名`
+                                : "対象データを取り込んでください"}
+                            </p>
                           </div>
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                            <TrendingUp className="h-4 w-4" />
-                          </span>
-                        </div>
-                        {multivariateInsights.highestAvgSlot ? (
-                          <>
-                            <p className="mt-4 text-xl font-bold text-slate-900">
-                              {WEEKDAY_LABELS[multivariateInsights.highestAvgSlot.weekday]}曜 {formatHourLabel(multivariateInsights.highestAvgSlot.hour)}
-                            </p>
-                            <p className="mt-2 text-sm text-slate-600">
-                              平均{Math.round(multivariateInsights.highestAvgSlot.avgPoints ?? 0).toLocaleString("ja-JP")}点
-                            </p>
-                          </>
-                        ) : (
-                          <p className="mt-4 text-xs text-slate-500">来院数が少なく評価できる枠がありません。</p>
-                        )}
-                      </div>
 
-                      <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">主要年代</p>
-                            <p className="mt-1 text-sm font-semibold text-slate-800">来院数の多い年代</p>
+                          <div className="rounded-2xl bg-white/10 p-5 shadow-inner shadow-black/10">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70">
+                                  平均点数が高い枠
+                                </p>
+                                <p className="mt-1 text-sm font-semibold text-white/90">ハイバリュー</p>
+                              </div>
+                              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white">
+                                <TrendingUp className="h-5 w-5" />
+                              </span>
+                            </div>
+                            <p className="mt-4 text-xl font-bold">
+                              {selectedSegmentInsight.highestAvgSlot
+                                ? `${getWeekdayLabel(selectedSegmentInsight.highestAvgSlot.weekday)}曜 ${formatHourLabel(selectedSegmentInsight.highestAvgSlot.hour)}`
+                                : "データ不足"}
+                            </p>
+                            <p className="mt-2 text-sm text-white/80">
+                              {selectedSegmentInsight.highestAvgSlot?.avgPoints !== null && selectedSegmentInsight.highestAvgSlot?.avgPoints !== undefined
+                                ? `平均${Math.round(selectedSegmentInsight.highestAvgSlot.avgPoints).toLocaleString("ja-JP")}点`
+                                : "集計可能な点数がありません"}
+                            </p>
                           </div>
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-600">
-                            <UserPlus className="h-4 w-4" />
-                          </span>
+
+                          <div className="rounded-2xl bg-white/10 p-5 shadow-inner shadow-black/10">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70">
+                                  主な年代
+                                </p>
+                                <p className="mt-1 text-sm font-semibold text-white/90">リード層</p>
+                              </div>
+                              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white">
+                                <UserPlus className="h-5 w-5" />
+                              </span>
+                            </div>
+                            <p className="mt-4 text-xl font-bold">
+                              {selectedSegmentInsight.leadingAgeBand?.label ?? "データ不足"}
+                            </p>
+                            <p className="mt-2 text-sm text-white/80">
+                              {selectedSegmentInsight.leadingAgeBand
+                                ? `${selectedSegmentInsight.leadingAgeBand.total.toLocaleString("ja-JP")}名`
+                                : "来院データを取り込んでください"}
+                            </p>
+                          </div>
                         </div>
-                        {multivariateInsights.leadingAgeBand ? (
-                          <>
-                            <p className="mt-4 text-xl font-bold text-slate-900">
-                              {multivariateInsights.leadingAgeBand.label}
-                            </p>
-                            <p className="mt-2 text-sm text-slate-600">
-                              {multivariateInsights.leadingAgeBand.total.toLocaleString("ja-JP")}名 / 平均{multivariateInsights.leadingAgeBand.avgPoints !== null ? Math.round(multivariateInsights.leadingAgeBand.avgPoints).toLocaleString("ja-JP") : "—"}点
-                            </p>
-                          </>
-                        ) : (
-                          <p className="mt-4 text-xs text-slate-500">年齢情報が不足しています。</p>
-                        )}
                       </div>
                     </div>
 
-                    {multivariateInsights.highlights.length > 0 && (
-                      <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
+                    {selectedSegmentInsight.highlights.length > 0 && (
+                      <div className="rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-soft">
                         <h3 className="text-sm font-semibold text-slate-800">注目ポイント</h3>
-                        <ul className="mt-2 space-y-1 text-xs text-slate-600">
-                          {multivariateInsights.highlights.map((item, index) => (
+                        <ul className="mt-2 space-y-2 text-sm text-slate-600">
+                          {selectedSegmentInsight.highlights.map((item, index) => (
                             <li key={`multivariate-highlight-${index}`}>・{item}</li>
                           ))}
                         </ul>
                       </div>
                     )}
 
-                    <div className="space-y-4">
-                      {multivariateInsights.weekdayGroups.map((group) => {
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      {selectedSegmentInsight.weekdayGroups.map((group) => {
+                        const isExpanded = expandedWeekdayBySegment[selectedInsightSegment] === group.weekday;
                         const groupTotal = group.slots.reduce((sum, slot) => sum + slot.totalPatients, 0);
+                        const peakSlot = group.slots.slice().sort((a, b) => b.totalPatients - a.totalPatients)[0] ?? null;
+                        const chartData = group.slots.map((slot) => ({
+                          hourLabel: formatHourLabel(slot.hour),
+                          patients: slot.totalPatients,
+                          avgPoints: slot.avgPoints ?? 0,
+                          rawAvg: slot.avgPoints,
+                        }));
+                        const gradientId = `weekday-${selectedInsightSegment}-${group.weekday}`;
                         return (
                           <div
-                            key={`weekday-group-${group.weekday}`}
-                            className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft"
+                            key={`weekday-group-${selectedInsightSegment}-${group.weekday}`}
+                            className="rounded-3xl border border-slate-200 bg-white/95 p-5 shadow-soft transition hover:-translate-y-0.5"
                           >
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <h3 className="text-sm font-semibold text-slate-800">{group.label}曜</h3>
-                              <span className="text-xs text-slate-500">{groupTotal.toLocaleString("ja-JP")}名</span>
-                            </div>
-                            <div className="mt-3 overflow-x-auto">
-                              <table className="w-full min-w-[520px] border-collapse text-xs">
-                                <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
-                                  <tr>
-                                    <th className="px-3 py-2 text-left font-semibold">時間帯</th>
-                                    <th className="px-3 py-2 text-right font-semibold">来院数</th>
-                                    <th className="px-3 py-2 text-right font-semibold">平均点数</th>
-                                    <th className="px-3 py-2 text-left font-semibold">主な年代</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
-                                  {group.slots.map((slot) => (
-                                    <tr
-                                      key={`weekday-${slot.weekday}-hour-${slot.hour}`}
-                                      className="hover:bg-slate-50"
-                                    >
-                                      <td className="px-3 py-2 font-semibold">{formatHourLabel(slot.hour)}</td>
-                                      <td className="px-3 py-2 text-right">{slot.totalPatients.toLocaleString("ja-JP")}</td>
-                                      <td className="px-3 py-2 text-right">
-                                        {slot.avgPoints !== null ? `${Math.round(slot.avgPoints).toLocaleString("ja-JP")}点` : "—"}
-                                      </td>
-                                      <td className="px-3 py-2">
-                                        {(() => {
-                                          if (slot.ageBreakdown.length === 0) {
-                                            return "—";
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedWeekdayBySegment((prev) => ({
+                                  ...prev,
+                                  [selectedInsightSegment]: isExpanded ? null : group.weekday,
+                                }))
+                              }
+                              className="flex w-full items-center justify-between gap-3 text-left"
+                            >
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
+                                  {group.label}曜
+                                </p>
+                                <p className="mt-1 text-xl font-bold text-slate-800">
+                                  {groupTotal.toLocaleString("ja-JP")}名
+                                  {peakSlot ? (
+                                    <span className="ml-2 text-xs font-medium text-slate-500">
+                                      ピーク {formatHourLabel(peakSlot.hour)} / {peakSlot.totalPatients.toLocaleString("ja-JP")}名
+                                    </span>
+                                  ) : null}
+                                </p>
+                              </div>
+                              <span
+                                className={`flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition ${
+                                  isExpanded ? "rotate-180" : ""
+                                }`}
+                              >
+                                <ChevronDown className="h-4 w-4" />
+                              </span>
+                            </button>
+                            {isExpanded && (
+                              <div className="mt-5 space-y-4">
+                                <div className="h-56">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <ComposedChart data={chartData}>
+                                      <defs>
+                                        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                                          <stop offset="0%" stopColor={selectedSegmentStyles.barColor} stopOpacity={0.85} />
+                                          <stop offset="100%" stopColor={selectedSegmentStyles.barColor} stopOpacity={0.2} />
+                                        </linearGradient>
+                                      </defs>
+                                      <CartesianGrid stroke="rgba(148, 163, 184, 0.3)" strokeDasharray="3 3" />
+                                      <XAxis dataKey="hourLabel" tick={{ fontSize: 11, fill: "#475569" }} />
+                                      <YAxis
+                                        yAxisId="left"
+                                        tick={{ fontSize: 11, fill: "#475569" }}
+                                        label={{
+                                          value: "来院数",
+                                          angle: -90,
+                                          offset: 10,
+                                          position: "insideLeft",
+                                          style: { fill: "#475569", fontSize: 11 },
+                                        }}
+                                      />
+                                      <YAxis
+                                        yAxisId="right"
+                                        orientation="right"
+                                        tick={{ fontSize: 11, fill: "#475569" }}
+                                        label={{
+                                          value: "平均点数",
+                                          angle: 90,
+                                          offset: 10,
+                                          position: "insideRight",
+                                          style: { fill: "#475569", fontSize: 11 },
+                                        }}
+                                      />
+                                      <Tooltip
+                                        formatter={(value, name, payload) => {
+                                          if (name === "avgPoints") {
+                                            const raw = payload?.payload?.rawAvg;
+                                            return [
+                                              raw !== null && raw !== undefined
+                                                ? `${Number(raw).toLocaleString("ja-JP", { maximumFractionDigits: 1 })}点`
+                                                : "—",
+                                              "平均点数",
+                                            ];
                                           }
-                                          return slot.ageBreakdown
-                                            .slice(0, 3)
-                                            .map((age) => `${age.label} ${formatPercentage(age.share)}`)
-                                            .join(" / ");
-                                        })()}
-                                      </td>
-                                    </tr>
+                                          return [`${Number(value).toLocaleString("ja-JP")}名`, "来院数"];
+                                        }}
+                                      />
+                                      <Area
+                                        yAxisId="left"
+                                        type="monotone"
+                                        dataKey="patients"
+                                        fill={`url(#${gradientId})`}
+                                        stroke={selectedSegmentStyles.barColor}
+                                        strokeWidth={2}
+                                        dot={{ r: 3, fill: selectedSegmentStyles.barColor }}
+                                      />
+                                      <Line
+                                        yAxisId="right"
+                                        type="monotone"
+                                        dataKey="avgPoints"
+                                        stroke={selectedSegmentStyles.lineColor}
+                                        strokeWidth={2}
+                                        dot={{
+                                          r: 3,
+                                          strokeWidth: 2,
+                                          stroke: "#ffffff",
+                                          fill: selectedSegmentStyles.lineColor,
+                                        }}
+                                      />
+                                    </ComposedChart>
+                                  </ResponsiveContainer>
+                                </div>
+                                {peakSlot && (
+                                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                                    <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-700">
+                                      ピーク {formatHourLabel(peakSlot.hour)} / {peakSlot.totalPatients.toLocaleString("ja-JP")}名
+                                    </span>
+                                    {peakSlot.ageBreakdown.slice(0, 2).map((age) => (
+                                      <span
+                                        key={age.ageBandId}
+                                        className="rounded-full bg-slate-100 px-3 py-1 font-semibold text-slate-600"
+                                      >
+                                        {age.label} {formatPercentage(age.share)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  {group.slots.map((slot) => (
+                                    <div
+                                      key={`${group.weekday}-${slot.hour}`}
+                                      className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 shadow-sm"
+                                    >
+                                      <div>
+                                        <p className="text-xs font-semibold text-slate-500">{formatHourLabel(slot.hour)}</p>
+                                        <p className="text-sm font-semibold text-slate-800">
+                                          {slot.totalPatients.toLocaleString("ja-JP")}名
+                                        </p>
+                                      </div>
+                                      <div className="text-right text-xs text-slate-500">
+                                        <p>
+                                          平均点 {slot.avgPoints !== null && slot.avgPoints !== undefined
+                                            ? `${slot.avgPoints.toLocaleString("ja-JP", { maximumFractionDigits: 1 })}点`
+                                            : "—"}
+                                        </p>
+                                        {slot.ageBreakdown[0] && (
+                                          <p className="mt-1 text-[11px]">主層: {slot.ageBreakdown[0].label}</p>
+                                        )}
+                                      </div>
+                                    </div>
                                   ))}
-                                </tbody>
-                              </table>
-                            </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
                     </div>
                   </>
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-brand-200 bg-brand-50/70 px-4 py-3 text-xs text-brand-700">
-                    予約ログとカルテ集計を取り込むと、多変量解析ダッシュボードが表示されます。
-                  </div>
+                  <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                    予約CSVとカルテCSVを取り込み、対象の診療科（総合診療・発熱外来）のデータを照合するとインサイトが表示されます。
+                  </p>
                 )}
-
                 <div className="space-y-3">
                   <h3 className="text-sm font-semibold text-slate-800">データ取込状況</h3>
                   <div className="grid gap-4 md:grid-cols-3">
@@ -4753,7 +5127,9 @@ function PatientAnalysisPageContent() {
                 </div>
               </div>
             )}
+
           </div>
+
         </SectionCard>
         )}
 
