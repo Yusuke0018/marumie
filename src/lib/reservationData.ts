@@ -13,6 +13,10 @@ const normalizePatientName = (value: string | undefined): {
   if (raw.length === 0) {
     return { raw: null, normalized: null };
   }
+  const upper = raw.toUpperCase();
+  if (upper === "#REF!" || upper === "N/A" || upper === "NA" || upper === "なし") {
+    return { raw: null, normalized: null };
+  }
   const normalized = raw
     .replace(/\u3000/g, " ")
     .replace(/\s+/g, " ")
@@ -425,8 +429,14 @@ export const parseReservationCsv = (content: string): Reservation[] => {
     const visitType = normalizeVisitType(row["初再診"]);
     const appointment = parseJstDateTime(row["予約日時"]);
     const patientId = row["患者ID"]?.trim() ?? "";
+    const patientNameCandidate = pickFirstNonEmpty(row, [
+      "患者氏名",
+      "患者名",
+      "氏名",
+      "お名前",
+    ]);
     const { raw: patientName, normalized: patientNameNormalized } = normalizePatientName(
-      row["患者名"] ?? row["氏名"] ?? row["お名前"],
+      patientNameCandidate ?? undefined,
     );
 
     const ageValue = parseOptionalInteger(
