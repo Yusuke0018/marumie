@@ -163,7 +163,7 @@ export default function ListingPage() {
     setUploadError(null);
   };
 
-  const categories: ListingCategory[] = ["内科", "胃カメラ", "大腸カメラ"];
+  const categories: ListingCategory[] = ["内科", "胃カメラ", "大腸カメラ", "発熱外来"];
 
   return (
     <main className="min-h-screen bg-background">
@@ -184,7 +184,7 @@ export default function ListingPage() {
                   <li>• <strong>金額・CV推移</strong>: 日ごとの広告費（円）と、予約ページへの遷移数（CV）の折れ線グラフ</li>
                   <li>• <strong>CVR・CPA推移</strong>: 日ごとのコンバージョン率（%）と1件あたりの獲得単価（円）の折れ線グラフ</li>
                   <li>• <strong>時間帯別CV</strong>: 0時〜23時の各時間に発生したCV（予約ページ遷移）の件数を棒グラフで表示</li>
-                  <li>• <strong>カテゴリ別</strong>: 内科・胃カメラ・大腸カメラのデータを個別に表示</li>
+                  <li>• <strong>カテゴリ別</strong>: 内科・胃カメラ・大腸カメラ・発熱外来のデータを個別に表示</li>
                   <li>• <strong>期間フィルター</strong>: 直近3ヶ月/6ヶ月/1年/全期間に加え、任意の日付範囲と月別で絞り込み可能</li>
                 </ul>
               </div>

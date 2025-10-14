@@ -1,4 +1,6 @@
 # 変更履歴
+- リスティング分析に発熱外来カテゴリを追加し、新しい発熱訴求CSVを診療科「発熱外来」との相関に紐付けるよう更新した。(2025-10-14)[src/lib/listingData.ts:1][src/app/listing/page.tsx:1][src/app/patients/page.tsx:145][src/app/correlation/page.tsx:1]
+- マップ分析ページのモバイルレイアウトを刷新し、カードの縦積みと地図表示領域の高さ最適化でタッチ操作性を向上させた。(2025-10-13)[src/app/map-analysis/page.tsx:1-360][src/app/map-analysis/page.tsx:880-1180]
 - Next.js と eslint-config-next を 14.2.33 に更新し、GHSA-7m27-7ghc-44w9 などの既知脆弱性を解消した。(2025-10-13)
 - リスティング分析(`/listing`)、広告相関分析(`/correlation`)、患者分析(`/patients`)、アンケート分析(`/survey`)を追加し、CSVダッシュボードを拡充した。(2025-10-13)[src/app/listing/page.tsx:1-360][src/app/correlation/page.tsx:1-360][src/app/patients/page.tsx:1-460][src/app/survey/page.tsx:1-240]
 - マップ分析の期間比較ビューをサンキー図から縦棒グラフ＋差分バーに刷新し、地図クリックで地区を選びつつ期間A/Bの割合と増減率を破線基準線と数値ラベルで直感比較できるようにした。(2025-10-12)

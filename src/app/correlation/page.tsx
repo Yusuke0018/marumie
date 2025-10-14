@@ -5,6 +5,7 @@ import { getMonthKey } from "@/lib/dateUtils";
 import { AnalysisFilterPortal } from "@/components/AnalysisFilterPortal";
 import { useAnalysisPeriodRange } from "@/hooks/useAnalysisPeriodRange";
 import { setAnalysisPeriodLabel } from "@/lib/analysisPeriod";
+import type { ListingCategory, ListingCategoryData } from "@/lib/listingData";
 import {
   ComposedChart,
   Bar,
@@ -20,20 +21,6 @@ import {
   Scatter,
   ZAxis,
 } from "recharts";
-
-type ListingData = {
-  date: string;
-  amount: number;
-  cv: number;
-  cvr: number;
-  cpa: number;
-  hourlyCV: number[];
-};
-
-type CategoryData = {
-  category: "内科" | "胃カメラ" | "大腸カメラ";
-  data: ListingData[];
-};
 
 type Reservation = {
   department: string;
@@ -83,11 +70,14 @@ const LISTING_STORAGE_KEY = "clinic-analytics/listing/v1";
 const RESERVATION_STORAGE_KEY = "clinic-analytics/reservations/v1";
 
 // カテゴリごとの診療科マッピング
-const CATEGORY_MAPPING = {
-  "内科": ["内科・外科外来（大岩医師）", "発熱・風邪症状外来", "内科外来（担当医師）"],
-  "胃カメラ": ["胃カメラ"],
-  "大腸カメラ": ["大腸カメラ", "人間ドックB", "内視鏡ドック"],
+const CATEGORY_MAPPING: Record<ListingCategory, string[]> = {
+  内科: ["内科・外科外来（大岩医師）", "内科外来（担当医師）"],
+  胃カメラ: ["胃カメラ"],
+  大腸カメラ: ["大腸カメラ", "人間ドックB", "内視鏡ドック"],
+  発熱外来: ["発熱外来", "発熱・風邪症状外来"],
 };
+
+const CATEGORY_ORDER: ListingCategory[] = ["内科", "胃カメラ", "大腸カメラ", "発熱外来"];
 
 // 相関係数を計算（Pearson）
 const calculateCorrelation = (x: number[], y: number[]): number => {
@@ -138,9 +128,9 @@ const getCorrelationInterpretation = (r: number): { level: string; meaning: stri
 };
 
 export default function CorrelationPage() {
-  const [listingData, setListingData] = useState<CategoryData[]>([]);
+  const [listingData, setListingData] = useState<ListingCategoryData[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<"内科" | "胃カメラ" | "大腸カメラ">("内科");
+  const [selectedCategory, setSelectedCategory] = useState<ListingCategory>("内科");
   const [lambda, setLambda] = useState<number>(0.5);
 
   useEffect(() => {
@@ -487,7 +477,7 @@ export default function CorrelationPage() {
           <div className="flex items-center gap-2">
             <label className="text-sm font-semibold text-slate-700">カテゴリ:</label>
             <div className="flex gap-2">
-              {(["内科", "胃カメラ", "大腸カメラ"] as const).map(cat => (
+              {CATEGORY_ORDER.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}

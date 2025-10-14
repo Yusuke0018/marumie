@@ -1,6 +1,6 @@
 import Papa from "papaparse";
 
-export type ListingCategory = "内科" | "胃カメラ" | "大腸カメラ";
+export type ListingCategory = "内科" | "胃カメラ" | "大腸カメラ" | "発熱外来";
 
 export type ListingData = {
   date: string;

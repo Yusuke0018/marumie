@@ -142,7 +142,7 @@ const DiagnosisCategoryChart = lazy(() =>
 
 const KARTE_MIN_MONTH = "2000-01";
 
-const LISTING_CATEGORIES: ListingCategory[] = ["内科", "胃カメラ", "大腸カメラ"];
+const LISTING_CATEGORIES: ListingCategory[] = ["内科", "胃カメラ", "大腸カメラ", "発熱外来"];
 const SURVEY_FILE_TYPES: SurveyFileType[] = ["外来", "内視鏡"];
 
 const TARGET_DEPARTMENT_KEYWORDS = ["発熱", "総合診療"];
@@ -218,6 +218,15 @@ const createEmptyListingTotals = (): Record<ListingCategory, number> =>
       return acc;
     },
     {} as Record<ListingCategory, number>,
+  );
+
+const createListingUploadState = (initial: boolean): Record<ListingCategory, boolean> =>
+  LISTING_CATEGORIES.reduce(
+    (acc, category) => {
+      acc[category] = initial;
+      return acc;
+    },
+    {} as Record<ListingCategory, boolean>,
   );
 
 const createEmptySurveyCounts = (): Record<SurveyFileType, number> =>
@@ -1035,11 +1044,9 @@ function PatientAnalysisPageContent() {
     lastUpdated: null,
     totals: createEmptyListingTotals(),
   });
-  const [isUploadingListing, setIsUploadingListing] = useState<Record<ListingCategory, boolean>>({
-    内科: false,
-    胃カメラ: false,
-    大腸カメラ: false,
-  });
+  const [isUploadingListing, setIsUploadingListing] = useState<Record<ListingCategory, boolean>>(
+    createListingUploadState(false),
+  );
   const [listingUploadError, setListingUploadError] = useState<string | null>(null);
   const [diagnosisRecords, setDiagnosisRecords] = useState<DiagnosisRecord[]>([]);
   const [diagnosisStatus, setDiagnosisStatus] = useState<{
