@@ -428,6 +428,7 @@ export const parseReservationCsv = (content: string): Reservation[] => {
 
     const visitType = normalizeVisitType(row["初再診"]);
     const appointment = parseJstDateTime(row["予約日時"]);
+    const appointmentOrReceived = appointment ?? received;
     const patientId = row["患者ID"]?.trim() ?? "";
     const patientNameCandidate = pickFirstNonEmpty(row, [
       "患者氏名",
@@ -485,9 +486,9 @@ export const parseReservationCsv = (content: string): Reservation[] => {
       }),
       department,
       visitType,
-      reservationDate: received.dateKey,
-      reservationMonth: received.monthKey,
-      reservationHour: received.hour,
+      reservationDate: appointmentOrReceived.dateKey,
+      reservationMonth: appointmentOrReceived.monthKey,
+      reservationHour: appointmentOrReceived.hour,
       receivedAtIso: received.iso,
       appointmentIso: appointment?.iso ?? null,
       patientId,
