@@ -1,0 +1,9 @@
+timestamp: 2025-10-14T12-57-12+0900
+branch: main
+commit: 8e51fb2bd428b1378b04260024f3766b3cab2e99
+summary: マップバブル縮尺をズーム依存で再調整
+changes: src/components/reservations/GeoDistributionMap.tsx (半径スケーリング刷新・境界線太さの自動調整)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: pending
