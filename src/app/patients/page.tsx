@@ -1215,6 +1215,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
   const [showDiagnosisCategoryChart, setShowDiagnosisCategoryChart] = useState(false);
 
   const bulkUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const [bulkQueue, setBulkQueue] = useState<File[]>([]);
   const [isBulkUploading, setIsBulkUploading] = useState(false);
   const [bulkUploadMessage, setBulkUploadMessage] = useState<string | null>(null);
   const [bulkUploadError, setBulkUploadError] = useState<string | null>(null);
@@ -3592,10 +3593,35 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
     }
   };
 
-  const handleBulkUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const input = event.target;
-    const files = input.files ? Array.from(input.files) : [];
+  const handleBulkFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files ? Array.from(event.target.files) : [];
     if (files.length === 0) {
+      return;
+    }
+
+    setBulkUploadError(null);
+
+    const makeKey = (file: File) => `${file.name}__${file.size}__${file.lastModified}`;
+    const map = new Map<string, File>();
+    for (const file of bulkQueue) {
+      map.set(makeKey(file), file);
+    }
+    for (const file of files) {
+      map.set(makeKey(file), file);
+    }
+
+    const nextQueue = Array.from(map.values());
+    setBulkQueue(nextQueue);
+    setBulkUploadMessage(`選択中のCSV: ${nextQueue.length}件`);
+
+    if (event.target) {
+      event.target.value = "";
+    }
+  };
+
+  const processBulkFiles = async (files: File[]) => {
+    if (files.length === 0) {
+      setBulkUploadError("取り込むCSVファイルを追加してください。");
       return;
     }
 
@@ -3605,124 +3631,155 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
 
     try {
       const listingBuckets: Record<ListingCategory, File[]> = {
-      内科: [],
-      発熱外来: [],
-      胃カメラ: [],
-      大腸カメラ: [],
-    };
+        内科: [],
+        発熱外来: [],
+        胃カメラ: [],
+        大腸カメラ: [],
+      };
 
-    const karteFiles: File[] = [];
-    const reservationFiles: File[] = [];
-    const surveyFiles: File[] = [];
-    const diagnosisFiles: File[] = [];
-    const unknownFiles: string[] = [];
+      const karteFiles: File[] = [];
+      const reservationFiles: File[] = [];
+      const surveyFiles: File[] = [];
+      const diagnosisFiles: File[] = [];
+      const unknownFiles: string[] = [];
 
-    const determineListingCategory = (name: string): ListingCategory | null => {
-      if (name.includes("発熱") || name.includes("fever")) {
-        return "発熱外来";
-      }
-      if (name.includes("内科") || name.includes("生活習慣")) {
-        return "内科";
-      }
-      if (name.includes("胃") || name.includes("stomach")) {
-        return "胃カメラ";
-      }
-      if (name.includes("大腸") || name.includes("colon")) {
-        return "大腸カメラ";
-      }
-      return null;
-    };
+      const determineListingCategory = (normalizedName: string): ListingCategory | null => {
+        if (normalizedName.includes("発熱") || normalizedName.includes("fever")) {
+          return "発熱外来";
+        }
+        if (
+          normalizedName.includes("内科") ||
+          normalizedName.includes("生活習慣") ||
+          normalizedName.includes("general")
+        ) {
+          return "内科";
+        }
+        if (normalizedName.includes("胃") || normalizedName.includes("stomach")) {
+          return "胃カメラ";
+        }
+        if (normalizedName.includes("大腸") || normalizedName.includes("colon")) {
+          return "大腸カメラ";
+        }
+        return null;
+      };
 
       for (const file of files) {
-      const lowerName = file.name.toLowerCase();
+        const normalizedName = file.name.normalize('NFKC');
+        const lowerName = normalizedName.toLowerCase();
 
-      if (lowerName.includes("カルテ")) {
-        karteFiles.push(file);
-        continue;
-      }
-      if (lowerName.includes("予約")) {
-        reservationFiles.push(file);
-        continue;
-      }
-      if (lowerName.includes("アンケート") || lowerName.includes("survey")) {
-        surveyFiles.push(file);
-        continue;
-      }
-      if (lowerName.includes("傷病") || lowerName.includes("主病") || lowerName.includes("diagnosis")) {
-        diagnosisFiles.push(file);
-        continue;
-      }
-      if (lowerName.includes("リスティング") || lowerName.includes("listing") || lowerName.includes("広告")) {
-        const category = determineListingCategory(lowerName);
-        if (category) {
-          listingBuckets[category].push(file);
-        } else {
-          unknownFiles.push(file.name);
+        if (lowerName.includes("カルテ")) {
+          karteFiles.push(file);
+          continue;
         }
-        continue;
-      }
+        if (lowerName.includes("予約")) {
+          reservationFiles.push(file);
+          continue;
+        }
+        if (lowerName.includes("アンケート") || lowerName.includes("survey")) {
+          surveyFiles.push(file);
+          continue;
+        }
+        if (
+          lowerName.includes("傷病") ||
+          lowerName.includes("主病") ||
+          lowerName.includes("diagnosis")
+        ) {
+          diagnosisFiles.push(file);
+          continue;
+        }
+        if (
+          lowerName.includes("リスティング") ||
+          lowerName.includes("listing") ||
+          lowerName.includes("広告")
+        ) {
+          const category = determineListingCategory(lowerName);
+          if (category) {
+            listingBuckets[category].push(file);
+          } else {
+            unknownFiles.push(file.name);
+          }
+          continue;
+        }
 
-      unknownFiles.push(file.name);
-    }
+        unknownFiles.push(file.name);
+      }
 
       const successes: string[] = [];
       const failures: string[] = [];
 
       const runTask = async (label: string, task: () => Promise<void>) => {
-      try {
-        await task();
-        successes.push(label);
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "不明なエラーが発生しました";
-        failures.push(`${label}: ${message}`);
-      }
-    };
+        try {
+          await task();
+          successes.push(label);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "不明なエラーが発生しました";
+          failures.push(`${label}: ${message}`);
+        }
+      };
 
       if (karteFiles.length > 0) {
-      await runTask("カルテ", () => importKarteFiles(karteFiles, { silent: true }));
-    }
+        await runTask("カルテ", () => importKarteFiles(karteFiles, { silent: true }));
+      }
       if (reservationFiles.length > 0) {
-      await runTask("予約", () => importReservationFiles(reservationFiles, { silent: true }));
-    }
+        await runTask("予約", () => importReservationFiles(reservationFiles, { silent: true }));
+      }
       if (surveyFiles.length > 0) {
-      await runTask("アンケート", () => importSurveyFiles(surveyFiles, { silent: true }));
-    }
+        await runTask("アンケート", () => importSurveyFiles(surveyFiles, { silent: true }));
+      }
       if (diagnosisFiles.length > 0) {
-      await runTask("傷病名", () => importDiagnosisFiles(diagnosisFiles, { silent: true }));
-    }
+        await runTask("傷病名", () => importDiagnosisFiles(diagnosisFiles, { silent: true }));
+      }
 
       for (const category of Object.keys(listingBuckets) as ListingCategory[]) {
-      const bucket = listingBuckets[category];
-      if (bucket.length === 0) {
-        continue;
+        const bucket = listingBuckets[category];
+        if (bucket.length === 0) {
+          continue;
+        }
+        await runTask(`リスティング(${category})`, () =>
+          importListingFiles(category, bucket, { silent: true }),
+        );
       }
-      await runTask(`リスティング(${category})`, () =>
-        importListingFiles(category, bucket, { silent: true }),
-      );
-    }
 
       if (successes.length > 0) {
-      setBulkUploadMessage(`取り込み完了: ${successes.join(" / ")}`);
-    } else {
-      setBulkUploadMessage("取り込めるCSVが見つかりませんでした。");
-    }
+        setBulkUploadMessage(`取り込み完了: ${successes.join(" / ")}`);
+      } else {
+        setBulkUploadMessage("取り込めるCSVが見つかりませんでした。");
+      }
 
       const issues: string[] = [];
       if (failures.length > 0) {
-      issues.push(...failures);
-    }
+        issues.push(...failures);
+      }
       if (unknownFiles.length > 0) {
-      issues.push(`判別できなかったファイル: ${unknownFiles.join(", ")}`);
-    }
+        issues.push(`判別できなかったファイル: ${unknownFiles.join(", ")}`);
+      }
       if (issues.length > 0) {
-      setBulkUploadError(issues.join(" / "));
-    }
+        setBulkUploadError(issues.join(" / "));
+      }
     } finally {
       setIsBulkUploading(false);
-      input.value = "";
     }
   };
+
+  const executeBulkUpload = async () => {
+    if (bulkQueue.length === 0) {
+      setBulkUploadError("取り込むCSVファイルを追加してください。");
+      return;
+    }
+
+    await processBulkFiles(bulkQueue);
+    if (bulkQueue.length > 0) {
+      setBulkQueue([]);
+    }
+  };
+
+  const clearBulkQueue = () => {
+    setBulkQueue([]);
+    setBulkUploadMessage("選択中のCSVをクリアしました。");
+    setBulkUploadError(null);
+  };
+
 
   const handleShare = async () => {
     if (records.length === 0) {
@@ -5744,13 +5801,51 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
                       {bulkUploadError}
                     </p>
                   )}
+                  {bulkQueue.length > 0 && (
+                    <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                      <p className="text-[11px] font-semibold text-slate-600">
+                        選択中のCSV ({bulkQueue.length}件)
+                      </p>
+                      <ul className="mt-1 space-y-1 text-[11px] text-slate-500">
+                        {bulkQueue.slice(0, 5).map((file) => (
+                          <li key={`${file.name}_${file.size}_${file.lastModified}`}>・{file.name}</li>
+                        ))}
+                        {bulkQueue.length > 5 && (
+                          <li className="text-slate-400">…ほか{bulkQueue.length - 5}件</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={executeBulkUpload}
+                      disabled={isBulkUploading || bulkQueue.length === 0}
+                      className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                        bulkQueue.length === 0 || isBulkUploading
+                          ? "cursor-not-allowed border-slate-100 bg-slate-100 text-slate-400"
+                          : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                      }`}
+                    >
+                      <RefreshCw className={`h-4 w-4 ${isBulkUploading ? "animate-spin" : ""}`} />
+                      取り込みを実行
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearBulkQueue}
+                      disabled={isBulkUploading || bulkQueue.length === 0}
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      追加リストをクリア
+                    </button>
+                  </div>
                   <input
                     ref={bulkUploadInputRef}
                     type="file"
                     accept=".csv,text/csv"
                     multiple
                     className="hidden"
-                    onChange={handleBulkUpload}
+                    onChange={handleBulkFileSelect}
                   />
                 </div>
                 <div className="space-y-2">
