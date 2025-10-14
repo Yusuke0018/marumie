@@ -489,32 +489,34 @@ const createAgeBreakdown = (): Record<AgeBandId, number> =>
     {} as Record<AgeBandId, number>,
   );
 
-const computeRadius = (count: number, zoom: number): number => {
-  if (count <= 0) {
-    return 5;
+const computeRadius = (count: number, zoom: number, maxCount: number): number => {
+  if (count <= 0 || maxCount <= 0) {
+    return zoom <= 11 ? 1.3 : 2.4;
   }
 
-  const baseZoom = 12;
-  const zoomDelta = zoom - baseZoom;
+  const normalized = Math.min(1, count / maxCount);
+  const eased = Math.pow(normalized, 0.58);
 
-  // 拡大時はズームレベル差1あたり約1.8倍まで拡大（ズーム14付近で約2.4倍）
-  // 縮小時はズームレベル差1あたり約0.3倍まで縮小（ズーム10で約3分の1以下）
-  const zoomFactor =
-    zoomDelta >= 0
-      ? 1 + zoomDelta * 0.8
-      : 1 / (1 + Math.abs(zoomDelta) * 2.4);
+  const zoomFactor = Math.pow(1.22, zoom - 12);
 
-  const scaled = Math.sqrt(count);
-  const baseRadius = 5 + scaled * 10;
-  let adjustedRadius = baseRadius * zoomFactor;
+  const baseMin = 2.4;
+  const baseMax = 36;
+  const scaledMin = Math.max(1.2, baseMin * zoomFactor);
+  const scaledMax = Math.min(68, baseMax * zoomFactor);
 
-  if (count === 1 && zoomDelta < 0) {
-    adjustedRadius *= 0.5;
+  let radius = scaledMin + (scaledMax - scaledMin) * eased;
+
+  if (count <= 3 && zoom < 12) {
+    radius *= 0.6;
   }
 
-  const minRadius = count <= 1 ? 2 : 3.5;
+  if (count <= 1 && zoom <= 11) {
+    radius *= 0.45;
+  }
 
-  return Math.min(80, Math.max(minRadius, adjustedRadius));
+  const finalRadius = Math.max(1.2, Math.min(scaledMax, radius));
+
+  return Number.isFinite(finalRadius) ? finalRadius : scaledMin;
 };
 
 const formatTopDepartments = (point: LocationAggregation): string => {
@@ -904,6 +906,10 @@ const GeoDistributionMapComponent = ({
   }, [townMaster]);
 
   const { mappedPoints, unmatchedCount } = useMemo(() => {
+    const maxGroupTotal = groupedLocations.reduce(
+      (max, group) => (group.total > max ? group.total : max),
+      0,
+    );
     let unmatchedTotals = 0;
     const result: MapPoint[] = [];
 
@@ -992,7 +998,7 @@ const GeoDistributionMapComponent = ({
         matchedTownName: coordinate.town,
         matchLevel,
         dominantAgeBandId,
-        radius: computeRadius(group.total, currentZoom),
+        radius: computeRadius(group.total, currentZoom, maxGroupTotal),
       });
     }
 
@@ -1285,6 +1291,19 @@ const GeoDistributionMapComponent = ({
               const adjustedFillColor = isSelected ? lightenColor(markerColor, 0.15) : baseFillColor;
               const adjustedFillOpacity = isSelected ? Math.min(0.95, baseFillOpacity + 0.2) : baseFillOpacity;
               const markerRadius = point.radius + (isFocused ? 6 : isSelected ? 2 : 0);
+              const baseStrokeWeight =
+                markerRadius >= 26
+                  ? 3.2
+                  : markerRadius >= 14
+                    ? 2.6
+                    : markerRadius >= 7
+                      ? 1.9
+                      : 1.3;
+              const markerStrokeWeight = isFocused
+                ? baseStrokeWeight + 1.2
+                : isSelected
+                  ? baseStrokeWeight + 0.6
+                  : baseStrokeWeight;
               const pie = buildAgePie(point.ageBreakdown);
               const markerClassName = [
                 "geo-area-marker",
@@ -1311,7 +1330,7 @@ const GeoDistributionMapComponent = ({
                   radius={markerRadius}
                   pathOptions={{
                     color: markerStrokeColor,
-                    weight: isFocused ? 4.2 : isSelected ? 3.2 : 2.5,
+                    weight: markerStrokeWeight,
                     fillColor: adjustedFillColor,
                     fillOpacity: adjustedFillOpacity,
                     lineCap: "round",
