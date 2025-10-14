@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Papa from "papaparse";
+import Holidays from "date-holidays";
 import { uploadDataToR2, fetchDataFromR2 } from "@/lib/dataShare";
 import {
   aggregateKarteMonthly,
@@ -170,29 +171,29 @@ const MULTIVARIATE_SEGMENT_ENTRIES: Array<{
   {
     id: "overall",
     label: "全体",
-    gradientClass: "from-sky-500 via-cyan-400 to-sky-600",
-    ringClass: "ring-sky-200",
-    chipClass: "bg-sky-500/20 text-white",
-    barColor: "#0ea5e9",
-    lineColor: "#bae6fd",
+    gradientClass: "from-slate-800 via-slate-700 to-slate-900",
+    ringClass: "ring-slate-300",
+    chipClass: "bg-slate-800/40 text-slate-100",
+    barColor: "#334155",
+    lineColor: "#94a3b8",
   },
   {
     id: "general",
     label: "総合診療",
-    gradientClass: "from-violet-500 via-fuchsia-500 to-violet-600",
-    ringClass: "ring-violet-200",
-    chipClass: "bg-violet-500/20 text-white",
-    barColor: "#8b5cf6",
-    lineColor: "#d8b4fe",
+    gradientClass: "from-emerald-700 via-emerald-600 to-teal-700",
+    ringClass: "ring-emerald-200",
+    chipClass: "bg-emerald-600/35 text-emerald-50",
+    barColor: "#047857",
+    lineColor: "#6ee7b7",
   },
   {
     id: "fever",
     label: "発熱外来",
-    gradientClass: "from-rose-500 via-amber-400 to-rose-600",
+    gradientClass: "from-rose-600 via-amber-500 to-rose-700",
     ringClass: "ring-rose-200",
-    chipClass: "bg-rose-500/25 text-white",
-    barColor: "#fb7185",
-    lineColor: "#f9a8d4",
+    chipClass: "bg-rose-500/35 text-rose-50",
+    barColor: "#e11d48",
+    lineColor: "#fbbf24",
   },
 ];
 
@@ -1080,7 +1081,51 @@ const getWeekdayLabel = (weekday: number): string =>
 const formatHourLabel = (hour: number) => `${hour.toString().padStart(2, "0")}:00`;
 
 const normalizeDepartmentLabel = (value: string) =>
-  value.replace(/\s+/g, "").replace(/[()（）]/g, "");
+  value.replace(/[\s・●()（）【】\[\]\-]/g, "");
+
+const GENERAL_DEPARTMENT_KEYWORDS = [
+  "内科・外科外来（大岩医師）",
+  "内科・外科外来",
+].map(normalizeDepartmentLabel);
+
+const FEVER_DEPARTMENT_KEYWORDS = [
+  "発熱外来",
+  "発熱・風邪症状外来",
+  "風邪症状外来",
+].map(normalizeDepartmentLabel);
+
+const HOLIDAYS_JP = new Holidays("JP");
+
+const getIsoWeekday = (isoDate: string): number => {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+};
+
+const toNormalizedWeekdayIndex = (weekday: number): number => ((weekday + 6) % 7);
+
+const isNewYearPeriodIso = (isoDate: string): boolean => {
+  const [, monthStr, dayStr] = isoDate.split("-");
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  if (Number.isNaN(month) || Number.isNaN(day)) {
+    return false;
+  }
+  if (month === 12 && day >= 27) {
+    return true;
+  }
+  if (month === 1 && day <= 3) {
+    return true;
+  }
+  return false;
+};
+
+const isJapaneseHolidayIso = (isoDate: string): boolean => {
+  const result = HOLIDAYS_JP.isHoliday(isoDate);
+  if (Array.isArray(result)) {
+    return result.length > 0;
+  }
+  return Boolean(result);
+};
 
 const formatTimestampLabel = (value: string | null) =>
   value ? new Date(value).toLocaleString("ja-JP") : "未登録";
@@ -2795,15 +2840,20 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
     }
 
     const normalizeDepartment = (value: string | null | undefined) =>
-      value ? value.replace(/[（）()●]/g, "").replace(/\s+/g, "") : "";
+      value ? normalizeDepartmentLabel(value) : "";
 
     const resolveSegments = (value: string | null | undefined): MultivariateSegmentKey[] => {
       const normalized = normalizeDepartment(value);
+      if (!normalized) {
+        return [];
+      }
       const segments: MultivariateSegmentKey[] = [];
-      const isGeneral = normalized.includes("総合診療");
-      const isFever =
-        normalized.includes("発熱") ||
-        normalized.includes("風邪症状");
+      const isGeneral = GENERAL_DEPARTMENT_KEYWORDS.some((keyword) =>
+        normalized.includes(keyword),
+      );
+      const isFever = FEVER_DEPARTMENT_KEYWORDS.some((keyword) =>
+        normalized.includes(keyword),
+      );
       if (!isGeneral && !isFever) {
         return segments;
       }
@@ -2882,16 +2932,17 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
       if (!dateKey) {
         continue;
       }
-      const weekdayDate = new Date(`${dateKey}T00:00:00`);
-      const weekday = weekdayDate.getDay();
-      if (Number.isNaN(weekday)) {
+      const baseWeekday = getIsoWeekday(dateKey);
+      if (Number.isNaN(baseWeekday)) {
         continue;
       }
+      const isHolidayDate = isJapaneseHolidayIso(dateKey) || isNewYearPeriodIso(dateKey);
+      const normalizedWeekday = isHolidayDate ? 7 : toNormalizedWeekdayIndex(baseWeekday);
       const bucketKey = `${nameKey}|${dateKey}`;
       const bucket = reservationBuckets.get(bucketKey) ?? [];
       bucket.push({
         ...reservation,
-        weekday,
+        weekday: normalizedWeekday,
         hour: reservation.reservationHour,
         segments,
       });
@@ -2953,7 +3004,9 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
         recordSegments.includes(segment),
       );
       const segmentsToApply =
-        matchedSegments.length > 0 ? matchedSegments : (["overall"] as MultivariateSegmentKey[]);
+        matchedSegments.length > 0
+          ? Array.from(new Set<MultivariateSegmentKey>(["overall", ...matchedSegments]))
+          : (["overall"] as MultivariateSegmentKey[]);
 
       const age = calculateAge(record.birthDateIso ?? null, record.dateIso);
       const ageBand = resolveAgeBand(age);
@@ -3179,20 +3232,23 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
 
   useEffect(() => {
     const currentSegment = multivariateInsights.segments[selectedInsightSegment];
-    if (!currentSegment?.hasData) {
-      return;
-    }
-    if (expandedWeekdayBySegment[selectedInsightSegment] !== null) {
-      return;
-    }
-    const firstGroup = currentSegment.weekdayGroups[0];
-    if (firstGroup) {
-      setExpandedWeekdayBySegment((prev) => ({
-        ...prev,
-        [selectedInsightSegment]: firstGroup.weekday,
-      }));
-    }
-  }, [expandedWeekdayBySegment, multivariateInsights, selectedInsightSegment]);
+    setExpandedWeekdayBySegment((prev) => {
+      const currentValue = prev[selectedInsightSegment];
+      if (!currentSegment?.hasData) {
+        if (currentValue !== null) {
+          return { ...prev, [selectedInsightSegment]: null };
+        }
+        return prev;
+      }
+      if (
+        currentValue !== null &&
+        !currentSegment.weekdayGroups.some((group) => group.weekday === currentValue)
+      ) {
+        return { ...prev, [selectedInsightSegment]: null };
+      }
+      return prev;
+    });
+  }, [multivariateInsights, selectedInsightSegment]);
 
   const selectedSegmentInsight =
     multivariateInsights.segments[selectedInsightSegment];

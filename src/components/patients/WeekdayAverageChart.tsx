@@ -19,10 +19,13 @@ type WeekdayAverageChartProps = {
   endMonth: string;
 };
 
+const sanitizeDepartment = (value: string) =>
+  value.replace(/[\s・●()（）【】\[\]\-]/g, "");
+
 const DEPARTMENT_GROUPS = {
-  総合診療: ["総合診療", "総合診療科"],
+  総合診療: ["内科・外科外来（大岩医師）", "内科・外科外来"],
   内視鏡: ["内視鏡", "内視鏡（保険）", "内視鏡（自費）", "人間ドックA", "人間ドックB"],
-  発熱外来: ["発熱外来", "発熱・風邪症状外来"],
+  発熱外来: ["発熱外来", "発熱・風邪症状外来", "風邪症状外来"],
 } as const;
 
 type DepartmentGroup = keyof typeof DEPARTMENT_GROUPS;
@@ -31,20 +34,26 @@ const DEPARTMENT_ORDER: DepartmentGroup[] = ["総合診療", "内視鏡", "発�
 
 const WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土", "日", "祝日"];
 
-const isNewYearPeriod = (date: Date): boolean => {
-  const month = date.getMonth() + 1;
-  const day = date.getDate();
+const getIsoWeekday = (isoDate: string): number => {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+};
 
-  // 12月27日〜31日
+const toNormalizedWeekdayIndex = (weekday: number): number => ((weekday + 6) % 7);
+
+const isNewYearPeriodIso = (isoDate: string): boolean => {
+  const [, monthStr, dayStr] = isoDate.split("-");
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  if (Number.isNaN(month) || Number.isNaN(day)) {
+    return false;
+  }
   if (month === 12 && day >= 27) {
     return true;
   }
-
-  // 1月1日〜3日
   if (month === 1 && day <= 3) {
     return true;
   }
-
   return false;
 };
 
@@ -75,10 +84,10 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
       if (endMonth && month > endMonth) continue;
 
       // 診療科グループを特定
-      const department = departmentRaw.replace(/\s+/g, "");
+      const normalizedDepartment = sanitizeDepartment(departmentRaw);
       let matchedGroup: DepartmentGroup | null = null;
       for (const [groupName, departments] of Object.entries(DEPARTMENT_GROUPS)) {
-        if (departments.some((candidate) => department.includes(candidate.replace(/\s+/g, "")))) {
+        if (departments.some((candidate) => normalizedDepartment.includes(sanitizeDepartment(candidate)))) {
           matchedGroup = groupName as DepartmentGroup;
           break;
         }
@@ -86,21 +95,12 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
 
       if (!matchedGroup) continue;
 
-      // 日付を解析
-      const date = new Date(dateStr);
-      if (isNaN(date.getTime())) continue;
+      const baseWeekday = getIsoWeekday(dateStr);
+      if (Number.isNaN(baseWeekday)) continue;
 
-      // 祝日判定
-      const isHoliday = holidays.isHoliday(date) || isNewYearPeriod(date);
+      const isHoliday = Boolean(holidays.isHoliday(dateStr)) || isNewYearPeriodIso(dateStr);
 
-      // 曜日インデックス（0=月, 1=火, ..., 6=日, 7=祝日）
-      let weekdayIndex: number;
-      if (isHoliday) {
-        weekdayIndex = 7; // 祝日
-      } else {
-        const jsDay = date.getDay(); // 0=日, 1=月, ..., 6=土
-        weekdayIndex = jsDay === 0 ? 6 : jsDay - 1; // 0=月, 1=火, ..., 6=日
-      }
+      const weekdayIndex = isHoliday ? 7 : toNormalizedWeekdayIndex(baseWeekday);
 
       const groupData = weekdayMap.get(weekdayIndex)!.get(matchedGroup)!;
       groupData.count++;
@@ -129,9 +129,9 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
   }, [records, startMonth, endMonth]);
 
   const COLORS: Record<DepartmentGroup, string> = {
-    総合診療: "#2563eb",
-    内視鏡: "#ec4899",
-    発熱外来: "#f97316",
+    総合診療: "#047857",
+    内視鏡: "#6366f1",
+    発熱外来: "#e11d48",
   };
 
   const seriesOrder = DEPARTMENT_ORDER;

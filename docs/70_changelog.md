@@ -1,5 +1,6 @@
 # 変更履歴
 - 多変量解析タブを全体・総合診療・発熱外来の3視点に拡張し、曜日カード展開でカラーグラフと詳細指標を表示できるよう刷新した。(2025-10-14)[src/app/patients/page.tsx:1]
+- チャネル概要のカラーパレットと祝日判定、曜日トグル挙動を改善し、視認性を向上させた。(2025-10-14)[src/app/patients/page.tsx:1][src/components/patients/WeekdayAverageChart.tsx:1]
 - 予約CSVの「患者氏名」列とプレースホルダー値に対応し、カルテデータとの照合で多変量インサイトが表示されるように修正した。(2025-10-14)[src/lib/reservationData.ts:1]
 - 予約CSVの来院日時を受信時刻ではなく「予約日時」列から計算し、時間帯分析やカルテ照合の一致率を改善した。(2025-10-14)[src/lib/reservationData.ts:1]
 - リスティング分析に発熱外来カテゴリを追加し、新しい発熱訴求CSVを診療科「発熱外来」との相関に紐付けるよう更新した。(2025-10-14)[src/lib/listingData.ts:1][src/app/listing/page.tsx:1][src/app/patients/page.tsx:145][src/app/correlation/page.tsx:1]
