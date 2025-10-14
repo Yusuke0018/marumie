@@ -9,6 +9,7 @@ import {
   useState,
   lazy,
   Suspense,
+  useRef,
   type ChangeEvent,
 } from "react";
 import {
@@ -1212,6 +1213,11 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
   const [diagnosisUploadError, setDiagnosisUploadError] = useState<string | null>(null);
   const [showDiagnosisChart, setShowDiagnosisChart] = useState(false);
   const [showDiagnosisCategoryChart, setShowDiagnosisCategoryChart] = useState(false);
+
+  const bulkUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const [isBulkUploading, setIsBulkUploading] = useState(false);
+  const [bulkUploadMessage, setBulkUploadMessage] = useState<string | null>(null);
+  const [bulkUploadError, setBulkUploadError] = useState<string | null>(null);
 
   const applySharedBundle = useCallback(
     (bundle: SharedDataBundle, fallbackTimestamp?: string) => {
@@ -3269,158 +3275,173 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
   const canShowDiagnosisChart = diagnosisMonthlyInRange.length > 0;
   const canShowDiagnosisCategoryChart = diagnosisCategoryMonthlyInRange.length > 0;
 
-  const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) {
-      return;
-    }
-
-    setUploadError(null);
-    try {
-      const existingMap = new Map<string, KarteRecord>();
-
-      // 既存データを先に追加
-      for (const record of records) {
-        const key = `${record.dateIso}|${record.visitType}|${record.patientNumber}|${record.department}`;
-        existingMap.set(key, record);
-      }
-
-      // 複数ファイルを処理
-      for (const file of Array.from(files)) {
-        const text = await file.text();
-        const parsed = parseKarteCsv(text);
-
-        for (const record of parsed) {
-          const key = `${record.dateIso}|${record.visitType}|${record.patientNumber}|${record.department}`;
-          existingMap.set(key, record);
-        }
-      }
-
-      const merged = Array.from(existingMap.values()).sort((a, b) =>
-        a.dateIso.localeCompare(b.dateIso),
-      );
-
-      setRecords(merged);
-      setShareUrl(null);
-
-      const timestamp = new Date().toISOString();
-      setLastUpdated(timestamp);
-
-      if (typeof window !== "undefined") {
-        try {
-          setCompressedItem(KARTE_STORAGE_KEY, JSON.stringify(merged));
-          window.localStorage.setItem(KARTE_TIMESTAMP_KEY, timestamp);
-        } catch (storageError) {
-          console.error("保存エラー:", storageError);
-          throw new Error("データの保存に失敗しました。データ量が多すぎる可能性があります。");
-        }
-      }
-    } catch (error) {
-      console.error(error);
-      const message =
-        error instanceof Error
-          ? `カルテ集計CSVの解析に失敗しました: ${error.message}`
-          : "カルテ集計CSVの解析に失敗しました。";
-      setUploadError(message);
-    } finally {
-      event.target.value = "";
-    }
-  };
-
-  const handleReservationUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const input = event.target;
-    const files = input.files ? Array.from(input.files) : [];
-    if (files.length === 0) {
-      return;
-    }
-
-    setReservationUploadError(null);
-    setIsUploadingReservation(true);
-
-    try {
-      const existing = loadReservationsFromStorage();
-      const incoming: Reservation[] = [];
-
-      for (const file of files) {
-        const text = await file.text();
-        const parsed = parseReservationCsv(text);
-        incoming.push(...parsed);
-      }
-
-      const { merged, newlyAdded } = mergeReservations(existing, incoming);
-      const timestamp = saveReservationsToStorage(merged);
-
-      if (newlyAdded.length > 0) {
-        saveReservationDiff(newlyAdded);
-      } else {
-        clearReservationDiff();
-      }
-
-      setReservationStatus({
-        lastUpdated: timestamp,
-        total: merged.length,
-      });
-      setReservationsRecords(merged);
-    } catch (error) {
-      console.error(error);
-      setReservationUploadError("予約ログCSVの解析に失敗しました。フォーマットをご確認ください。");
-    } finally {
-      input.value = "";
-      setIsUploadingReservation(false);
-    }
-  };
-
-  const handleSurveyUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const input = event.target;
-    const files = input.files ? Array.from(input.files) : [];
-    if (files.length === 0) {
-      return;
-    }
-
-    setSurveyUploadError(null);
-    setIsUploadingSurvey(true);
-
-    try {
-      const existing = loadSurveyDataFromStorage();
-      const incoming: SurveyData[] = [];
-
-      for (const file of files) {
-        const text = await file.text();
-        const fileType = determineSurveyFileType(file.name);
-        const parsed = parseSurveyCsv(text, fileType);
-        incoming.push(...parsed);
-      }
-
-      const merged = mergeSurveyData(existing, incoming);
-      const timestamp = saveSurveyDataToStorage(merged);
-
-      setSurveyStatus({
-        lastUpdated: timestamp,
-        total: merged.length,
-        byType: summarizeSurveyByType(merged),
-      });
-    } catch (error) {
-      console.error(error);
-      setSurveyUploadError("アンケートCSVの解析に失敗しました。");
-    } finally {
-      input.value = "";
-      setIsUploadingSurvey(false);
-    }
-  };
-
-  const handleListingUpload =
-    (category: ListingCategory) => async (event: ChangeEvent<HTMLInputElement>) => {
-      const input = event.target;
-      const files = input.files ? Array.from(input.files) : [];
+  const importKarteFiles = useCallback(
+    async (files: File[], { silent }: { silent?: boolean } = {}) => {
       if (files.length === 0) {
         return;
       }
 
-      setListingUploadError(null);
-      setIsUploadingListing((state) => ({
-        ...state,
-        [category]: true,
-      }));
+      if (!silent) {
+        setUploadError(null);
+      }
+
+      try {
+        const existingMap = new Map<string, KarteRecord>();
+
+        for (const record of records) {
+          const key = `${record.dateIso}|${record.visitType}|${record.patientNumber}|${record.department}`;
+          existingMap.set(key, record);
+        }
+
+        for (const file of files) {
+          const text = await file.text();
+          const parsed = parseKarteCsv(text);
+
+          for (const record of parsed) {
+            const key = `${record.dateIso}|${record.visitType}|${record.patientNumber}|${record.department}`;
+            existingMap.set(key, record);
+          }
+        }
+
+        const merged = Array.from(existingMap.values()).sort((a, b) =>
+          a.dateIso.localeCompare(b.dateIso),
+        );
+
+        setRecords(merged);
+        setShareUrl(null);
+
+        const timestamp = new Date().toISOString();
+        setLastUpdated(timestamp);
+
+        if (typeof window !== "undefined") {
+          try {
+            setCompressedItem(KARTE_STORAGE_KEY, JSON.stringify(merged));
+            window.localStorage.setItem(KARTE_TIMESTAMP_KEY, timestamp);
+          } catch (storageError) {
+            console.error("保存エラー:", storageError);
+            throw new Error("データの保存に失敗しました。データ量が多すぎる可能性があります。");
+          }
+        }
+      } catch (error) {
+        console.error(error);
+        const message =
+          error instanceof Error
+            ? `カルテ集計CSVの解析に失敗しました: ${error.message}`
+            : "カルテ集計CSVの解析に失敗しました。";
+        if (!silent) {
+          setUploadError(message);
+        }
+        throw error;
+      }
+    },
+    [records],
+  );
+
+  const importReservationFiles = useCallback(
+    async (files: File[], { silent }: { silent?: boolean } = {}) => {
+      if (files.length === 0) {
+        return;
+      }
+
+      if (!silent) {
+        setReservationUploadError(null);
+        setIsUploadingReservation(true);
+      }
+
+      try {
+        const existing = loadReservationsFromStorage();
+        const incoming: Reservation[] = [];
+
+        for (const file of files) {
+          const text = await file.text();
+          const parsed = parseReservationCsv(text);
+          incoming.push(...parsed);
+        }
+
+        const { merged, newlyAdded } = mergeReservations(existing, incoming);
+        const timestamp = saveReservationsToStorage(merged);
+
+        if (newlyAdded.length > 0) {
+          saveReservationDiff(newlyAdded);
+        } else {
+          clearReservationDiff();
+        }
+
+        setReservationStatus({
+          lastUpdated: timestamp,
+          total: merged.length,
+        });
+        setReservationsRecords(merged);
+      } catch (error) {
+        console.error(error);
+        if (!silent) {
+          setReservationUploadError("予約ログCSVの解析に失敗しました。フォーマットをご確認ください。");
+        }
+        throw error;
+      } finally {
+        if (!silent) {
+          setIsUploadingReservation(false);
+        }
+      }
+    },
+    [],
+  );
+
+  const importSurveyFiles = useCallback(
+    async (files: File[], { silent }: { silent?: boolean } = {}) => {
+      if (files.length === 0) {
+        return;
+      }
+
+      if (!silent) {
+        setSurveyUploadError(null);
+        setIsUploadingSurvey(true);
+      }
+
+      try {
+        const existing = loadSurveyDataFromStorage();
+        const incoming: SurveyData[] = [];
+
+        for (const file of files) {
+          const text = await file.text();
+          const fileType = determineSurveyFileType(file.name);
+          const parsed = parseSurveyCsv(text, fileType);
+          incoming.push(...parsed);
+        }
+
+        const merged = mergeSurveyData(existing, incoming);
+        const timestamp = saveSurveyDataToStorage(merged);
+
+        setSurveyStatus({
+          lastUpdated: timestamp,
+          total: merged.length,
+          byType: summarizeSurveyByType(merged),
+        });
+      } catch (error) {
+        console.error(error);
+        if (!silent) {
+          setSurveyUploadError("アンケートCSVの解析に失敗しました。");
+        }
+        throw error;
+      } finally {
+        if (!silent) {
+          setIsUploadingSurvey(false);
+        }
+      }
+    },
+    [],
+  );
+
+  const importListingFiles = useCallback(
+    async (category: ListingCategory, files: File[], { silent }: { silent?: boolean } = {}) => {
+      if (files.length === 0) {
+        return;
+      }
+
+      if (!silent) {
+        setListingUploadError(null);
+        setIsUploadingListing((state) => ({ ...state, [category]: true }));
+      }
 
       try {
         const existing = loadListingDataFromStorage();
@@ -3446,13 +3467,114 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
         });
       } catch (error) {
         console.error(error);
-        setListingUploadError("リスティング広告CSVの解析に失敗しました。");
+        if (!silent) {
+          setListingUploadError("リスティング広告CSVの解析に失敗しました。");
+        }
+        throw error;
+      } finally {
+        if (!silent) {
+          setIsUploadingListing((state) => ({ ...state, [category]: false }));
+        }
+      }
+    },
+    [],
+  );
+
+  const importDiagnosisFiles = useCallback(
+    async (files: File[], { silent }: { silent?: boolean } = {}) => {
+      if (files.length === 0) {
+        return;
+      }
+
+      if (!silent) {
+        setDiagnosisUploadError(null);
+        setIsUploadingDiagnosis(true);
+      }
+
+      try {
+        const existing = loadDiagnosisFromStorage();
+        const incoming: DiagnosisRecord[] = [];
+
+        for (const file of files) {
+          const text = await file.text();
+          const parsed = parseDiagnosisCsv(text);
+          incoming.push(...parsed);
+        }
+
+        const merged = mergeDiagnosisRecords(existing, incoming);
+        const timestamp = saveDiagnosisToStorage(merged);
+
+        setDiagnosisRecords(merged);
+        setDiagnosisStatus({
+          lastUpdated: timestamp,
+          total: merged.length,
+          byDepartment: calculateDiagnosisDepartmentTotals(merged),
+          byCategory: calculateDiagnosisCategoryTotals(merged),
+        });
+      } catch (error) {
+        console.error(error);
+        if (!silent) {
+          setDiagnosisUploadError("傷病名CSVの解析に失敗しました。フォーマットをご確認ください。");
+        }
+        throw error;
+      } finally {
+        if (!silent) {
+          setIsUploadingDiagnosis(false);
+        }
+      }
+    },
+    [],
+  );
+
+  const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    try {
+      await importKarteFiles(files);
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const handleReservationUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const files = input.files ? Array.from(input.files) : [];
+    if (files.length === 0) {
+      return;
+    }
+
+    try {
+      await importReservationFiles(files);
+    } finally {
+      input.value = "";
+    }
+  };
+
+  const handleSurveyUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const files = input.files ? Array.from(input.files) : [];
+    if (files.length === 0) {
+      return;
+    }
+
+    try {
+      await importSurveyFiles(files);
+    } finally {
+      input.value = "";
+    }
+  };
+
+  const handleListingUpload =
+    (category: ListingCategory) => async (event: ChangeEvent<HTMLInputElement>) => {
+      const input = event.target;
+      const files = input.files ? Array.from(input.files) : [];
+      if (files.length === 0) {
+        return;
+      }
+
+      try {
+        await importListingFiles(category, files);
       } finally {
         input.value = "";
-        setIsUploadingListing((state) => ({
-          ...state,
-          [category]: false,
-        }));
       }
     };
 
@@ -3463,35 +3585,142 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
       return;
     }
 
-    setDiagnosisUploadError(null);
-    setIsUploadingDiagnosis(true);
-
     try {
-      const existing = loadDiagnosisFromStorage();
-      const incoming: DiagnosisRecord[] = [];
-
-      for (const file of files) {
-        const text = await file.text();
-        const parsed = parseDiagnosisCsv(text);
-        incoming.push(...parsed);
-      }
-
-      const merged = mergeDiagnosisRecords(existing, incoming);
-    const timestamp = saveDiagnosisToStorage(merged);
-
-    setDiagnosisRecords(merged);
-    setDiagnosisStatus({
-      lastUpdated: timestamp,
-      total: merged.length,
-      byDepartment: calculateDiagnosisDepartmentTotals(merged),
-      byCategory: calculateDiagnosisCategoryTotals(merged),
-    });
-  } catch (error) {
-      console.error(error);
-      setDiagnosisUploadError("傷病名CSVの解析に失敗しました。フォーマットをご確認ください。");
+      await importDiagnosisFiles(files);
     } finally {
       input.value = "";
-      setIsUploadingDiagnosis(false);
+    }
+  };
+
+  const handleBulkUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const files = input.files ? Array.from(input.files) : [];
+    if (files.length === 0) {
+      return;
+    }
+
+    setBulkUploadMessage(null);
+    setBulkUploadError(null);
+    setIsBulkUploading(true);
+
+    try {
+      const listingBuckets: Record<ListingCategory, File[]> = {
+      内科: [],
+      発熱外来: [],
+      胃カメラ: [],
+      大腸カメラ: [],
+    };
+
+    const karteFiles: File[] = [];
+    const reservationFiles: File[] = [];
+    const surveyFiles: File[] = [];
+    const diagnosisFiles: File[] = [];
+    const unknownFiles: string[] = [];
+
+    const determineListingCategory = (name: string): ListingCategory | null => {
+      if (name.includes("発熱") || name.includes("fever")) {
+        return "発熱外来";
+      }
+      if (name.includes("内科") || name.includes("生活習慣")) {
+        return "内科";
+      }
+      if (name.includes("胃") || name.includes("stomach")) {
+        return "胃カメラ";
+      }
+      if (name.includes("大腸") || name.includes("colon")) {
+        return "大腸カメラ";
+      }
+      return null;
+    };
+
+      for (const file of files) {
+      const lowerName = file.name.toLowerCase();
+
+      if (lowerName.includes("カルテ")) {
+        karteFiles.push(file);
+        continue;
+      }
+      if (lowerName.includes("予約")) {
+        reservationFiles.push(file);
+        continue;
+      }
+      if (lowerName.includes("アンケート") || lowerName.includes("survey")) {
+        surveyFiles.push(file);
+        continue;
+      }
+      if (lowerName.includes("傷病") || lowerName.includes("主病") || lowerName.includes("diagnosis")) {
+        diagnosisFiles.push(file);
+        continue;
+      }
+      if (lowerName.includes("リスティング") || lowerName.includes("listing") || lowerName.includes("広告")) {
+        const category = determineListingCategory(lowerName);
+        if (category) {
+          listingBuckets[category].push(file);
+        } else {
+          unknownFiles.push(file.name);
+        }
+        continue;
+      }
+
+      unknownFiles.push(file.name);
+    }
+
+      const successes: string[] = [];
+      const failures: string[] = [];
+
+      const runTask = async (label: string, task: () => Promise<void>) => {
+      try {
+        await task();
+        successes.push(label);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "不明なエラーが発生しました";
+        failures.push(`${label}: ${message}`);
+      }
+    };
+
+      if (karteFiles.length > 0) {
+      await runTask("カルテ", () => importKarteFiles(karteFiles, { silent: true }));
+    }
+      if (reservationFiles.length > 0) {
+      await runTask("予約", () => importReservationFiles(reservationFiles, { silent: true }));
+    }
+      if (surveyFiles.length > 0) {
+      await runTask("アンケート", () => importSurveyFiles(surveyFiles, { silent: true }));
+    }
+      if (diagnosisFiles.length > 0) {
+      await runTask("傷病名", () => importDiagnosisFiles(diagnosisFiles, { silent: true }));
+    }
+
+      for (const category of Object.keys(listingBuckets) as ListingCategory[]) {
+      const bucket = listingBuckets[category];
+      if (bucket.length === 0) {
+        continue;
+      }
+      await runTask(`リスティング(${category})`, () =>
+        importListingFiles(category, bucket, { silent: true }),
+      );
+    }
+
+      if (successes.length > 0) {
+      setBulkUploadMessage(`取り込み完了: ${successes.join(" / ")}`);
+    } else {
+      setBulkUploadMessage("取り込めるCSVが見つかりませんでした。");
+    }
+
+      const issues: string[] = [];
+      if (failures.length > 0) {
+      issues.push(...failures);
+    }
+      if (unknownFiles.length > 0) {
+      issues.push(`判別できなかったファイル: ${unknownFiles.join(", ")}`);
+    }
+      if (issues.length > 0) {
+      setBulkUploadError(issues.join(" / "));
+    }
+    } finally {
+      setIsBulkUploading(false);
+      input.value = "";
     }
   };
 
@@ -5483,6 +5712,47 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
                     ? "共有URLから閲覧中です。操作内容は公開データに即時反映されるため取り扱いにご注意ください。"
                     : "カルテ集計に加えて、予約ログ・アンケート・広告のCSVもこのページでまとめて更新できます。共有URLはコピーして関係者へ連携してください。"}
                 </p>
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-700">まとめてCSV取り込み</p>
+                      <p className="text-xs text-slate-500">
+                        ファイル名に「カルテ」「予約」「アンケート」「リスティング」「傷病」などのキーワードを含めると自動で振り分けます。
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => bulkUploadInputRef.current?.click()}
+                      disabled={isBulkUploading}
+                      className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                        isBulkUploading
+                          ? "cursor-wait border-slate-100 bg-slate-100 text-slate-400"
+                          : "border-slate-300 text-slate-600 hover:border-brand-200 hover:text-brand-600"
+                      }`}
+                    >
+                      <Upload className="h-4 w-4" />
+                      {isBulkUploading ? "取り込み中..." : "CSVをまとめて選択"}
+                    </button>
+                  </div>
+                  {bulkUploadMessage && (
+                    <p className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-700">
+                      {bulkUploadMessage}
+                    </p>
+                  )}
+                  {bulkUploadError && (
+                    <p className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                      {bulkUploadError}
+                    </p>
+                  )}
+                  <input
+                    ref={bulkUploadInputRef}
+                    type="file"
+                    accept=".csv,text/csv"
+                    multiple
+                    className="hidden"
+                    onChange={handleBulkUpload}
+                  />
+                </div>
                 <div className="space-y-2">
                   {records.length > 0 && (
                     <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
