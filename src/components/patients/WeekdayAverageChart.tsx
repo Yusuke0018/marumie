@@ -41,6 +41,14 @@ const getIsoWeekday = (isoDate: string): number => {
 
 const toNormalizedWeekdayIndex = (weekday: number): number => ((weekday + 6) % 7);
 
+const isJapaneseHolidayIso = (holidays: Holidays, isoDate: string): boolean => {
+  const result = holidays.isHoliday(isoDate);
+  if (Array.isArray(result)) {
+    return result.length > 0;
+  }
+  return Boolean(result);
+};
+
 const isNewYearPeriodIso = (isoDate: string): boolean => {
   const [, monthStr, dayStr] = isoDate.split("-");
   const month = Number(monthStr);
@@ -98,7 +106,7 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
       const baseWeekday = getIsoWeekday(dateStr);
       if (Number.isNaN(baseWeekday)) continue;
 
-      const isHoliday = Boolean(holidays.isHoliday(dateStr)) || isNewYearPeriodIso(dateStr);
+      const isHoliday = isJapaneseHolidayIso(holidays, dateStr) || isNewYearPeriodIso(dateStr);
 
       const weekdayIndex = isHoliday ? 7 : toNormalizedWeekdayIndex(baseWeekday);
 
@@ -129,15 +137,15 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
   }, [records, startMonth, endMonth]);
 
   const COLORS: Record<DepartmentGroup, string> = {
-    総合診療: "#047857",
-    内視鏡: "#6366f1",
-    発熱外来: "#e11d48",
+    総合診療: "#0f766e",
+    内視鏡: "#4338ca",
+    発熱外来: "#b91c1c",
   };
 
   const seriesOrder = DEPARTMENT_ORDER;
 
   const renderLegend: LegendProps["content"] = () => (
-    <div className="mt-2 flex flex-wrap justify-center gap-4 text-xs font-medium text-slate-600">
+    <div className="mt-3 flex flex-wrap justify-center gap-5 text-sm font-semibold text-slate-700">
       {seriesOrder.map((group) => (
         <span key={group} className="inline-flex items-center gap-2">
           <span
@@ -153,26 +161,38 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
   return (
     <div className="h-96">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-          <XAxis dataKey="weekday" tick={{ fontSize: 12 }} />
+        <BarChart data={data} barCategoryGap={18}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#CBD5F5" />
+          <XAxis dataKey="weekday" tick={{ fontSize: 13, fill: "#1f2937", fontWeight: 600 }} />
           <YAxis
             label={{
               value: "平均患者数（人）",
               angle: -90,
               position: "insideLeft",
-              style: { fontSize: 12 },
+              style: { fontSize: 13, fill: "#1f2937", fontWeight: 600 },
             }}
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 13, fill: "#1f2937", fontWeight: 600 }}
           />
           <Tooltip
             formatter={(value: number, name: string) => [`${value}人`, name]}
             itemSorter={(item) =>
               seriesOrder.indexOf((item?.name as DepartmentGroup) ?? seriesOrder[0])}
+            contentStyle={{
+              borderRadius: 12,
+              borderColor: "#cbd5e1",
+              backgroundColor: "#ffffff",
+              boxShadow: "0 18px 32px rgba(15,23,42,0.12)",
+            }}
           />
           <Legend verticalAlign="bottom" content={renderLegend} />
           {DEPARTMENT_ORDER.map((group) => (
-            <Bar key={group} dataKey={group} fill={COLORS[group]} name={group} />
+            <Bar
+              key={group}
+              dataKey={group}
+              fill={COLORS[group]}
+              name={group}
+              radius={[10, 10, 6, 6]}
+            />
           ))}
         </BarChart>
       </ResponsiveContainer>

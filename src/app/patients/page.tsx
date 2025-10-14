@@ -738,7 +738,7 @@ const StatCard = ({
 type UnitPriceGroupId = "general" | "internal" | "endoscopy" | "fever";
 
 const normalizeUnitPriceDepartment = (value: string) =>
-  value.replace(/\s+/g, "").replace(/[()（）]/g, "");
+  value.replace(/[\s・●()（）【】\[\]\-]/g, "").toLowerCase();
 
 const UNIT_PRICE_GROUPS: Array<{
   id: UnitPriceGroupId;
@@ -1078,14 +1078,23 @@ const WEEKDAY_PRESENTATION = [
 const getWeekdayLabel = (weekday: number): string =>
   WEEKDAY_LABELS[weekday] ?? "—";
 
+const formatWeekdayWithSuffix = (weekday: number): string => {
+  const label = getWeekdayLabel(weekday);
+  return label === "祝日" ? label : `${label}曜`;
+};
+
 const formatHourLabel = (hour: number) => `${hour.toString().padStart(2, "0")}:00`;
 
 const normalizeDepartmentLabel = (value: string) =>
-  value.replace(/[\s・●()（）【】\[\]\-]/g, "");
+  value.replace(/[\s・●()（）【】\[\]\-]/g, "").toLowerCase();
 
 const GENERAL_DEPARTMENT_KEYWORDS = [
   "内科・外科外来（大岩医師）",
   "内科・外科外来",
+  "内科外科外来",
+  "総合診療",
+  "総合診療科",
+  "総合診療外来",
 ].map(normalizeDepartmentLabel);
 
 const FEVER_DEPARTMENT_KEYWORDS = [
@@ -3173,14 +3182,14 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
       const highlights: string[] = [];
       if (topSlot) {
         highlights.push(
-          `最も患者数が多いのは${getWeekdayLabel(topSlot.weekday)}曜${formatHourLabel(topSlot.hour)}帯（${topSlot.totalPatients.toLocaleString(
+          `最も患者数が多いのは${formatWeekdayWithSuffix(topSlot.weekday)} ${formatHourLabel(topSlot.hour)}帯（${topSlot.totalPatients.toLocaleString(
             "ja-JP",
           )}名）です。`,
         );
         const primaryAge = topSlot.ageBreakdown[0];
         if (primaryAge) {
           highlights.push(
-            `${getWeekdayLabel(topSlot.weekday)}曜${formatHourLabel(topSlot.hour)}は${primaryAge.label}が中心（構成比${formatPercentage(
+            `${formatWeekdayWithSuffix(topSlot.weekday)} ${formatHourLabel(topSlot.hour)}は${primaryAge.label}が中心（構成比${formatPercentage(
               primaryAge.share,
             )}）です。`,
           );
@@ -3188,7 +3197,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
       }
       if (highestAvgSlot && highestAvgSlot.avgPoints !== null) {
         highlights.push(
-          `単価が高いのは${getWeekdayLabel(highestAvgSlot.weekday)}曜${formatHourLabel(highestAvgSlot.hour)}帯（平均${Math.round(
+          `単価が高いのは${formatWeekdayWithSuffix(highestAvgSlot.weekday)} ${formatHourLabel(highestAvgSlot.hour)}帯（平均${Math.round(
             highestAvgSlot.avgPoints,
           ).toLocaleString("ja-JP")}点）です。`,
         );
@@ -4274,7 +4283,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
 
                 <div className="grid gap-4 lg:grid-cols-2">
                   <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
-                    <h3 className="text-sm font-semibold text-slate-800">最終来院からの経過日数</h3>
+                    <h3 className="text-base font-semibold text-slate-900">最終来院からの経過日数</h3>
                     <table className="mt-3 w-full border-collapse text-sm">
                       <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                         <tr>
@@ -4299,7 +4308,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
                     </table>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
-                    <h3 className="text-sm font-semibold text-slate-800">来院回数の分布</h3>
+                    <h3 className="text-base font-semibold text-slate-900">来院回数の分布</h3>
                     <table className="mt-3 w-full border-collapse text-sm">
                       <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                         <tr>
@@ -4326,7 +4335,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
-                  <h3 className="text-sm font-semibold text-slate-800">疾患別の継続状況</h3>
+                  <h3 className="text-base font-semibold text-slate-900">疾患別の継続状況</h3>
                   <table className="mt-3 w-full border-collapse text-sm">
                     <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                       <tr>
@@ -4400,7 +4409,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
 
                 <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-soft">
                   <div className="flex flex-wrap items-start justify-between gap-3">
-                    <h3 className="text-sm font-semibold text-slate-800">年齢別の離脱率</h3>
+                    <h3 className="text-base font-semibold text-slate-900">年齢別の離脱率</h3>
                     {lifestyleAnalysis.ageStats.ranking.length >= 2 && (
                       <div className="flex flex-wrap gap-2 text-xs">
                         <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-semibold text-emerald-600">
@@ -4723,7 +4732,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
                           <tbody className="divide-y divide-slate-100 bg-white">
                             {shiftRows.map((row) => (
                               <tr key={row.key}>
-                                <td className="px-4 py-3 text-slate-700">{getWeekdayLabel(row.weekday)}</td>
+                                <td className="px-4 py-3 text-slate-700">{formatWeekdayWithSuffix(row.weekday)}</td>
                                 <td className="px-4 py-3 text-slate-700">{formatHourLabel(row.hour)}</td>
                                 <td className="px-4 py-3 text-right text-slate-600">
                                   {row.patientCount.toLocaleString("ja-JP")}名
@@ -4874,7 +4883,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
                           </span>
                         </div>
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                          <div className="rounded-2xl bg-white/10 p-5 shadow-inner shadow-black/10">
+                          <div className="rounded-2xl bg-white/25 p-5 shadow-lg shadow-black/10 backdrop-blur">
                             <div className="flex items-center justify-between gap-3">
                               <div>
                                 <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70">
@@ -4894,7 +4903,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
                             </p>
                           </div>
 
-                          <div className="rounded-2xl bg-white/10 p-5 shadow-inner shadow-black/10">
+                          <div className="rounded-2xl bg-white/25 p-5 shadow-lg shadow-black/10 backdrop-blur">
                             <div className="flex items-center justify-between gap-3">
                               <div>
                                 <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70">
@@ -4908,7 +4917,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
                             </div>
                             <p className="mt-4 text-xl font-bold">
                               {selectedSegmentInsight.topSlot
-                                ? `${getWeekdayLabel(selectedSegmentInsight.topSlot.weekday)}曜 ${formatHourLabel(selectedSegmentInsight.topSlot.hour)}`
+                                ? `${formatWeekdayWithSuffix(selectedSegmentInsight.topSlot.weekday)} ${formatHourLabel(selectedSegmentInsight.topSlot.hour)}`
                                 : "データ不足"}
                             </p>
                             <p className="mt-2 text-sm text-white/80">
@@ -4918,7 +4927,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
                             </p>
                           </div>
 
-                          <div className="rounded-2xl bg-white/10 p-5 shadow-inner shadow-black/10">
+                          <div className="rounded-2xl bg-white/25 p-5 shadow-lg shadow-black/10 backdrop-blur">
                             <div className="flex items-center justify-between gap-3">
                               <div>
                                 <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70">
@@ -4932,7 +4941,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
                             </div>
                             <p className="mt-4 text-xl font-bold">
                               {selectedSegmentInsight.highestAvgSlot
-                                ? `${getWeekdayLabel(selectedSegmentInsight.highestAvgSlot.weekday)}曜 ${formatHourLabel(selectedSegmentInsight.highestAvgSlot.hour)}`
+                                ? `${formatWeekdayWithSuffix(selectedSegmentInsight.highestAvgSlot.weekday)} ${formatHourLabel(selectedSegmentInsight.highestAvgSlot.hour)}`
                                 : "データ不足"}
                             </p>
                             <p className="mt-2 text-sm text-white/80">
@@ -4942,7 +4951,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
                             </p>
                           </div>
 
-                          <div className="rounded-2xl bg-white/10 p-5 shadow-inner shadow-black/10">
+                          <div className="rounded-2xl bg-white/25 p-5 shadow-lg shadow-black/10 backdrop-blur">
                             <div className="flex items-center justify-between gap-3">
                               <div>
                                 <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/70">
@@ -4969,7 +4978,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
 
                     {selectedSegmentInsight.highlights.length > 0 && (
                       <div className="rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-soft">
-                        <h3 className="text-sm font-semibold text-slate-800">注目ポイント</h3>
+                        <h3 className="text-base font-semibold text-slate-900">注目ポイント</h3>
                         <ul className="mt-2 space-y-2 text-sm text-slate-600">
                           {selectedSegmentInsight.highlights.map((item, index) => (
                             <li key={`multivariate-highlight-${index}`}>・{item}</li>
@@ -4993,7 +5002,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
                         return (
                           <div
                             key={`weekday-group-${selectedInsightSegment}-${group.weekday}`}
-                            className="rounded-3xl border border-slate-200 bg-white/95 p-5 shadow-soft transition hover:-translate-y-0.5"
+                            className="rounded-3xl border border-slate-200 bg-white p-5 shadow-lg transition hover:-translate-y-1 hover:shadow-xl"
                           >
                             <button
                               type="button"
@@ -5006,8 +5015,8 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
                               className="flex w-full items-center justify-between gap-3 text-left"
                             >
                               <div>
-                                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
-                                  {group.label}曜
+                                <p className="text-sm font-semibold tracking-[0.2em] text-slate-700">
+                                  {group.label === "祝日" ? "祝日" : `${formatWeekdayWithSuffix(group.weekday)}`}
                                 </p>
                                 <p className="mt-1 text-xl font-bold text-slate-800">
                                   {groupTotal.toLocaleString("ja-JP")}名
@@ -5124,7 +5133,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
                                     >
                                       <div>
                                         <p className="text-xs font-semibold text-slate-500">{formatHourLabel(slot.hour)}</p>
-                                        <p className="text-sm font-semibold text-slate-800">
+                                        <p className="text-base font-semibold text-slate-900">
                                           {slot.totalPatients.toLocaleString("ja-JP")}名
                                         </p>
                                       </div>
@@ -5154,7 +5163,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
                   </p>
                 )}
                 <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-slate-800">データ取込状況</h3>
+                  <h3 className="text-base font-semibold text-slate-900">データ取込状況</h3>
                   <div className="grid gap-4 md:grid-cols-3">
                     {channelSummaryCards.map((card) => (
                       <div
