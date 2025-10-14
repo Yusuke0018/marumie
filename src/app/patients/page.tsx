@@ -142,7 +142,7 @@ const DiagnosisCategoryChart = lazy(() =>
 
 const KARTE_MIN_MONTH = "2000-01";
 
-const LISTING_CATEGORIES: ListingCategory[] = ["内科", "胃カメラ", "大腸カメラ", "発熱外来"];
+const LISTING_CATEGORIES: ListingCategory[] = ["内科", "発熱外来", "胃カメラ", "大腸カメラ"];
 const SURVEY_FILE_TYPES: SurveyFileType[] = ["外来", "内視鏡"];
 
 const TARGET_DEPARTMENT_KEYWORDS = ["発熱", "総合診療"];

@@ -72,12 +72,12 @@ const RESERVATION_STORAGE_KEY = "clinic-analytics/reservations/v1";
 // カテゴリごとの診療科マッピング
 const CATEGORY_MAPPING: Record<ListingCategory, string[]> = {
   内科: ["内科・外科外来（大岩医師）", "内科外来（担当医師）"],
+  発熱外来: ["発熱外来", "発熱・風邪症状外来"],
   胃カメラ: ["胃カメラ"],
   大腸カメラ: ["大腸カメラ", "人間ドックB", "内視鏡ドック"],
-  発熱外来: ["発熱外来", "発熱・風邪症状外来"],
 };
 
-const CATEGORY_ORDER: ListingCategory[] = ["内科", "胃カメラ", "大腸カメラ", "発熱外来"];
+const CATEGORY_ORDER: ListingCategory[] = ["内科", "発熱外来", "胃カメラ", "大腸カメラ"];
 
 // 相関係数を計算（Pearson）
 const calculateCorrelation = (x: number[], y: number[]): number => {
