@@ -49,6 +49,7 @@ export default function Navigation() {
     { href: "/survey" as const, label: "アンケート分析" },
     { href: "/listing" as const, label: "リスティング分析" },
     { href: "/correlation" as const, label: "相関分析" },
+    { href: "/ab-test" as const, label: "ABテスト" },
   ];
 
   const toggleMenu = () => setIsOpen((value) => !value);
