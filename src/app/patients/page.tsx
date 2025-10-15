@@ -1094,6 +1094,27 @@ const FEVER_DEPARTMENT_KEYWORDS = [
   "風邪症状外来",
 ].map(normalizeDepartmentLabel);
 
+const classifyDepartmentDisplayName = (value: string): string => {
+  const trimmed = value.trim();
+  const normalized = normalizeDepartmentLabel(trimmed);
+  if (!normalized) {
+    return "診療科未分類";
+  }
+  if (GENERAL_DEPARTMENT_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+    return "総合診療";
+  }
+  if (FEVER_DEPARTMENT_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+    return "発熱外来";
+  }
+  if (normalized.includes("内科")) {
+    return "内科";
+  }
+  if (normalized.includes("外科")) {
+    return "外科";
+  }
+  return trimmed.length > 0 ? trimmed : "診療科未分類";
+};
+
 const HOLIDAYS_JP = new Holidays("JP");
 
 const getIsoWeekday = (isoDate: string): number => {
@@ -2011,6 +2032,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
       const patientName = normalizePatientNameForKey(record.patientNameNormalized);
       const points = record.points ?? null;
       const departmentRaw = record.department?.trim() ?? "";
+      const displayDepartment = classifyDepartmentDisplayName(departmentRaw);
       if (!patientName || points === null) {
         return;
       }
@@ -2022,10 +2044,16 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
         return;
       }
 
-      const normalizedDept = normalizeDepartmentLabel(departmentRaw);
+      const normalizedDept = normalizeDepartmentLabel(displayDepartment);
       const matchIndex = candidates.findIndex((candidate) => {
-        const candidateDept = normalizeDepartmentLabel(candidate.department ?? "");
-        return candidateDept === normalizedDept;
+        const candidateDept = normalizeDepartmentLabel(
+          classifyDepartmentDisplayName(candidate.department ?? ""),
+        );
+        return (
+          candidateDept === normalizedDept ||
+          candidateDept.includes(normalizedDept) ||
+          normalizedDept.includes(candidateDept)
+        );
       });
       const match = matchIndex >= 0 ? candidates.splice(matchIndex, 1)[0] : candidates.shift();
       if (!match) {
@@ -2043,7 +2071,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
 
       const weekday = visitDate.getDay();
       const hour = visitDate.getHours();
-      const department = departmentRaw.length > 0 ? departmentRaw : "診療科未分類";
+      const department = displayDepartment;
 
       if (!departmentMap.has(department)) {
         departmentMap.set(department, new Map<string, ShiftStat>());
