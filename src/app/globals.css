@@ -80,3 +80,17 @@ a {
 .picker-area-marker {
   pointer-events: auto;
 }
+
+/* Leafletツールチップをマップ領域内に収める */
+.leaflet-tooltip {
+  max-width: 280px !important;
+  white-space: normal !important;
+}
+
+.leaflet-container {
+  overflow: hidden !important;
+}
+
+.leaflet-tooltip-pane {
+  z-index: 650 !important;
+}
