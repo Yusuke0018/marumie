@@ -293,7 +293,7 @@ export default function ABTestPage() {
 
     // 保険種別分布
     const insuranceDistribution: Record<string, number> = {};
-    filteredRecords.forEach((record) => {
+    filteredRecords.forEach(() => {
       // 保険種別は仮でdepartmentから抽出（実際のデータ構造に応じて調整）
       const insurance = "不明"; // TODO: 実際のカラムから取得
       insuranceDistribution[insurance] = (insuranceDistribution[insurance] || 0) + 1;
@@ -333,14 +333,17 @@ export default function ABTestPage() {
     };
   };
 
+  // 集計関数をuseCallbackでメモ化
+  const calculateMetricsCallback = useMemo(() => calculateMetrics, [karteData]);
+
   // 各期間の集計結果
   const metricsMap = useMemo(() => {
     const map: Record<string, ComparisonMetrics> = {};
     dateRanges.forEach((range) => {
-      map[range.id] = calculateMetrics(range.dates);
+      map[range.id] = calculateMetricsCallback(range.dates);
     });
     return map;
-  }, [dateRanges, karteData]);
+  }, [dateRanges, calculateMetricsCallback]);
 
   // 差分・増減率計算
   const calculateDiff = (baseValue: number, compareValue: number) => {
@@ -348,8 +351,6 @@ export default function ABTestPage() {
     const rate = baseValue !== 0 ? ((diff / baseValue) * 100).toFixed(1) : "N/A";
     return { diff, rate };
   };
-
-  const activeRange = dateRanges.find((r) => r.id === activeRangeId);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
