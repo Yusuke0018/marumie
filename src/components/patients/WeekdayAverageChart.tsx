@@ -19,23 +19,27 @@ type WeekdayAverageChartProps = {
   endMonth: string;
 };
 
-// 診療科名を正規化（空白・記号を除去）
-const normalizeDepartment = (value: string): string => {
+// 表示する診療科の定義（この順で表示）
+const DEPARTMENT_ORDER = ["総合診療", "発熱外来", "内視鏡"] as const;
+type TargetDepartment = (typeof DEPARTMENT_ORDER)[number];
+
+// 診療科名を正規化し、3つの対象診療科のいずれかに分類
+const normalizeDepartment = (value: string): TargetDepartment | null => {
   const normalized = value.trim().replace(/[\s・●()（）【】\[\]\-]/g, "");
 
-  // 表記ゆれを統一
+  // 表記ゆれを統一して3診療科に分類
   if (normalized.includes("内科外来") || normalized.includes("外科外来") || normalized.includes("総合診療")) {
     return "総合診療";
-  }
-  if (normalized.includes("内視鏡") || normalized.includes("人間ドック")) {
-    return "内視鏡";
   }
   if (normalized.includes("発熱") || normalized.includes("風邪")) {
     return "発熱外来";
   }
+  if (normalized.includes("内視鏡") || normalized.includes("人間ドック")) {
+    return "内視鏡";
+  }
 
-  // その他はそのまま返す
-  return value.trim();
+  // 対象外の診療科はnullを返す
+  return null;
 };
 
 const WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土", "日", "祝日"];
@@ -75,12 +79,16 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
   const data = useMemo(() => {
     const holidays = new Holidays("JP");
 
-    // 曜日×診療科の集計マップ
-    const weekdayMap = new Map<number, Map<string, { count: number; days: Set<string> }>>();
+    // 曜日×診療科の集計マップ（3診療科のみ）
+    const weekdayMap = new Map<number, Map<TargetDepartment, { count: number; days: Set<string> }>>();
 
     // 初期化（0=月曜日, 1=火曜日, ..., 6=日曜日, 7=祝日）
     for (let i = 0; i <= 7; i++) {
-      weekdayMap.set(i, new Map());
+      const deptMap = new Map<TargetDepartment, { count: number; days: Set<string> }>();
+      for (const dept of DEPARTMENT_ORDER) {
+        deptMap.set(dept, { count: 0, days: new Set() });
+      }
+      weekdayMap.set(i, deptMap);
     }
 
     // レコードを集計
@@ -93,9 +101,9 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
       if (startMonth && month < startMonth) continue;
       if (endMonth && month > endMonth) continue;
 
-      // 診療科名を正規化
+      // 診療科名を正規化（3診療科のみ）
       const department = normalizeDepartment(departmentRaw);
-      if (!department) continue;
+      if (!department) continue; // 対象外の診療科はスキップ
 
       const baseWeekday = getIsoWeekday(dateStr);
       if (Number.isNaN(baseWeekday)) continue;
@@ -103,78 +111,46 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
       const isHoliday = isJapaneseHolidayIso(holidays, dateStr) || isNewYearPeriodIso(dateStr);
       const weekdayIndex = isHoliday ? 7 : toNormalizedWeekdayIndex(baseWeekday);
 
-      const dayMap = weekdayMap.get(weekdayIndex)!;
-      if (!dayMap.has(department)) {
-        dayMap.set(department, { count: 0, days: new Set() });
-      }
-
-      const deptData = dayMap.get(department)!;
+      const deptData = weekdayMap.get(weekdayIndex)!.get(department)!;
       deptData.count++;
       deptData.days.add(dateStr);
     }
 
-    // 全診療科を収集してソート
-    const allDepartments = new Set<string>();
-    for (const dayMap of weekdayMap.values()) {
-      for (const dept of dayMap.keys()) {
-        allDepartments.add(dept);
-      }
-    }
-    const departmentOrder = Array.from(allDepartments).sort((a, b) => a.localeCompare(b, "ja"));
-
-    // 平均を計算
+    // 平均を計算（固定順: 総合診療→発熱外来→内視鏡）
     const result = [];
     for (let i = 0; i <= 7; i++) {
       const weekdayLabel = WEEKDAY_LABELS[i];
-      const dayMap = weekdayMap.get(i)!;
+      const deptMap = weekdayMap.get(i)!;
 
       const entry: Record<string, string | number> = { weekday: weekdayLabel };
 
-      for (const dept of departmentOrder) {
-        const deptData = dayMap.get(dept);
-        if (deptData) {
-          const daysCount = deptData.days.size;
-          const average = daysCount > 0 ? Math.round((deptData.count / daysCount) * 10) / 10 : 0;
-          entry[dept] = average;
-        } else {
-          entry[dept] = 0;
-        }
+      for (const dept of DEPARTMENT_ORDER) {
+        const deptData = deptMap.get(dept)!;
+        const daysCount = deptData.days.size;
+        const average = daysCount > 0 ? Math.round((deptData.count / daysCount) * 10) / 10 : 0;
+        entry[dept] = average;
       }
 
       result.push(entry);
     }
 
-    return { data: result, departments: departmentOrder };
+    return result;
   }, [records, startMonth, endMonth]);
 
-  // 診療科ごとの色を動的に割り当て
-  const COLOR_PALETTE = [
-    "#0f766e", // 総合診療（teal-700）
-    "#4338ca", // 内視鏡（indigo-700）
-    "#b91c1c", // 発熱外来（red-700）
-    "#ea580c", // オレンジ
-    "#7c3aed", // パープル
-    "#0891b2", // シアン
-    "#059669", // グリーン
-    "#dc2626", // レッド
-    "#9333ea", // バイオレット
-  ];
-
-  const departmentColors = useMemo(() => {
-    const colors: Record<string, string> = {};
-    data.departments.forEach((dept, index) => {
-      colors[dept] = COLOR_PALETTE[index % COLOR_PALETTE.length];
-    });
-    return colors;
-  }, [data.departments]);
+  // 診療科ごとの色設定（固定順）
+  const DEPARTMENT_COLORS: Record<TargetDepartment, string> = {
+    総合診療: "#0f766e", // teal-700
+    発熱外来: "#b91c1c", // red-700
+    内視鏡: "#4338ca",   // indigo-700
+  };
 
   const renderLegend: LegendProps["content"] = () => (
     <div className="mt-3 flex flex-wrap justify-center gap-5 text-sm font-semibold text-slate-700">
-      {data.departments.map((dept) => (
+      {DEPARTMENT_ORDER.map((dept) => (
         <span key={dept} className="inline-flex items-center gap-2">
           <span
             className="h-2.5 w-2.5 rounded-full"
-            style={{ backgroundColor: departmentColors[dept] }}
+            style={{ backgroundColor: DEPARTMENT_COLORS[dept] }}
           />
           {dept}
         </span>
@@ -185,7 +161,7 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
   return (
     <div className="h-96">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data.data} barCategoryGap={18}>
+        <BarChart data={data} barCategoryGap={18}>
           <CartesianGrid strokeDasharray="3 3" stroke="#CBD5F5" />
           <XAxis dataKey="weekday" tick={{ fontSize: 13, fill: "#1f2937", fontWeight: 600 }} />
           <YAxis
@@ -207,11 +183,11 @@ export const WeekdayAverageChart = ({ records, startMonth, endMonth }: WeekdayAv
             }}
           />
           <Legend verticalAlign="bottom" content={renderLegend} />
-          {data.departments.map((dept) => (
+          {DEPARTMENT_ORDER.map((dept) => (
             <Bar
               key={dept}
               dataKey={dept}
-              fill={departmentColors[dept]}
+              fill={DEPARTMENT_COLORS[dept]}
               name={dept}
               radius={[10, 10, 6, 6]}
             />
