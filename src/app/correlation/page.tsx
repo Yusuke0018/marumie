@@ -381,7 +381,7 @@ export default function CorrelationPage() {
       trueFirst: bucket.trueFirst,
       trueFirstRatio: trueFirstRatios[hour],
       reservations: bucket.reservations,
-      reservationsRatio: reservationRatios[hour],
+      reservationsRatio: Number(reservationRatios[hour].toFixed(1)),
     }));
 
     return {
