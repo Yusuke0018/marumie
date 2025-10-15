@@ -1082,10 +1082,6 @@ const normalizeDepartmentLabel = (value: string) =>
 const GENERAL_DEPARTMENT_KEYWORDS = [
   "内科・外科外来（大岩医師）",
   "内科・外科外来",
-  "内科外科外来",
-  "総合診療",
-  "総合診療科",
-  "総合診療外来",
 ].map(normalizeDepartmentLabel);
 
 const FEVER_DEPARTMENT_KEYWORDS = [
