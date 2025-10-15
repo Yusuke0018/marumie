@@ -136,7 +136,7 @@ const GeoDistributionMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-[360px] items-center justify-center rounded-3xl border border-slate-200 bg-white text-slate-500 sm:h-[520px]">
+      <div className="flex h-[520px] items-center justify-center rounded-3xl border border-slate-200 bg-white text-slate-500">
         地図コンポーネントを読み込み中です...
       </div>
     ),
@@ -216,27 +216,6 @@ type ComparisonSelectionPreset =
 
 const arraysEqual = (a: string[], b: string[]) =>
   a.length === b.length && a.every((value, index) => value === b[index]);
-
-const useIsMobile = () => {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    const mediaQuery = window.matchMedia("(max-width: 640px)");
-    const update = () => setIsMobile(mediaQuery.matches);
-    update();
-    if (typeof mediaQuery.addEventListener === "function") {
-      mediaQuery.addEventListener("change", update);
-      return () => mediaQuery.removeEventListener("change", update);
-    }
-    mediaQuery.addListener(update);
-    return () => mediaQuery.removeListener(update);
-  }, []);
-
-  return isMobile;
-};
 
 const HIDDEN_AREA_LABEL = "住所未設定";
 
@@ -745,8 +724,6 @@ const MapAnalysisPage = () => {
     resetPeriod: resetMapPeriod,
   } = useAnalysisPeriodRange(sortedMonths, { autoSelectLatest: false });
 
-  const isMobile = useIsMobile();
-
   const mapRecords = useMemo<MapRecord[]>(() => {
     if (karteRecords.length === 0) {
       return [];
@@ -816,7 +793,6 @@ const MapAnalysisPage = () => {
   const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>([]);
   const [selectionPreset, setSelectionPreset] = useState<ComparisonSelectionPreset>("recommended");
   const [comparisonMetric, setComparisonMetric] = useState<"share" | "count">("share");
-  const isShareMetric = comparisonMetric === "share";
   const [focusAreaId, setFocusAreaId] = useState<string | null>(null);
   const [pendingAreaId, setPendingAreaId] = useState<string>("");
   const [rangeA, setRangeA] = useState<ComparisonRange>({ start: null, end: null });
@@ -910,7 +886,7 @@ const MapAnalysisPage = () => {
       : null;
   const periodRangeDisplay =
     startMonthLabel && endMonthLabel
-      ? `${startMonthLabel}〜\n${endMonthLabel}`
+      ? `${startMonthLabel} → ${endMonthLabel}`
       : startMonthLabel ?? endMonthLabel ?? "期間未設定";
 
   const totalRecords = filteredMapRecords.length;
@@ -1113,7 +1089,7 @@ const MapAnalysisPage = () => {
   const periodALabel = rangeDescription.a;
   const periodBLabel = rangeDescription.b;
 
-  const filteredComparisonRows = useMemo<ComparisonRow[]>(() => {
+  const topDiffRows = useMemo<ComparisonRow[]>(() => {
     if (!validComparison) {
       return [];
     }
@@ -1140,134 +1116,83 @@ const MapAnalysisPage = () => {
       }
       return true;
     });
-    return validRows;
+    return validRows.slice(0, 8);
   }, [validComparison]);
 
-  const pickIds = useCallback((rows: ComparisonRow[], limit: number) => {
-    const seen = new Set<string>();
-    const ids: string[] = [];
-    for (const row of rows) {
-      if (seen.has(row.id)) {
-        continue;
-      }
-      seen.add(row.id);
-      ids.push(row.id);
-      if (ids.length >= limit) {
-        break;
-      }
+  const defaultAreaIds = useMemo(
+    () => topDiffRows.slice(0, MAX_SELECTED_AREAS).map((row) => row.id),
+    [topDiffRows],
+  );
+
+  const increaseComparisonRows = useMemo(() => {
+    if (!validComparison) {
+      return [] as ComparisonRow[];
     }
-    return ids;
-  }, []);
+    return validComparison.rows
+      .filter((row) => {
+        const label = row.label.trim();
+        if (isCorporateLabel(label)) {
+          return false;
+        }
+        if (row.diffShare <= 0) {
+          return false;
+        }
+        const prominentShare = Math.max(row.shareA, row.shareB);
+        return prominentShare >= SHARE_RATIO_THRESHOLD;
+      })
+      .sort((a, b) => b.diffShare - a.diffShare);
+  }, [validComparison]);
 
-  const shareRecommendedIds = useMemo(
-    () =>
-      pickIds(
-        [...filteredComparisonRows].sort(
-          (a, b) => Math.abs(b.diffShare) - Math.abs(a.diffShare),
-        ),
-        MAX_SELECTED_AREAS,
-      ),
-    [filteredComparisonRows, pickIds],
-  );
+  const decreaseComparisonRows = useMemo(() => {
+    if (!validComparison) {
+      return [] as ComparisonRow[];
+    }
+    return validComparison.rows
+      .filter((row) => {
+        const label = row.label.trim();
+        if (isCorporateLabel(label)) {
+          return false;
+        }
+        if (row.diffShare >= 0) {
+          return false;
+        }
+        const prominentShare = Math.max(row.shareA, row.shareB);
+        return prominentShare >= SHARE_RATIO_THRESHOLD;
+      })
+      .sort((a, b) => a.diffShare - b.diffShare);
+  }, [validComparison]);
 
-  const shareIncreaseIds = useMemo(
-    () =>
-      pickIds(
-        filteredComparisonRows
-          .filter((row) => row.diffShare > 0)
-          .sort((a, b) => b.diffShare - a.diffShare),
-        MAX_SELECTED_AREAS,
-      ),
-    [filteredComparisonRows, pickIds],
-  );
+  const selectionPresetMap = useMemo(() => {
+    const pickIds = (rows: ComparisonRow[], limit: number) => {
+      const seen = new Set<string>();
+      const ids: string[] = [];
+      for (const row of rows) {
+        if (seen.has(row.id)) {
+          continue;
+        }
+        seen.add(row.id);
+        ids.push(row.id);
+        if (ids.length >= limit) {
+          break;
+        }
+      }
+      return ids;
+    };
 
-  const shareDecreaseIds = useMemo(
-    () =>
-      pickIds(
-        filteredComparisonRows
-          .filter((row) => row.diffShare < 0)
-          .sort((a, b) => a.diffShare - b.diffShare),
-        MAX_SELECTED_AREAS,
-      ),
-    [filteredComparisonRows, pickIds],
-  );
+    const increaseTop10 = pickIds(increaseComparisonRows, MAX_SELECTED_AREAS);
+    const decreaseTop10 = pickIds(decreaseComparisonRows, MAX_SELECTED_AREAS);
+    const mixedTop5 = pickIds(
+      [...increaseComparisonRows.slice(0, 5), ...decreaseComparisonRows.slice(0, 5)],
+      MAX_SELECTED_AREAS,
+    );
 
-  const countRecommendedIds = useMemo(
-    () =>
-      pickIds(
-        [...filteredComparisonRows].sort(
-          (a, b) => Math.abs(b.diff) - Math.abs(a.diff),
-        ),
-        MAX_SELECTED_AREAS,
-      ),
-    [filteredComparisonRows, pickIds],
-  );
-
-  const countIncreaseIds = useMemo(
-    () =>
-      pickIds(
-        filteredComparisonRows
-          .filter((row) => row.diff > 0)
-          .sort((a, b) => b.diff - a.diff),
-        MAX_SELECTED_AREAS,
-      ),
-    [filteredComparisonRows, pickIds],
-  );
-
-  const countDecreaseIds = useMemo(
-    () =>
-      pickIds(
-        filteredComparisonRows
-          .filter((row) => row.diff < 0)
-          .sort((a, b) => a.diff - b.diff),
-        MAX_SELECTED_AREAS,
-      ),
-    [filteredComparisonRows, pickIds],
-  );
-
-  const recommendedIds = useMemo(
-    () => (isShareMetric ? shareRecommendedIds : countRecommendedIds),
-    [countRecommendedIds, isShareMetric, shareRecommendedIds],
-  );
-
-  const increasePresetIds = useMemo(
-    () => (isShareMetric ? shareIncreaseIds : countIncreaseIds),
-    [countIncreaseIds, isShareMetric, shareIncreaseIds],
-  );
-
-  const decreasePresetIds = useMemo(
-    () => (isShareMetric ? shareDecreaseIds : countDecreaseIds),
-    [countDecreaseIds, isShareMetric, shareDecreaseIds],
-  );
-
-  const mixedPresetIds = useMemo(() => {
-    const combined = [
-      ...increasePresetIds.slice(0, 5),
-      ...decreasePresetIds.slice(0, 5),
-    ];
-    return pickIds(
-      combined
-        .map((id) => filteredComparisonRows.find((row) => row.id === id))
-        .filter((row): row is ComparisonRow => Boolean(row))
-        .sort((a, b) => {
-          if (isShareMetric) {
-            return Math.abs(b.diffShare) - Math.abs(a.diffShare);
-          }
-          return Math.abs(b.diff) - Math.abs(a.diff);
-        }),
-        MAX_SELECTED_AREAS,
-      );
-  }, [decreasePresetIds, filteredComparisonRows, increasePresetIds, isShareMetric, pickIds]);
-
-  const selectionPresetMap = useMemo(
-    () => ({
-      recommended: recommendedIds,
-      increaseTop10: increasePresetIds,
-      decreaseTop10: decreasePresetIds,
-      mixedTop5: mixedPresetIds,
-    }) as Record<Exclude<ComparisonSelectionPreset, "custom">, string[]>,
-    [decreasePresetIds, increasePresetIds, mixedPresetIds, recommendedIds],
-  );
+    return {
+      recommended: defaultAreaIds,
+      increaseTop10,
+      decreaseTop10,
+      mixedTop5,
+    } as Record<Exclude<ComparisonSelectionPreset, "custom">, string[]>;
+  }, [defaultAreaIds, decreaseComparisonRows, increaseComparisonRows]);
 
   const comparisonBarData = useMemo<
     Array<{
@@ -1283,11 +1208,11 @@ const MapAnalysisPage = () => {
       accent: string;
     }>
   >(() => {
-    if (filteredComparisonRows.length === 0) {
+    if (!validComparison || topDiffRows.length === 0) {
       return [];
     }
     const palette = AREA_COLOR_PALETTE;
-    return filteredComparisonRows.map((row, index) => {
+    return topDiffRows.map((row, index) => {
       const { fill, accent } = palette[index % palette.length];
       const shareA = Number((row.shareA * 100).toFixed(1));
       const shareB = Number((row.shareB * 100).toFixed(1));
@@ -1305,7 +1230,7 @@ const MapAnalysisPage = () => {
         accent,
       };
     });
-  }, [filteredComparisonRows]);
+  }, [topDiffRows, validComparison]);
 
   useEffect(() => {
     if (comparisonBarData.length === 0) {
@@ -1347,46 +1272,34 @@ const MapAnalysisPage = () => {
   ]);
 
   const selectionPresetOptions = useMemo(
-    () => {
-      const recommendedLabel = isShareMetric ? "推奨（割合差分順）" : "推奨（人数差分順）";
-      const increaseLabel = isShareMetric
-        ? "増加順 TOP10（0.1%以上）"
-        : "増加人数 TOP10";
-      const decreaseLabel = isShareMetric
-        ? "減少順 TOP10（0.1%以上）"
-        : "減少人数 TOP10";
-      const mixedLabel = isShareMetric
-        ? "増加TOP5 + 減少TOP5（0.1%以上）"
-        : "増加人数TOP5 + 減少人数TOP5";
-      return [
-        {
-          value: "recommended" as const,
-          label: recommendedLabel,
-          disabled: selectionPresetMap.recommended.length === 0,
-        },
-        {
-          value: "increaseTop10" as const,
-          label: increaseLabel,
-          disabled: selectionPresetMap.increaseTop10.length === 0,
-        },
-        {
-          value: "decreaseTop10" as const,
-          label: decreaseLabel,
-          disabled: selectionPresetMap.decreaseTop10.length === 0,
-        },
-        {
-          value: "mixedTop5" as const,
-          label: mixedLabel,
-          disabled: selectionPresetMap.mixedTop5.length === 0,
-        },
-        {
-          value: "custom" as const,
-          label: "手動選択（保持）",
-          disabled: false,
-        },
-      ];
-    },
-    [isShareMetric, selectionPresetMap],
+    () => [
+      {
+        value: "recommended" as const,
+        label: "推奨（差分順）",
+        disabled: selectionPresetMap.recommended.length === 0,
+      },
+      {
+        value: "increaseTop10" as const,
+        label: "増加順 TOP10（0.1%以上）",
+        disabled: selectionPresetMap.increaseTop10.length === 0,
+      },
+      {
+        value: "decreaseTop10" as const,
+        label: "減少順 TOP10（0.1%以上）",
+        disabled: selectionPresetMap.decreaseTop10.length === 0,
+      },
+      {
+        value: "mixedTop5" as const,
+        label: "増加TOP5 + 減少TOP5（0.1%以上）",
+        disabled: selectionPresetMap.mixedTop5.length === 0,
+      },
+      {
+        value: "custom" as const,
+        label: "手動選択（保持）",
+        disabled: false,
+      },
+    ],
+    [selectionPresetMap],
   );
 
   const selectedComparisonData = useMemo(() => {
@@ -1492,31 +1405,13 @@ const MapAnalysisPage = () => {
   );
 
   const isExpandedComparison = selectedComparisonData.length >= 8;
-  const comparisonChartHeight = Math.max(
-    isMobile ? 240 : 320,
-    selectedComparisonData.length * (isMobile ? 64 : 72),
-  );
-  const diffChartHeight = Math.max(
-    isMobile ? 220 : 260,
-    selectedComparisonData.length * (isMobile ? 56 : 64),
-  );
-  const shareBarCategoryGap = isExpandedComparison
-    ? isMobile
-      ? "12%"
-      : "18%"
-    : isMobile
-      ? "20%"
-      : "26%";
-  const shareBarGap = isExpandedComparison ? (isMobile ? 2 : 4) : isMobile ? 3 : 6;
-  const diffBarCategoryGap = isExpandedComparison
-    ? isMobile
-      ? "18%"
-      : "24%"
-    : isMobile
-      ? "22%"
-      : "32%";
-  const diffBarGap = isExpandedComparison ? (isMobile ? 2 : 4) : isMobile ? 3 : 6;
-  const geoMapHeight = isMobile ? 360 : 520;
+  const comparisonChartHeight = Math.max(320, selectedComparisonData.length * 72);
+  const diffChartHeight = Math.max(260, selectedComparisonData.length * 64);
+  const shareBarCategoryGap = isExpandedComparison ? "18%" : "26%";
+  const shareBarGap = isExpandedComparison ? 4 : 6;
+  const diffBarCategoryGap = isExpandedComparison ? "24%" : "32%";
+  const diffBarGap = isExpandedComparison ? 4 : 6;
+  const isShareMetric = comparisonMetric === "share";
   const metricUnitLabel = isShareMetric ? "%" : "件";
   const primaryComparisonTitle = isShareMetric ? "来院割合の比較" : "来院人数の比較";
   const primaryComparisonSubtitle = `淡色が${periodALabel}、濃色が${periodBLabel}です（単位: ${metricUnitLabel}）。`;
@@ -2016,20 +1911,15 @@ const MapAnalysisPage = () => {
           </section>
         ) : (
           <section className="space-y-8">
-            <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-card sm:p-6">
-              <div
-                className="rounded-2xl border border-slate-200 bg-slate-50/40"
-                style={{ height: `${geoMapHeight}px` }}
-              >
-                <GeoDistributionMap
-                  reservations={filteredMapRecords}
-                  periodLabel={mapPeriodLabel}
-                  selectedAreaIds={selectedAreaIds}
-                  focusAreaId={focusAreaId}
-                  onToggleArea={handleToggleAreaFromMap}
-                  onRegisterAreas={handleRegisterAreas}
-                />
-              </div>
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
+              <GeoDistributionMap
+                reservations={filteredMapRecords}
+                periodLabel={mapPeriodLabel}
+                selectedAreaIds={selectedAreaIds}
+                focusAreaId={focusAreaId}
+                onToggleArea={handleToggleAreaFromMap}
+                onRegisterAreas={handleRegisterAreas}
+              />
             </section>
 
             <section className="rounded-3xl border border-indigo-200 bg-white/85 p-6 shadow-sm">
@@ -2037,7 +1927,7 @@ const MapAnalysisPage = () => {
                 <div>
                   <h2 className="text-base font-semibold text-slate-900">期間サマリー</h2>
                   <p className="text-xs text-slate-500">
-                    範囲: <span className="whitespace-pre-line font-semibold text-slate-700">{periodRangeDisplay}</span>
+                    範囲: <span className="font-semibold text-slate-700">{periodRangeDisplay}</span>
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
@@ -2692,10 +2582,7 @@ const MapAnalysisPage = () => {
                 閉じる
               </button>
             </div>
-          <div
-            className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/40"
-            style={{ height: `${geoMapHeight}px` }}
-          >
+          <div className="mt-4 h-[520px] rounded-2xl border border-slate-200 bg-slate-50/40">
             <GeoDistributionMap
               reservations={filteredMapRecords}
               periodLabel={mapPeriodLabel}
