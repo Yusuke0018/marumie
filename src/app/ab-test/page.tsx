@@ -2,6 +2,9 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Papa from "papaparse";
+import { DayPicker } from "react-day-picker";
+import { ja } from "date-fns/locale";
+import "react-day-picker/dist/style.css";
 import {
   BarChart,
   Bar,
@@ -229,23 +232,28 @@ export default function ABTestPage() {
     );
   };
 
-  // 個別日付の追加・削除
-  const toggleDate = (id: string, dateIso: string) => {
+  // カレンダーで複数日を選択
+  const setSelectedDates = (id: string, dates: Date[] | undefined) => {
+    if (!dates) {
+      setDateRanges(dateRanges.map((r) => (r.id === id ? { ...r, dates: [] } : r)));
+      return;
+    }
+
+    if (dates.length > 30) {
+      alert("最大30日まで選択できます");
+      return;
+    }
+
+    const dateIsos = dates.map((d) => d.toISOString().split("T")[0]).sort();
+    setDateRanges(dateRanges.map((r) => (r.id === id ? { ...r, dates: dateIsos } : r)));
+  };
+
+  // 個別日付の削除
+  const removeDate = (id: string, dateIso: string) => {
     setDateRanges(
       dateRanges.map((r) => {
         if (r.id !== id) return r;
-        const dateIndex = r.dates.indexOf(dateIso);
-        if (dateIndex >= 0) {
-          // 既に選択されている場合は削除
-          return { ...r, dates: r.dates.filter((d) => d !== dateIso) };
-        } else {
-          // 選択されていない場合は追加（最大30日）
-          if (r.dates.length >= 30) {
-            alert("最大30日まで選択できます");
-            return r;
-          }
-          return { ...r, dates: [...r.dates, dateIso].sort() };
-        }
+        return { ...r, dates: r.dates.filter((d) => d !== dateIso) };
       })
     );
   };
@@ -453,43 +461,62 @@ export default function ABTestPage() {
 
                 <div className="space-y-3">
                   <div>
-                    <label className="text-xs font-semibold text-slate-700">期間指定</label>
-                    <div className="flex gap-2 mt-1">
-                      <input
-                        type="date"
-                        className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
-                        placeholder="開始日"
-                        onChange={(e) => {
-                          const endDate = range.dates[range.dates.length - 1] || e.target.value;
-                          setDateRangeFromTo(range.id, e.target.value, endDate);
+                    <label className="text-xs font-semibold text-slate-700 mb-2 block">
+                      カレンダーから日付を選択（最大30日）
+                    </label>
+                    <div className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                      <DayPicker
+                        mode="multiple"
+                        selected={range.dates.map((d) => new Date(d + "T00:00:00"))}
+                        onSelect={(dates) => setSelectedDates(range.id, dates)}
+                        locale={ja}
+                        max={30}
+                        modifiersStyles={{
+                          selected: {
+                            backgroundColor: range.color,
+                            color: "white",
+                            fontWeight: "bold",
+                          },
                         }}
-                      />
-                      <span className="text-slate-400">〜</span>
-                      <input
-                        type="date"
-                        className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
-                        placeholder="終了日"
-                        onChange={(e) => {
-                          const startDate = range.dates[0] || e.target.value;
-                          setDateRangeFromTo(range.id, startDate, e.target.value);
+                        styles={{
+                          caption: { color: "#334155", fontWeight: "600" },
+                          head_cell: { color: "#64748b", fontWeight: "600" },
+                          day: { fontSize: "0.875rem" },
                         }}
                       />
                     </div>
                   </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-700">個別日追加</label>
-                    <input
-                      type="date"
-                      className="w-full rounded border border-slate-300 px-2 py-1 text-sm mt-1"
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          toggleDate(range.id, e.target.value);
-                          e.target.value = "";
-                        }
-                      }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
+
+                  <details>
+                    <summary className="text-xs font-semibold text-slate-700 cursor-pointer hover:text-slate-900">
+                      期間範囲で一括選択
+                    </summary>
+                    <div className="mt-2 p-3 bg-slate-50 rounded-lg">
+                      <div className="flex gap-2">
+                        <input
+                          type="date"
+                          className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
+                          placeholder="開始日"
+                          onChange={(e) => {
+                            const endDate = range.dates[range.dates.length - 1] || e.target.value;
+                            setDateRangeFromTo(range.id, e.target.value, endDate);
+                          }}
+                        />
+                        <span className="text-slate-400">〜</span>
+                        <input
+                          type="date"
+                          className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
+                          placeholder="終了日"
+                          onChange={(e) => {
+                            const startDate = range.dates[0] || e.target.value;
+                            setDateRangeFromTo(range.id, startDate, e.target.value);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </details>
+
+                  <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200">
                     <span className="font-semibold text-slate-700">
                       {range.dates.length}日間選択中
                     </span>
@@ -498,20 +525,22 @@ export default function ABTestPage() {
                         onClick={() => setDateRanges(dateRanges.map((r) => r.id === range.id ? { ...r, dates: [] } : r))}
                         className="text-red-500 hover:text-red-700 font-semibold"
                       >
-                        クリア
+                        すべてクリア
                       </button>
                     )}
                   </div>
+
                   {range.dates.length > 0 && (
-                    <div className="max-h-24 overflow-y-auto border border-slate-200 rounded p-2 text-xs space-y-1">
+                    <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg p-2 text-xs space-y-1 bg-white">
+                      <div className="font-semibold text-slate-600 mb-1 px-2">選択中の日付:</div>
                       {range.dates.map((date) => (
-                        <div key={date} className="flex items-center justify-between bg-slate-50 px-2 py-1 rounded">
-                          <span>{date}</span>
+                        <div key={date} className="flex items-center justify-between bg-slate-50 px-2 py-1.5 rounded hover:bg-slate-100 transition">
+                          <span className="font-medium">{date}</span>
                           <button
-                            onClick={() => toggleDate(range.id, date)}
-                            className="text-red-500 hover:text-red-700 ml-2"
+                            onClick={() => removeDate(range.id, date)}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 rounded px-2 py-0.5 transition"
                           >
-                            ×
+                            削除
                           </button>
                         </div>
                       ))}
