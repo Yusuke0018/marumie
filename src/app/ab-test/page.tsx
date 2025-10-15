@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Papa from "papaparse";
 import {
   BarChart,
@@ -13,6 +13,8 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { KarteRecord } from "@/lib/karteAnalytics";
+import { getCompressedItem } from "@/lib/storageCompression";
+import { KARTE_STORAGE_KEY } from "@/lib/storageKeys";
 
 type DateRange = {
   id: string;
@@ -52,12 +54,12 @@ type ComparisonMetrics = {
 };
 
 const PRESET_COLORS = [
-  "#0f766e", // teal-700
-  "#b91c1c", // red-700
-  "#4338ca", // indigo-700
-  "#ca8a04", // yellow-700
-  "#16a34a", // green-600
-  "#9333ea", // purple-600
+  "#99d6d0", // パステルティール
+  "#ffb3c1", // パステルピンク
+  "#b3c5ff", // パステルブルー
+  "#ffe599", // パステルイエロー
+  "#c1f0c1", // パステルグリーン
+  "#e6b3ff", // パステルパープル
 ];
 
 export default function ABTestPage() {
@@ -73,6 +75,21 @@ export default function ABTestPage() {
   const [karteData, setKarteData] = useState<KarteRecord[]>([]);
   const [activeRangeId, setActiveRangeId] = useState<string>("period-a");
   const [isLoading, setIsLoading] = useState(false);
+
+  // localStorageからカルテデータを読み込み
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const stored = getCompressedItem(KARTE_STORAGE_KEY);
+      if (stored) {
+        const parsed: KarteRecord[] = JSON.parse(stored);
+        setKarteData(parsed);
+      }
+    } catch (error) {
+      console.error("カルテデータの読み込みエラー:", error);
+    }
+  }, []);
 
   // CSV解析関数
   const parseKarteCsv = (text: string): KarteRecord[] => {
@@ -209,6 +226,27 @@ export default function ABTestPage() {
       dateRanges.map((r) =>
         r.id === id ? { ...r, dates } : r
       )
+    );
+  };
+
+  // 個別日付の追加・削除
+  const toggleDate = (id: string, dateIso: string) => {
+    setDateRanges(
+      dateRanges.map((r) => {
+        if (r.id !== id) return r;
+        const dateIndex = r.dates.indexOf(dateIso);
+        if (dateIndex >= 0) {
+          // 既に選択されている場合は削除
+          return { ...r, dates: r.dates.filter((d) => d !== dateIso) };
+        } else {
+          // 選択されていない場合は追加（最大30日）
+          if (r.dates.length >= 30) {
+            alert("最大30日まで選択できます");
+            return r;
+          }
+          return { ...r, dates: [...r.dates, dateIso].sort() };
+        }
+      })
     );
   };
 
@@ -413,59 +451,141 @@ export default function ABTestPage() {
                   )}
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div>
-                    <label className="text-xs text-slate-600">開始日</label>
+                    <label className="text-xs font-semibold text-slate-700">期間指定</label>
+                    <div className="flex gap-2 mt-1">
+                      <input
+                        type="date"
+                        className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
+                        placeholder="開始日"
+                        onChange={(e) => {
+                          const endDate = range.dates[range.dates.length - 1] || e.target.value;
+                          setDateRangeFromTo(range.id, e.target.value, endDate);
+                        }}
+                      />
+                      <span className="text-slate-400">〜</span>
+                      <input
+                        type="date"
+                        className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
+                        placeholder="終了日"
+                        onChange={(e) => {
+                          const startDate = range.dates[0] || e.target.value;
+                          setDateRangeFromTo(range.id, startDate, e.target.value);
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700">個別日追加</label>
                     <input
                       type="date"
-                      className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+                      className="w-full rounded border border-slate-300 px-2 py-1 text-sm mt-1"
                       onChange={(e) => {
-                        const endDate = range.dates[range.dates.length - 1] || e.target.value;
-                        setDateRangeFromTo(range.id, e.target.value, endDate);
+                        if (e.target.value) {
+                          toggleDate(range.id, e.target.value);
+                          e.target.value = "";
+                        }
                       }}
                     />
                   </div>
-                  <div>
-                    <label className="text-xs text-slate-600">終了日</label>
-                    <input
-                      type="date"
-                      className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
-                      onChange={(e) => {
-                        const startDate = range.dates[0] || e.target.value;
-                        setDateRangeFromTo(range.id, startDate, e.target.value);
-                      }}
-                    />
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700">
+                      {range.dates.length}日間選択中
+                    </span>
+                    {range.dates.length > 0 && (
+                      <button
+                        onClick={() => setDateRanges(dateRanges.map((r) => r.id === range.id ? { ...r, dates: [] } : r))}
+                        className="text-red-500 hover:text-red-700 font-semibold"
+                      >
+                        クリア
+                      </button>
+                    )}
                   </div>
-                  <div className="text-xs text-slate-600">
-                    {range.dates.length}日間選択中
-                  </div>
+                  {range.dates.length > 0 && (
+                    <div className="max-h-24 overflow-y-auto border border-slate-200 rounded p-2 text-xs space-y-1">
+                      {range.dates.map((date) => (
+                        <div key={date} className="flex items-center justify-between bg-slate-50 px-2 py-1 rounded">
+                          <span>{date}</span>
+                          <button
+                            onClick={() => toggleDate(range.id, date)}
+                            className="text-red-500 hover:text-red-700 ml-2"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* データアップロードセクション */}
+        {/* データ読み込みセクション */}
         <div className="mb-8 rounded-2xl bg-white p-6 shadow-lg">
           <h2 className="mb-4 text-2xl font-semibold text-slate-700">データ読み込み</h2>
-          <div className="flex items-center gap-4">
-            <input
-              type="file"
-              accept=".csv"
-              onChange={handleKarteUpload}
-              disabled={isLoading}
-              className="rounded-lg border border-slate-300 px-4 py-2 disabled:bg-slate-100"
-            />
-            {isLoading && <span className="text-sm text-slate-600">読み込み中...</span>}
-            {karteData.length > 0 && (
-              <span className="text-sm font-semibold text-green-600">
-                {karteData.length.toLocaleString()}件読み込み済み
-              </span>
-            )}
-          </div>
-          <p className="mt-2 text-sm text-slate-600">
-            カルテ集計CSVをアップロードしてください
-          </p>
+
+          {karteData.length > 0 ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 p-4 bg-green-50 border-2 border-green-200 rounded-xl">
+                <div className="flex-shrink-0 w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xl">✓</span>
+                </div>
+                <div>
+                  <p className="font-semibold text-green-900">
+                    データ管理ページのカルテデータを使用中
+                  </p>
+                  <p className="text-sm text-green-700">
+                    {karteData.length.toLocaleString()}件のレコードが読み込まれています
+                  </p>
+                </div>
+              </div>
+              <details className="text-sm text-slate-600">
+                <summary className="cursor-pointer font-semibold hover:text-slate-800">
+                  別のCSVをアップロードする場合はこちら
+                </summary>
+                <div className="mt-3 p-4 bg-slate-50 rounded-lg">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleKarteUpload}
+                    disabled={isLoading}
+                    className="w-full rounded-lg border border-slate-300 px-4 py-2 disabled:bg-slate-100"
+                  />
+                  {isLoading && <span className="text-sm text-slate-600 mt-2 block">読み込み中...</span>}
+                  <p className="mt-2 text-xs text-slate-500">
+                    新しいCSVをアップロードすると、現在のデータが上書きされます
+                  </p>
+                </div>
+              </details>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 p-4 bg-amber-50 border-2 border-amber-200 rounded-xl">
+                <div className="flex-shrink-0 w-10 h-10 bg-amber-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xl">!</span>
+                </div>
+                <div>
+                  <p className="font-semibold text-amber-900">
+                    カルテデータがありません
+                  </p>
+                  <p className="text-sm text-amber-700">
+                    データ管理ページでカルテCSVをアップロードするか、こちらから直接アップロードしてください
+                  </p>
+                </div>
+              </div>
+              <input
+                type="file"
+                accept=".csv"
+                onChange={handleKarteUpload}
+                disabled={isLoading}
+                className="w-full rounded-lg border border-slate-300 px-4 py-2 disabled:bg-slate-100"
+              />
+              {isLoading && <span className="text-sm text-slate-600">読み込み中...</span>}
+            </div>
+          )}
         </div>
 
         {/* 比較結果セクション */}
