@@ -78,6 +78,9 @@ const categorizeKarteDepartment = (
 };
 
 const getReservationTimestamp = (reservation: Reservation): string | null => {
+  if (reservation.bookingIso && reservation.bookingIso.length >= 10) {
+    return reservation.bookingIso;
+  }
   if (reservation.appointmentIso && reservation.appointmentIso.length >= 10) {
     return reservation.appointmentIso;
   }
@@ -88,6 +91,9 @@ const getReservationTimestamp = (reservation: Reservation): string | null => {
 };
 
 const getReservationDateKey = (reservation: Reservation): string | null => {
+  if (reservation.bookingDate && reservation.bookingDate.length >= 10) {
+    return reservation.bookingDate;
+  }
   const timestamp = getReservationTimestamp(reservation);
   if (timestamp) {
     return timestamp.slice(0, 10);
@@ -193,7 +199,10 @@ export const buildTrueFirstAggregation = (
   reservations.forEach((reservation) => {
     const timestamp = getReservationTimestamp(reservation);
     const dateKey = getReservationDateKey(reservation);
-    const hour = reservation.reservationHour;
+    const hour =
+      reservation.bookingHour !== undefined && reservation.bookingHour !== null
+        ? reservation.bookingHour
+        : reservation.reservationHour;
     if (!timestamp || !dateKey || hour < 0 || hour > 23) {
       return;
     }

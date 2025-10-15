@@ -36,6 +36,9 @@ export type Reservation = {
   reservationHour: number;
   receivedAtIso: string;
   appointmentIso: string | null;
+  bookingIso?: string | null;
+  bookingDate?: string | null;
+  bookingHour?: number | null;
   patientId: string;
   patientName?: string | null;
   patientNameNormalized?: string | null;
@@ -330,6 +333,30 @@ const isValidReservationRecord = (record: unknown): record is Reservation => {
     return false;
   }
 
+  if (
+    item.bookingIso !== undefined &&
+    item.bookingIso !== null &&
+    typeof item.bookingIso !== "string"
+  ) {
+    return false;
+  }
+
+  if (
+    item.bookingDate !== undefined &&
+    item.bookingDate !== null &&
+    typeof item.bookingDate !== "string"
+  ) {
+    return false;
+  }
+
+  if (
+    item.bookingHour !== undefined &&
+    item.bookingHour !== null &&
+    (typeof item.bookingHour !== "number" || Number.isNaN(item.bookingHour))
+  ) {
+    return false;
+  }
+
   return true;
 };
 
@@ -406,6 +433,65 @@ const parseJstDateTime = (raw: string | undefined): ParsedDateTime | null => {
   };
 };
 
+const parseTimeWithDate = (
+  dateKey: string,
+  timeValue: string | undefined,
+): ParsedDateTime | null => {
+  if (!timeValue) {
+    return null;
+  }
+  const trimmed = timeValue.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const [hourStr, minuteStr = "0"] = trimmed.split(":");
+  const hour = Number(hourStr);
+  const minute = Number(minuteStr);
+
+  if (
+    Number.isNaN(hour) ||
+    Number.isNaN(minute) ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59
+  ) {
+    return null;
+  }
+
+  const [yearStr, monthStr, dayStr] = dateKey.split("-");
+  if (!yearStr || !monthStr || !dayStr) {
+    return null;
+  }
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  if (
+    Number.isNaN(year) ||
+    Number.isNaN(month) ||
+    Number.isNaN(day) ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31
+  ) {
+    return null;
+  }
+
+  const mm = month.toString().padStart(2, "0");
+  const dd = day.toString().padStart(2, "0");
+  const hh = hour.toString().padStart(2, "0");
+  const mi = minute.toString().padStart(2, "0");
+  const normalizedDate = `${year}-${mm}-${dd}`;
+  return {
+    iso: `${normalizedDate}T${hh}:${mi}:00+09:00`,
+    dateKey: normalizedDate,
+    monthKey: `${year}-${mm}`,
+    hour,
+  };
+};
+
 export const parseReservationCsv = (content: string): Reservation[] => {
   const parsed = Papa.parse<Record<string, string>>(content, {
     header: true,
@@ -429,6 +515,7 @@ export const parseReservationCsv = (content: string): Reservation[] => {
     const visitType = normalizeVisitType(row["初再診"]);
     const appointment = parseJstDateTime(row["予約日時"]);
     const appointmentOrReceived = appointment ?? received;
+    const booking = parseTimeWithDate(received.dateKey, row["予約時刻_時分"]);
     const patientId = row["患者ID"]?.trim() ?? "";
     const patientNameCandidate = pickFirstNonEmpty(row, [
       "患者氏名",
@@ -491,6 +578,9 @@ export const parseReservationCsv = (content: string): Reservation[] => {
       reservationHour: appointmentOrReceived.hour,
       receivedAtIso: received.iso,
       appointmentIso: appointment?.iso ?? null,
+      bookingIso: booking?.iso ?? received.iso,
+      bookingDate: booking?.dateKey ?? received.dateKey,
+      bookingHour: booking?.hour ?? received.hour,
       patientId,
       patientName,
       patientNameNormalized,
