@@ -1,4 +1,5 @@
 import Papa from "papaparse";
+import { normalizeNameForMatching } from "@/lib/patientIdentity";
 
 export type VisitType = "初診" | "再診" | "未設定";
 
@@ -21,9 +22,13 @@ const normalizePatientName = (value: string | undefined): {
     .replace(/\u3000/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+  const matchingNormalized = normalizeNameForMatching(raw);
+
   return {
     raw,
-    normalized: normalized.length > 0 ? normalized : null,
+    normalized:
+      matchingNormalized ??
+      (normalized.length > 0 ? normalized : null),
   };
 };
 

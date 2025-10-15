@@ -151,7 +151,6 @@ export const buildTrueFirstAggregation = (
 
   for (const reservation of reservations) {
     const identityKey = createPatientIdentityKey({
-      patientId: reservation.patientId,
       patientNameNormalized: reservation.patientNameNormalized ?? undefined,
       patientName: reservation.patientName ?? undefined,
     });
@@ -216,7 +215,6 @@ export const buildTrueFirstAggregation = (
     reservationBucket[category][hour] += 1;
 
     const identityKey = createPatientIdentityKey({
-      patientId: reservation.patientId,
       patientNameNormalized: reservation.patientNameNormalized ?? undefined,
       patientName: reservation.patientName ?? undefined,
     });
