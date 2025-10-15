@@ -115,6 +115,7 @@ import {
 } from "@/lib/diagnosisData";
 import { KARTE_STORAGE_KEY, KARTE_TIMESTAMP_KEY } from "@/lib/storageKeys";
 import type { SharedDataBundle } from "@/lib/sharedBundle";
+import { normalizeNameForMatching } from "@/lib/patientIdentity";
 import { LifestyleViewContext } from "./LifestyleViewContext";
 
 const MonthlyTrendChart = lazy(() =>
@@ -264,25 +265,6 @@ type MultivariateSegmentInsight = {
 type MultivariateInsights = {
   hasData: boolean;
   segments: Record<MultivariateSegmentKey, MultivariateSegmentInsight>;
-};
-
-const toHiragana = (value: string) =>
-  value.replace(/[\u30a1-\u30f6]/g, (ch) =>
-    String.fromCharCode(ch.charCodeAt(0) - 0x60),
-  );
-
-const normalizeNameForMatching = (value: string | null | undefined): string | null => {
-  if (!value) {
-    return null;
-  }
-  const nfkc = value.normalize("NFKC");
-  const withoutRuby = nfkc.replace(/[（(][^）)]*[）)]/g, "");
-  const trimmed = withoutRuby.replace(/\u3000/g, " ").replace(/\s+/g, " ").trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-  const hiragana = toHiragana(trimmed).replace(/\s+/g, "");
-  return hiragana.length > 0 ? hiragana : null;
 };
 
 const createEmptyListingTotals = (): Record<ListingCategory, number> =>
@@ -1062,6 +1044,14 @@ const normalizePatientName = (value: string | null | undefined): string | null =
     .replace(/\s+/g, " ")
     .trim();
   return normalized.length > 0 ? normalized : null;
+};
+
+const normalizePatientNameForKey = (value: string | null | undefined): string | null => {
+  const matching = normalizeNameForMatching(value);
+  if (matching) {
+    return matching;
+  }
+  return normalizePatientName(value);
 };
 
 const WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土", "日", "祝日"] as const;
@@ -1984,7 +1974,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
 
     const reservationMap = new Map<string, Reservation[]>();
     reservationsRecords.forEach((reservation) => {
-      const normalizedName = normalizePatientName(
+      const normalizedName = normalizePatientNameForKey(
         reservation.patientNameNormalized ?? reservation.patientName,
       );
       const appointmentSource = reservation.appointmentIso ?? reservation.receivedAtIso;
@@ -2018,7 +2008,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
     const departmentMap = new Map<string, Map<string, ShiftStat>>();
 
     filteredClassified.forEach((record) => {
-      const patientName = normalizePatientName(record.patientNameNormalized);
+      const patientName = normalizePatientNameForKey(record.patientNameNormalized);
       const points = record.points ?? null;
       const departmentRaw = record.department?.trim() ?? "";
       if (!patientName || points === null) {
