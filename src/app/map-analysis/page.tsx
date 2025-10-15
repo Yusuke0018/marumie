@@ -2032,7 +2032,7 @@ const MapAnalysisPage = () => {
               </div>
             </section>
 
-            <section className="rounded-3xl border border-indigo-200 bg-white/85 p-6 shadow-sm">
+            <section className="rounded-3xl border border-indigo-200 bg-white p-6 shadow-sm">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <h2 className="text-base font-semibold text-slate-900">期間サマリー</h2>
