@@ -1230,7 +1230,7 @@ const GeoDistributionMapComponent = ({
               attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
             />
             <Marker position={[CLINIC_LOCATION.lat, CLINIC_LOCATION.lng]} icon={clinicIcon}>
-              <Tooltip direction="top" offset={[0, -12]} opacity={1}>
+              <Tooltip direction="auto" offset={[0, 0]} opacity={1}>
                 <div className="space-y-1 text-xs">
                   <p className="font-semibold text-rose-600">{CLINIC_NAME}</p>
                   <p className="text-[11px] text-slate-600">{CLINIC_ADDRESS}</p>
@@ -1354,7 +1354,7 @@ const GeoDistributionMapComponent = ({
                       : undefined
                   }
                 >
-                  <Tooltip direction="top" offset={[0, -point.radius]} opacity={1}>
+                  <Tooltip direction="auto" offset={[0, 0]} opacity={1}>
                     <div className="space-y-1">
                       <p className="text-sm font-semibold text-slate-900">
                         {point.locationLabel}
