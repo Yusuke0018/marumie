@@ -1079,16 +1079,20 @@ const formatHourLabel = (hour: number) => `${hour.toString().padStart(2, "0")}:0
 const normalizeDepartmentLabel = (value: string) =>
   value.replace(/[\s・●()（）【】\[\]\-]/g, "").toLowerCase();
 
-const GENERAL_DEPARTMENT_KEYWORDS = [
-  "内科・外科外来（大岩医師）",
-  "内科・外科外来",
-].map(normalizeDepartmentLabel);
+// 総合診療の判定パターン（柔軟なマッチング）
+const isGeneralDepartment = (normalized: string): boolean => {
+  return (
+    normalized.includes("内科外来") ||
+    normalized.includes("外科外来") ||
+    normalized.includes("総合診療") ||
+    normalized.includes("一般内科")
+  );
+};
 
-const FEVER_DEPARTMENT_KEYWORDS = [
-  "発熱外来",
-  "発熱・風邪症状外来",
-  "風邪症状外来",
-].map(normalizeDepartmentLabel);
+// 発熱外来の判定パターン（柔軟なマッチング）
+const isFeverDepartment = (normalized: string): boolean => {
+  return normalized.includes("発熱") || normalized.includes("風邪");
+};
 
 const classifyDepartmentDisplayName = (value: string): string => {
   const trimmed = value.trim();
@@ -1096,10 +1100,10 @@ const classifyDepartmentDisplayName = (value: string): string => {
   if (!normalized) {
     return "診療科未分類";
   }
-  if (GENERAL_DEPARTMENT_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+  if (isGeneralDepartment(normalized)) {
     return "総合診療";
   }
-  if (FEVER_DEPARTMENT_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+  if (isFeverDepartment(normalized)) {
     return "発熱外来";
   }
   if (normalized.includes("内科")) {
@@ -2879,20 +2883,16 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
         return [];
       }
       const segments: MultivariateSegmentKey[] = [];
-      const isGeneral = GENERAL_DEPARTMENT_KEYWORDS.some((keyword) =>
-        normalized.includes(keyword),
-      );
-      const isFever = FEVER_DEPARTMENT_KEYWORDS.some((keyword) =>
-        normalized.includes(keyword),
-      );
-      if (!isGeneral && !isFever) {
+      const general = isGeneralDepartment(normalized);
+      const fever = isFeverDepartment(normalized);
+      if (!general && !fever) {
         return segments;
       }
       segments.push("overall");
-      if (isGeneral) {
+      if (general) {
         segments.push("general");
       }
-      if (isFever) {
+      if (fever) {
         segments.push("fever");
       }
       return segments;
