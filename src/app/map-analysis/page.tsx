@@ -2132,6 +2132,7 @@ const MapAnalysisPage = () => {
                 </div>
               </section>
 
+              <div className="isolate">
               <section className="relative z-10 mt-4 mb-96 overflow-visible">
                 <div className="rounded-3xl border border-indigo-200 bg-white p-6 pb-32 shadow-sm">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -2398,6 +2399,7 @@ const MapAnalysisPage = () => {
                   </div>
                 </div>
               </section>
+              </div>
 
               <section className="relative z-0 mt-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
                 <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
