@@ -1079,19 +1079,20 @@ const formatHourLabel = (hour: number) => `${hour.toString().padStart(2, "0")}:0
 const normalizeDepartmentLabel = (value: string) =>
   value.replace(/[\s・●()（）【】\[\]\-]/g, "").toLowerCase();
 
-// 総合診療の判定パターン（柔軟なマッチング）
+// 総合診療のキーワード配列
+const GENERAL_DEPARTMENT_KEYWORDS = ["内科・外科外来（大岩医師）", "内科・外科外来"].map(normalizeDepartmentLabel);
+
+// 発熱外来のキーワード配列
+const FEVER_DEPARTMENT_KEYWORDS = ["発熱外来", "発熱・風邪症状外来", "風邪症状外来"].map(normalizeDepartmentLabel);
+
+// 総合診療の判定
 const isGeneralDepartment = (normalized: string): boolean => {
-  return (
-    normalized.includes("内科外来") ||
-    normalized.includes("外科外来") ||
-    normalized.includes("総合診療") ||
-    normalized.includes("一般内科")
-  );
+  return GENERAL_DEPARTMENT_KEYWORDS.some((kw) => normalized === kw);
 };
 
-// 発熱外来の判定パターン（柔軟なマッチング）
+// 発熱外来の判定
 const isFeverDepartment = (normalized: string): boolean => {
-  return normalized.includes("発熱") || normalized.includes("風邪");
+  return FEVER_DEPARTMENT_KEYWORDS.some((kw) => normalized === kw);
 };
 
 const classifyDepartmentDisplayName = (value: string): string => {
