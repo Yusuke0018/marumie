@@ -3654,10 +3654,10 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
       };
 
       for (const file of files) {
-        const normalizedName = file.name.normalize('NFKC');
+        const normalizedName = file.name.normalize("NFKC");
         const lowerName = normalizedName.toLowerCase();
 
-        if (lowerName.includes("カルテ")) {
+        if (/(カルテ|karte)/.test(lowerName)) {
           karteFiles.push(file);
           continue;
         }
