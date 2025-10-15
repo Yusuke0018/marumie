@@ -8,4 +8,4 @@ changes:
 tests:
   - npm run lint (pass)
   - npm run build (pass)
-push: pending
+push: success
