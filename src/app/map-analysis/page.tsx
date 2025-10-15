@@ -2169,8 +2169,8 @@ const MapAnalysisPage = () => {
                       )}
                     </div>
                   </div>
-                  <div className="mt-6 grid gap-4 lg:grid-cols-3">
-                    <div className="space-y-3">
+                  <div className="relative z-10 mt-6 grid gap-4 lg:grid-cols-3">
+                    <div className="relative z-10 space-y-3">
                       <h3 className="text-sm font-semibold text-emerald-600">
                         増加した地区 Top3
                       </h3>
@@ -2247,7 +2247,7 @@ const MapAnalysisPage = () => {
                         })
                       )}
                     </div>
-                    <div className="space-y-3">
+                    <div className="relative z-10 space-y-3">
                       <h3 className="text-sm font-semibold text-rose-600">
                         減少した地区 Top3
                       </h3>
@@ -2324,7 +2324,7 @@ const MapAnalysisPage = () => {
                         })
                       )}
                     </div>
-                    <div className="space-y-3">
+                    <div className="relative z-10 space-y-3">
                       <h3 className="text-sm font-semibold text-indigo-600">
                         伸びた年代 Top3
                       </h3>
