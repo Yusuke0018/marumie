@@ -152,6 +152,7 @@ export default function CorrelationPage() {
   const [surveyData, setSurveyData] = useState<SurveyData[]>([]);
   const [karteRecords, setKarteRecords] = useState<KarteRecord[]>([]);
   const [selectedSegment, setSelectedSegment] = useState<SegmentKey>("general");
+  const [showDailyTable, setShowDailyTable] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -452,6 +453,29 @@ export default function CorrelationPage() {
     filteredDates.length > 0 &&
     (totalListing > 0 || totalTrueFirst > 0 || totalReservations > 0);
 
+  const evaluationSummary = useMemo(() => {
+    const lagDirection =
+      peakLag.lag === 0
+        ? "ほぼ同時"
+        : peakLag.lag > 0
+          ? `${peakLag.lag}時間後に真の初診が伸びています`
+          : `${Math.abs(peakLag.lag)}時間前から真の初診が立ち上がっています`;
+    const googleSentence =
+      googleShare >= 20
+        ? `Google流入は真の初診の約${googleShare.toFixed(1)}%を占めており、施策の寄与が高い状態です。`
+        : `Google流入は真の初診の約${googleShare.toFixed(1)}%に留まっており、さらなる強化余地があります。`;
+    const alignment =
+      dailyCorrelation >= 0.5
+        ? "日次推移も概ね同じ動きです。"
+        : "日次推移はばらつきがあり、曜日要因などの影響が考えられます。";
+    return {
+      headline: `${SEGMENT_LABEL[selectedSegment]}は ${correlationLevel(peakLag.correlation).label}（r=${peakLag.correlation.toFixed(2)}）です。`,
+      lag: lagDirection,
+      googleSentence,
+      alignment,
+    };
+  }, [selectedSegment, peakLag, googleShare, dailyCorrelation]);
+
   return (
     <main className="min-h-screen bg-background">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-12">
@@ -672,6 +696,19 @@ export default function CorrelationPage() {
               </div>
             </section>
 
+            <section className="rounded-3xl border border-brand-200 bg-white/80 p-6 shadow-soft">
+              <h2 className="text-lg font-semibold text-slate-900">簡易評価</h2>
+              <p className="mt-2 text-sm text-slate-600">{evaluationSummary.headline}</p>
+              <ul className="mt-4 space-y-2 text-sm text-slate-600">
+                <li>・{evaluationSummary.lag}</li>
+                <li>・{evaluationSummary.googleSentence}</li>
+                <li>・{evaluationSummary.alignment}</li>
+              </ul>
+              <p className="mt-3 text-xs text-slate-400">
+                ※ 指標は現時点の集計に基づきます。CSVを更新した場合は再読み込みしてください。
+              </p>
+            </section>
+
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
               <h2 className="text-lg font-semibold text-slate-900">
                 日次の指標比較
@@ -679,89 +716,100 @@ export default function CorrelationPage() {
               <p className="text-xs text-slate-500">
                 リスティングCVと真の初診件数、アンケート上の Google 回答を日次で比較
               </p>
-              <div className="mt-4 h-80 w-full">
-                <ResponsiveContainer>
-                  <ComposedChart data={dailyChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="date" />
-                    <YAxis yAxisId="left" allowDecimals={false} />
-                    <YAxis yAxisId="right" orientation="right" allowDecimals={false} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar
-                      yAxisId="left"
-                      dataKey="listingCv"
-                      name="リスティングCV"
-                      fill="#2563eb"
-                      opacity={0.75}
-                    />
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="trueFirst"
-                      name="真の初診"
-                      stroke="#f97316"
-                      strokeWidth={2}
-                    />
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="surveyGoogle"
-                      name="アンケート Google 回答"
-                      stroke="#10b981"
-                      strokeWidth={2}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="h-72 w-full xl:h-80">
+                  <ResponsiveContainer>
+                    <ComposedChart data={dailyChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis dataKey="date" />
+                      <YAxis yAxisId="left" allowDecimals={false} />
+                      <YAxis yAxisId="right" orientation="right" allowDecimals={false} />
+                      <Tooltip />
+                      <Legend />
+                      <Bar
+                        yAxisId="left"
+                        dataKey="listingCv"
+                        name="リスティングCV"
+                        fill="#2563eb"
+                        opacity={0.75}
+                      />
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="trueFirst"
+                        name="真の初診"
+                        stroke="#f97316"
+                        strokeWidth={2}
+                      />
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="surveyGoogle"
+                        name="アンケート Google 回答"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDailyTable((value) => !value)}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-brand-200 hover:text-brand-600"
+                >
+                  {showDailyTable ? "日次一覧を閉じる" : "日次一覧を表示"}
+                </button>
               </div>
             </section>
 
-            <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-soft">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        日付
-                      </th>
-                      <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        リスティングCV
-                      </th>
-                      <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        真の初診
-                      </th>
-                      <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        予約総数
-                      </th>
-                      <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Google 回答
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
-                    {dailyChartData.map((row) => (
-                      <tr key={row.date}>
-                        <td className="px-4 py-2 text-sm text-slate-600">
-                          {row.date}
-                        </td>
-                        <td className="px-4 py-2 text-right text-sm font-medium text-slate-900">
-                          {row.listingCv.toLocaleString("ja-JP")}
-                        </td>
-                        <td className="px-4 py-2 text-right text-sm text-slate-600">
-                          {row.trueFirst.toLocaleString("ja-JP")}
-                        </td>
-                        <td className="px-4 py-2 text-right text-sm text-slate-600">
-                          {row.reservations.toLocaleString("ja-JP")}
-                        </td>
-                        <td className="px-4 py-2 text-right text-sm text-slate-600">
-                          {row.surveyGoogle.toLocaleString("ja-JP")}
-                        </td>
+            {showDailyTable && (
+              <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-soft">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-200">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          日付
+                        </th>
+                        <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          リスティングCV
+                        </th>
+                        <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          真の初診
+                        </th>
+                        <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          予約総数
+                        </th>
+                        <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Google 回答
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {dailyChartData.map((row) => (
+                        <tr key={row.date}>
+                          <td className="px-4 py-2 text-sm text-slate-600">
+                            {row.date}
+                          </td>
+                          <td className="px-4 py-2 text-right text-sm font-medium text-slate-900">
+                            {row.listingCv.toLocaleString("ja-JP")}
+                          </td>
+                          <td className="px-4 py-2 text-right text-sm text-slate-600">
+                            {row.trueFirst.toLocaleString("ja-JP")}
+                          </td>
+                          <td className="px-4 py-2 text-right text-sm text-slate-600">
+                            {row.reservations.toLocaleString("ja-JP")}
+                          </td>
+                          <td className="px-4 py-2 text-right text-sm text-slate-600">
+                            {row.surveyGoogle.toLocaleString("ja-JP")}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
           </>
         )}
       </div>
