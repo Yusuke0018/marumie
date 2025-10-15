@@ -1960,7 +1960,7 @@ const MapAnalysisPage = () => {
   return (
     <>
       <main className="min-h-screen bg-background">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-12">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-12 px-6 py-12">
         <section className="relative overflow-hidden rounded-3xl border border-emerald-200 bg-gradient-to-br from-white via-emerald-50 to-sky-100 p-8 shadow-card">
           <div className="pointer-events-none absolute -right-16 top-0 h-48 w-48 rounded-full bg-gradient-to-br from-emerald-200/50 via-sky-200/40 to-purple-200/40 blur-3xl" />
           <div className="pointer-events-none absolute -left-20 bottom-0 h-52 w-52 rounded-full bg-gradient-to-br from-sky-200/45 via-emerald-200/30 to-white/0 blur-3xl" />
@@ -2032,7 +2032,7 @@ const MapAnalysisPage = () => {
               </div>
             </section>
 
-            <section className="relative z-10 rounded-3xl border border-indigo-200 bg-white/90 p-6 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-white/75">
+            <section className="relative z-10 mb-8 mt-4 rounded-3xl border border-indigo-200 bg-white/90 p-6 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-white/75">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <h2 className="text-base font-semibold text-slate-900">期間サマリー</h2>
@@ -2242,7 +2242,7 @@ const MapAnalysisPage = () => {
             </section>
 
 
-            <section className="relative z-0 rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
+            <section className="relative z-0 mt-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
               <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                   <h2 className="text-base font-semibold text-slate-900">期間比較モード</h2>
