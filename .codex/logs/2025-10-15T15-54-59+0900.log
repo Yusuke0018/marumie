@@ -1,0 +1,11 @@
+timestamp: 2025-10-15T15-54-59+0900
+branch: main
+commit: 3179a18ced733d2b815894c39d1adc6210c07a37
+summary: マップ分析の期間サマリー背景を不透明化
+changes:
+  - src/app/map-analysis/page.tsx (期間サマリーカードの背景を bg-white に変更して下層重なりを防止)
+  - docs/70_changelog.md (今回のUI修正を追記)
+tests:
+  - npm run lint (pass)
+  - npm run build (pass)
+push: success
