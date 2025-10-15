@@ -2032,7 +2032,7 @@ const MapAnalysisPage = () => {
               </div>
             </section>
 
-            <section className="rounded-3xl border border-indigo-200 bg-white/90 p-6 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-white/75">
+            <section className="relative z-10 rounded-3xl border border-indigo-200 bg-white/90 p-6 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-white/75">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <h2 className="text-base font-semibold text-slate-900">期間サマリー</h2>
@@ -2242,7 +2242,7 @@ const MapAnalysisPage = () => {
             </section>
 
 
-            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
+            <section className="relative z-0 rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
               <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                   <h2 className="text-base font-semibold text-slate-900">期間比較モード</h2>
