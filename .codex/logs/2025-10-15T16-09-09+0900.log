@@ -1,6 +1,6 @@
 timestamp: 2025-10-15T16-09-09+0900
 branch: main
-commit: 4924d1dd99b5630afe2c35ed3e99439220345c16
+commit: b2ad5b2239baf38962653fccdde68b4b77f8149b
 summary: 期間サマリーカードの背景効果を調整
 changes:
   - src/app/map-analysis/page.tsx (bg-whiteを半透明＋backdrop-blurに変更)
