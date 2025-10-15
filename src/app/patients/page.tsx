@@ -2876,8 +2876,9 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
     const normalizeDepartment = (value: string | null | undefined) =>
       value ? normalizeDepartmentLabel(value) : "";
 
-    const resolveSegments = (value: string | null | undefined): MultivariateSegmentKey[] => {
-      const normalized = normalizeDepartment(value);
+const resolveSegments = (value: string | null | undefined): MultivariateSegmentKey[] => {
+      const displayName = classifyDepartmentDisplayName(value ?? "");
+      const normalized = normalizeDepartment(displayName);
       if (!normalized) {
         return [];
       }
