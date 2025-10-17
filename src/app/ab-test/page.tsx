@@ -79,6 +79,22 @@ export default function ABTestPage() {
   const [activeRangeId, setActiveRangeId] = useState<string>("period-a");
   const [isLoading, setIsLoading] = useState(false);
 
+  const formatDateToIso = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const parseIsoDateToLocal = (value: string): Date | null => {
+    if (!value) return null;
+    const [year, month, day] = value.split("-").map((part) => Number(part));
+    if ([year, month, day].some((part) => Number.isNaN(part))) {
+      return null;
+    }
+    return new Date(year, month - 1, day);
+  };
+
   // localStorageからカルテデータを読み込み
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -213,14 +229,18 @@ export default function ABTestPage() {
 
   // 日付範囲設定（開始日〜終了日）
   const setDateRangeFromTo = (id: string, startDate: string, endDate: string) => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    const start = parseIsoDateToLocal(startDate);
+    const end = parseIsoDateToLocal(endDate);
+    if (!start || !end || start > end) {
+      return;
+    }
+
     const dates: string[] = [];
 
     const current = new Date(start);
     let dayCount = 0;
     while (current <= end && dayCount < 30) {
-      dates.push(current.toISOString().split("T")[0]);
+      dates.push(formatDateToIso(current));
       current.setDate(current.getDate() + 1);
       dayCount++;
     }
@@ -244,7 +264,7 @@ export default function ABTestPage() {
       return;
     }
 
-    const dateIsos = dates.map((d) => d.toISOString().split("T")[0]).sort();
+    const dateIsos = dates.map((d) => formatDateToIso(d)).sort();
     setDateRanges(dateRanges.map((r) => (r.id === id ? { ...r, dates: dateIsos } : r)));
   };
 
@@ -467,7 +487,9 @@ export default function ABTestPage() {
                     <div className="border border-slate-200 rounded-lg p-3 bg-slate-50">
                       <DayPicker
                         mode="multiple"
-                        selected={range.dates.map((d) => new Date(d + "T00:00:00"))}
+                        selected={range.dates
+                          .map((d) => parseIsoDateToLocal(d))
+                          .filter((value): value is Date => value !== null)}
                         onSelect={(dates) => setSelectedDates(range.id, dates)}
                         locale={ja}
                         max={30}
