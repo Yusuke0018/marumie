@@ -63,6 +63,41 @@ export const ENDOSCOPY_DEPARTMENT_KEYWORDS = [
 const normalizeDepartmentLabel = (value: string | null | undefined) =>
   typeof value === "string" ? value.replace(/\s+/g, "") : "";
 
+const isTelemedicineSelfPayDepartment = (normalized: string, normalizedLower: string) =>
+  normalized.includes("オンライン診療") &&
+  (normalized.includes("自費") ||
+    normalized.includes("自由診療") ||
+    normalizedLower.includes("aga") ||
+    normalizedLower.includes("ed"));
+
+const isForeignSelfPayDepartment = (normalized: string, normalizedLower: string) =>
+  normalized.includes("外国人") ||
+  normalized.includes("外国") ||
+  normalized.includes("海外") ||
+  normalizedLower.includes("foreign") ||
+  normalizedLower.includes("inbound");
+
+const buildPatientKey = (record: KarteRecord): string | null => {
+  if (record.patientNumber !== null) {
+    return `num:${record.patientNumber}`;
+  }
+
+  const name = record.patientNameNormalized?.trim().toLowerCase();
+  const birth = record.birthDateIso?.trim();
+
+  if (name && birth) {
+    return `name:${name}|birth:${birth}`;
+  }
+  if (name) {
+    return `name:${name}`;
+  }
+  if (birth) {
+    return `birth:${birth}`;
+  }
+
+  return null;
+};
+
 export const isEndoscopyDepartment = (department: string | null | undefined): boolean => {
   if (!department) {
     return false;
@@ -98,6 +133,8 @@ export function classifyKarteRecords(records: KarteRecord[]): KarteRecordWithCat
   const months = Array.from(monthMap.keys()).sort(MONTH_SORT);
   const classified: KarteRecordWithCategory[] = [];
 
+  const seenPatientKeys = new Set<string>();
+
   for (let index = 0; index < months.length; index++) {
     const month = months[index];
     const currentRecords = [...(monthMap.get(month) ?? [])].sort((a, b) =>
@@ -125,6 +162,21 @@ export function classifyKarteRecords(records: KarteRecord[]): KarteRecordWithCat
 
       // 健康診断・人間ドック・予防接種は初再診の概念がないため純初診として扱う
       const department = record.department?.trim() ?? "";
+      const normalizedDepartment = normalizeDepartmentLabel(department);
+      const normalizedDepartmentLower = normalizedDepartment.toLowerCase();
+      const isTelemedicineSelfPay = isTelemedicineSelfPayDepartment(
+        normalizedDepartment,
+        normalizedDepartmentLower,
+      );
+      const isForeignSelfPay = isForeignSelfPayDepartment(
+        normalizedDepartment,
+        normalizedDepartmentLower,
+      );
+      const requiresVisitReclassification = isTelemedicineSelfPay || isForeignSelfPay;
+
+      const patientKey = buildPatientKey(record);
+      const hasSeenPatient = patientKey ? seenPatientKeys.has(patientKey) : false;
+
       const isPreventiveCare =
         department.includes("健康診断") ||
         department.includes("人間ドック") ||
@@ -132,31 +184,50 @@ export function classifyKarteRecords(records: KarteRecord[]): KarteRecordWithCat
 
       if (isPreventiveCare) {
         category = "pureFirst";
-      } else if (record.visitType === "再診") {
-        category = "revisit";
-      } else if (record.visitType === "初診") {
-        const patientNumber = record.patientNumber;
-        let isPureFirst = false;
+      } else {
+        const evaluateFirstVisitCategory = (): KarteVisitCategory => {
+          const patientNumber = record.patientNumber;
 
-        if (patientNumber === null) {
-          isPureFirst = previousMaxNumber === null;
-        } else if (previousMaxNumber === null) {
-          isPureFirst = true;
-        } else if (patientNumber > previousMaxNumber) {
-          isPureFirst = true;
-        } else if (patientNumber >= previousMaxNumber - 200) {
-          isPureFirst = !previousNumbers.has(patientNumber);
-        } else {
-          isPureFirst = false;
+          if (!hasSeenPatient) {
+            return "pureFirst";
+          }
+
+          let isPureFirst = false;
+
+          if (patientNumber === null) {
+            isPureFirst = previousMaxNumber === null;
+          } else if (previousMaxNumber === null) {
+            isPureFirst = !previousNumbers.has(patientNumber);
+          } else if (patientNumber > previousMaxNumber) {
+            isPureFirst = !previousNumbers.has(patientNumber);
+          } else if (patientNumber >= previousMaxNumber - 200) {
+            isPureFirst = !previousNumbers.has(patientNumber);
+          } else {
+            isPureFirst = false;
+          }
+
+          return isPureFirst ? "pureFirst" : "returningFirst";
+        };
+
+        const shouldTreatAsFirstCandidate =
+          record.visitType === "初診" ||
+          (requiresVisitReclassification && !hasSeenPatient);
+
+        if (shouldTreatAsFirstCandidate) {
+          category = evaluateFirstVisitCategory();
+        } else if (record.visitType === "再診") {
+          category = "revisit";
         }
-
-        category = isPureFirst ? "pureFirst" : "returningFirst";
       }
 
       classified.push({
         ...record,
         category,
       });
+
+      if (patientKey && !hasSeenPatient) {
+        seenPatientKeys.add(patientKey);
+      }
     }
   }
 
