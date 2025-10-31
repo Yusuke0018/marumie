@@ -370,6 +370,12 @@ const INSIGHT_PRIORITY_DEPARTMENTS = [
   "外国人自費",
 ] as const;
 
+const WORKING_DAY_TARGET_DEPARTMENTS = [
+  "総合診療",
+  "発熱外来",
+  "内科",
+] as const;
+
 const roundTo1Decimal = (value: number) => Math.round(value * 10) / 10;
 
 const calculateAge = (birthIso: string | null, visitIso: string): number | null => {
@@ -1838,6 +1844,66 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
         return a.department.localeCompare(b.department, "ja");
       });
   }, [currentInsightRecords]);
+
+  const departmentWorkingDayStats = useMemo(() => {
+    if (filteredClassified.length === 0) {
+      return null;
+    }
+
+    const workMap = new Map<
+      string,
+      {
+        total: number;
+        workingDays: Set<string>;
+      }
+    >();
+    WORKING_DAY_TARGET_DEPARTMENTS.forEach((department) => {
+      workMap.set(department, {
+        total: 0,
+        workingDays: new Set<string>(),
+      });
+    });
+
+    filteredClassified.forEach((record) => {
+      const displayDepartment = classifyDepartmentDisplayName(record.department ?? "");
+      const slot = workMap.get(displayDepartment);
+      if (!slot) {
+        return;
+      }
+      slot.total += 1;
+      slot.workingDays.add(record.dateIso);
+    });
+
+    let hasAnyData = false;
+    const summaries = WORKING_DAY_TARGET_DEPARTMENTS.reduce(
+      (accumulator, department) => {
+        const slot = workMap.get(department)!;
+        const workingDaysCount = slot.workingDays.size;
+        if (workingDaysCount > 0) {
+          hasAnyData = true;
+        }
+        accumulator[department] = {
+          total: slot.total,
+          workingDays: workingDaysCount,
+          averagePerDay:
+            workingDaysCount > 0
+              ? roundTo1Decimal(slot.total / workingDaysCount)
+              : null,
+        };
+        return accumulator;
+      },
+      {} as Record<
+        (typeof WORKING_DAY_TARGET_DEPARTMENTS)[number],
+        {
+          total: number;
+          workingDays: number;
+          averagePerDay: number | null;
+        }
+      >,
+    );
+
+    return hasAnyData ? summaries : null;
+  }, [filteredClassified]);
 
   const previousDepartmentStats = useMemo<Map<string, DepartmentStat>>(() => {
     if (previousPeriodRecords.length === 0) {
@@ -5078,6 +5144,45 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
                         ? "選択した期間に該当する診療科データがありません。"
                         : "選択された月に該当する診療科データがありません。"}
                   </p>
+                )}
+                {departmentWorkingDayStats && (
+                  <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-sm font-semibold text-slate-700">
+                        稼働日数と1日平均（期間内集計）
+                      </h3>
+                      <span className="text-[11px] font-medium text-slate-400">
+                        ※ 1名以上受診があった日を稼働日として集計
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                      {WORKING_DAY_TARGET_DEPARTMENTS.map((department) => {
+                        const stats = departmentWorkingDayStats[department];
+                        const averageLabel =
+                          stats.averagePerDay !== null
+                            ? `${stats.averagePerDay.toLocaleString("ja-JP", {
+                                minimumFractionDigits: 1,
+                                maximumFractionDigits: 1,
+                              })}名`
+                            : "—";
+                        return (
+                          <div
+                            key={department}
+                            className="rounded-2xl border border-slate-100 bg-white p-4 shadow-soft"
+                          >
+                            <p className="text-xs font-semibold text-slate-500">{department}</p>
+                            <p className="mt-1 text-xl font-bold text-slate-900">
+                              {stats.total.toLocaleString("ja-JP")}名
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              稼働日数: {stats.workingDays.toLocaleString("ja-JP")}日
+                            </p>
+                            <p className="text-xs text-slate-500">1日平均: {averageLabel}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
                 {departmentStats.length > 0 && (
                   <>
