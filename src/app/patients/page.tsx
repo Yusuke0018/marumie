@@ -363,17 +363,13 @@ const DIAGNOSIS_CATEGORY_BADGE_CLASSES: Record<DiagnosisCategory, string> = {
 };
 
 const INSIGHT_PRIORITY_DEPARTMENTS = [
+  "総合診療＋内科",
   "総合診療",
+  "内科",
   "発熱外来",
   "オンライン診療（保険）",
   "オンライン診療（自費）",
   "外国人自費",
-] as const;
-
-const WORKING_DAY_TARGET_DEPARTMENTS = [
-  "総合診療",
-  "発熱外来",
-  "内科",
 ] as const;
 
 const roundTo1Decimal = (value: number) => Math.round(value * 10) / 10;
@@ -1719,32 +1715,21 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
       return [];
     }
 
-    const map = new Map<
-      string,
-      {
-        department: string;
-        total: number;
-        pureFirst: number;
-        returningFirst: number;
-        revisit: number;
-        pointsSum: number;
-        ageSum: number;
-        ageCount: number;
-      }
-    >();
+    type Bucket = {
+      department: string;
+      total: number;
+      pureFirst: number;
+      returningFirst: number;
+      revisit: number;
+      pointsSum: number;
+      ageSum: number;
+      ageCount: number;
+    };
 
-    for (const record of currentInsightRecords) {
-      const departmentRaw = record.department?.trim() ?? "";
-      const isPriorityDepartment = INSIGHT_PRIORITY_DEPARTMENTS.includes(
-        departmentRaw as (typeof INSIGHT_PRIORITY_DEPARTMENTS)[number],
-      );
-      if (departmentRaw.includes("自費") && !isPriorityDepartment) {
-        continue;
-      }
-      const department = departmentRaw.length > 0 ? departmentRaw : "診療科未分類";
-      if (!map.has(department)) {
-        map.set(department, {
-          department,
+    const ensureBucket = (map: Map<string, Bucket>, key: string) => {
+      if (!map.has(key)) {
+        map.set(key, {
+          department: key,
           total: 0,
           pureFirst: 0,
           returningFirst: 0,
@@ -1754,10 +1739,11 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
           ageCount: 0,
         });
       }
+      return map.get(key)!;
+    };
 
-      const bucket = map.get(department)!;
+    const addRecordToBucket = (bucket: Bucket, record: KarteRecordWithCategory) => {
       bucket.total += 1;
-
       if (record.category === "pureFirst") {
         bucket.pureFirst += 1;
       } else if (record.category === "returningFirst") {
@@ -1776,21 +1762,31 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
         bucket.ageSum += age;
         bucket.ageCount += 1;
       }
+    };
+
+    const map = new Map<string, Bucket>();
+
+    for (const record of currentInsightRecords) {
+      const departmentRaw = record.department?.trim() ?? "";
+      const displayDepartment = departmentRaw.length > 0 ? departmentRaw : "診療科未分類";
+      const isPriorityDepartment = INSIGHT_PRIORITY_DEPARTMENTS.includes(
+        displayDepartment as (typeof INSIGHT_PRIORITY_DEPARTMENTS)[number],
+      );
+      if (departmentRaw.includes("自費") && !isPriorityDepartment) {
+        continue;
+      }
+
+      const primaryBucket = ensureBucket(map, displayDepartment);
+      addRecordToBucket(primaryBucket, record);
+
+      if (displayDepartment === "総合診療" || displayDepartment === "内科") {
+        const combinedBucket = ensureBucket(map, "総合診療＋内科");
+        addRecordToBucket(combinedBucket, record);
+      }
     }
 
     INSIGHT_PRIORITY_DEPARTMENTS.forEach((department) => {
-      if (!map.has(department)) {
-        map.set(department, {
-          department,
-          total: 0,
-          pureFirst: 0,
-          returningFirst: 0,
-          revisit: 0,
-          pointsSum: 0,
-          ageSum: 0,
-          ageCount: 0,
-        });
-      }
+      ensureBucket(map, department);
     });
 
     const priorityOrder = new Map<string, number>(
@@ -1845,92 +1841,27 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
       });
   }, [currentInsightRecords]);
 
-  const departmentWorkingDayStats = useMemo(() => {
-    if (filteredClassified.length === 0) {
-      return null;
-    }
-
-    const workMap = new Map<
-      string,
-      {
-        total: number;
-        workingDays: Set<string>;
-      }
-    >();
-    WORKING_DAY_TARGET_DEPARTMENTS.forEach((department) => {
-      workMap.set(department, {
-        total: 0,
-        workingDays: new Set<string>(),
-      });
-    });
-
-    filteredClassified.forEach((record) => {
-      const displayDepartment = classifyDepartmentDisplayName(record.department ?? "");
-      const slot = workMap.get(displayDepartment);
-      if (!slot) {
-        return;
-      }
-      slot.total += 1;
-      slot.workingDays.add(record.dateIso);
-    });
-
-    const baseStats = WORKING_DAY_TARGET_DEPARTMENTS.map((department) => {
-      const slot = workMap.get(department)!;
-      return {
-        label: department,
-        total: slot.total,
-        workingDays: slot.workingDays.size,
-      };
-    });
-
-    const generalStat = baseStats.find((stat) => stat.label === "総合診療");
-    const internalStat = baseStats.find((stat) => stat.label === "内科");
-
-    const combinedStat = {
-      label: "総合診療＋内科",
-      total: (generalStat?.total ?? 0) + (internalStat?.total ?? 0),
-      workingDays: (generalStat?.workingDays ?? 0) + (internalStat?.workingDays ?? 0),
-    };
-
-    const statsList = [combinedStat, ...baseStats];
-    const hasAnyData = statsList.some(
-      (stat) => stat.total > 0 || stat.workingDays > 0,
-    );
-
-    return hasAnyData ? statsList : null;
-  }, [filteredClassified]);
 
   const previousDepartmentStats = useMemo<Map<string, DepartmentStat>>(() => {
     if (previousPeriodRecords.length === 0) {
       return new Map();
     }
 
-    const map = new Map<
-      string,
-      {
-        department: string;
-        total: number;
-        pureFirst: number;
-        returningFirst: number;
-        revisit: number;
-        pointsSum: number;
-        ageSum: number;
-        ageCount: number;
-      }
-    >();
+    type Bucket = {
+      department: string;
+      total: number;
+      pureFirst: number;
+      returningFirst: number;
+      revisit: number;
+      pointsSum: number;
+      ageSum: number;
+      ageCount: number;
+    };
 
-    for (const record of previousPeriodRecords) {
-      const departmentRaw = record.department?.trim() ?? "";
-      const isPriorityDepartment = INSIGHT_PRIORITY_DEPARTMENTS.includes(
-        departmentRaw as (typeof INSIGHT_PRIORITY_DEPARTMENTS)[number],
-      );
-      if (departmentRaw.includes("自費") && !isPriorityDepartment) {
-        continue;
-      }
-      const department = departmentRaw.length > 0 ? departmentRaw : "診療科未分類";
-      if (!map.has(department)) {
-        map.set(department, {
-          department,
+    const ensureBucket = (map: Map<string, Bucket>, key: string) => {
+      if (!map.has(key)) {
+        map.set(key, {
+          department: key,
           total: 0,
           pureFirst: 0,
           returningFirst: 0,
@@ -1940,10 +1871,11 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
           ageCount: 0,
         });
       }
+      return map.get(key)!;
+    };
 
-      const bucket = map.get(department)!;
+    const addRecordToBucket = (bucket: Bucket, record: KarteRecordWithCategory) => {
       bucket.total += 1;
-
       if (record.category === "pureFirst") {
         bucket.pureFirst += 1;
       } else if (record.category === "returningFirst") {
@@ -1962,21 +1894,31 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
         bucket.ageSum += age;
         bucket.ageCount += 1;
       }
+    };
+
+    const map = new Map<string, Bucket>();
+
+    for (const record of previousPeriodRecords) {
+      const departmentRaw = record.department?.trim() ?? "";
+      const displayDepartment = departmentRaw.length > 0 ? departmentRaw : "診療科未分類";
+      const isPriorityDepartment = INSIGHT_PRIORITY_DEPARTMENTS.includes(
+        displayDepartment as (typeof INSIGHT_PRIORITY_DEPARTMENTS)[number],
+      );
+      if (departmentRaw.includes("自費") && !isPriorityDepartment) {
+        continue;
+      }
+
+      const primaryBucket = ensureBucket(map, displayDepartment);
+      addRecordToBucket(primaryBucket, record);
+
+      if (displayDepartment === "総合診療" || displayDepartment === "内科") {
+        const combinedBucket = ensureBucket(map, "総合診療＋内科");
+        addRecordToBucket(combinedBucket, record);
+      }
     }
 
     INSIGHT_PRIORITY_DEPARTMENTS.forEach((department) => {
-      if (!map.has(department)) {
-        map.set(department, {
-          department,
-          total: 0,
-          pureFirst: 0,
-          returningFirst: 0,
-          revisit: 0,
-          pointsSum: 0,
-          ageSum: 0,
-          ageCount: 0,
-        });
-      }
+      ensureBucket(map, department);
     });
 
     const resultMap = new Map<string, DepartmentStat>();
@@ -5139,34 +5081,6 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
                         ? "選択した期間に該当する診療科データがありません。"
                         : "選択された月に該当する診療科データがありません。"}
                   </p>
-                )}
-                {departmentWorkingDayStats && (
-                  <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-semibold text-slate-700">
-                        稼働日数サマリ（期間内集計）
-                      </h3>
-                      <span className="text-[11px] font-medium text-slate-400">
-                        ※ 1名以上受診があった日を稼働日として集計
-                      </span>
-                    </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                      {departmentWorkingDayStats.map((stats) => (
-                        <div
-                          key={stats.label}
-                          className="rounded-2xl border border-slate-100 bg-white p-4 shadow-soft"
-                        >
-                          <p className="text-xs font-semibold text-slate-500">{stats.label}</p>
-                          <p className="mt-1 text-xl font-bold text-slate-900">
-                            {stats.total.toLocaleString("ja-JP")}名
-                          </p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            稼働日数: {stats.workingDays.toLocaleString("ja-JP")}日
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 )}
                 {departmentStats.length > 0 && (
                   <>
