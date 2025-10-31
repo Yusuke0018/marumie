@@ -362,6 +362,14 @@ const DIAGNOSIS_CATEGORY_BADGE_CLASSES: Record<DiagnosisCategory, string> = {
   その他: "bg-slate-50 text-slate-600",
 };
 
+const INSIGHT_PRIORITY_DEPARTMENTS = [
+  "総合診療",
+  "発熱外来",
+  "オンライン診療（保険）",
+  "オンライン診療（自費）",
+  "外国人自費",
+] as const;
+
 const roundTo1Decimal = (value: number) => Math.round(value * 10) / 10;
 
 const calculateAge = (birthIso: string | null, visitIso: string): number | null => {
@@ -1107,6 +1115,28 @@ const classifyDepartmentDisplayName = (value: string): string => {
   if (isFeverDepartment(normalized)) {
     return "発熱外来";
   }
+  if (normalized.includes("オンライン診療")) {
+    if (normalized.includes("保険")) {
+      return "オンライン診療（保険）";
+    }
+    if (
+      normalized.includes("自費") ||
+      normalized.includes("自由診療") ||
+      normalized.includes("aga") ||
+      normalized.includes("ed")
+    ) {
+      return "オンライン診療（自費）";
+    }
+  }
+  if (
+    normalized.includes("外国人") ||
+    normalized.includes("外国") ||
+    normalized.includes("海外") ||
+    normalized.includes("foreign") ||
+    normalized.includes("inbound")
+  ) {
+    return "外国人自費";
+  }
   if (normalized.includes("内科")) {
     return "内科";
   }
@@ -1699,7 +1729,10 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
 
     for (const record of currentInsightRecords) {
       const departmentRaw = record.department?.trim() ?? "";
-      if (departmentRaw.includes("自費")) {
+      const isPriorityDepartment = INSIGHT_PRIORITY_DEPARTMENTS.includes(
+        departmentRaw as (typeof INSIGHT_PRIORITY_DEPARTMENTS)[number],
+      );
+      if (departmentRaw.includes("自費") && !isPriorityDepartment) {
         continue;
       }
       const department = departmentRaw.length > 0 ? departmentRaw : "診療科未分類";
@@ -1738,6 +1771,25 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
         bucket.ageCount += 1;
       }
     }
+
+    INSIGHT_PRIORITY_DEPARTMENTS.forEach((department) => {
+      if (!map.has(department)) {
+        map.set(department, {
+          department,
+          total: 0,
+          pureFirst: 0,
+          returningFirst: 0,
+          revisit: 0,
+          pointsSum: 0,
+          ageSum: 0,
+          ageCount: 0,
+        });
+      }
+    });
+
+    const priorityOrder = new Map<string, number>(
+      INSIGHT_PRIORITY_DEPARTMENTS.map((department, index) => [department, index]),
+    );
 
     return Array.from(map.values())
       .map((bucket) => {
@@ -1768,6 +1820,17 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
         };
       })
       .sort((a, b) => {
+        const orderA = priorityOrder.get(a.department);
+        const orderB = priorityOrder.get(b.department);
+        if (orderA !== undefined && orderB !== undefined) {
+          return orderA - orderB;
+        }
+        if (orderA !== undefined) {
+          return -1;
+        }
+        if (orderB !== undefined) {
+          return 1;
+        }
         const diff = b.total - a.total;
         if (diff !== 0) {
           return diff;
@@ -1797,7 +1860,10 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
 
     for (const record of previousPeriodRecords) {
       const departmentRaw = record.department?.trim() ?? "";
-      if (departmentRaw.includes("自費")) {
+      const isPriorityDepartment = INSIGHT_PRIORITY_DEPARTMENTS.includes(
+        departmentRaw as (typeof INSIGHT_PRIORITY_DEPARTMENTS)[number],
+      );
+      if (departmentRaw.includes("自費") && !isPriorityDepartment) {
         continue;
       }
       const department = departmentRaw.length > 0 ? departmentRaw : "診療科未分類";
@@ -1836,6 +1902,21 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
         bucket.ageCount += 1;
       }
     }
+
+    INSIGHT_PRIORITY_DEPARTMENTS.forEach((department) => {
+      if (!map.has(department)) {
+        map.set(department, {
+          department,
+          total: 0,
+          pureFirst: 0,
+          returningFirst: 0,
+          revisit: 0,
+          pointsSum: 0,
+          ageSum: 0,
+          ageCount: 0,
+        });
+      }
+    });
 
     const resultMap = new Map<string, DepartmentStat>();
     for (const bucket of map.values()) {

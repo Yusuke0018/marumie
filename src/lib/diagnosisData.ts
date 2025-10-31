@@ -5,12 +5,19 @@ import {
   clearCompressedItem,
 } from "./storageCompression";
 
-export type DiagnosisDepartment = "総合診療" | "発熱外来" | "オンライン診療（保険）";
+export type DiagnosisDepartment =
+  | "総合診療"
+  | "発熱外来"
+  | "オンライン診療（保険）"
+  | "オンライン診療（自費）"
+  | "外国人自費";
 
 export const DIAGNOSIS_TARGET_DEPARTMENTS: DiagnosisDepartment[] = [
   "総合診療",
   "発熱外来",
   "オンライン診療（保険）",
+  "オンライン診療（自費）",
+  "外国人自費",
 ];
 
 export type DiagnosisCategory = "生活習慣病" | "外科" | "皮膚科" | "その他";
@@ -110,6 +117,7 @@ const normalizeDepartment = (value: string | undefined): DiagnosisDepartment | n
     .replace(/[\s()（）・･/\\-]+/g, "")
     .replace(/科$/, "")
     .replace(/外来$/, "外来");
+  const normalizedLower = normalized.toLowerCase();
 
   if (
     normalized.includes("総合診療") ||
@@ -127,8 +135,27 @@ const normalizeDepartment = (value: string | undefined): DiagnosisDepartment | n
   ) {
     return "発熱外来";
   }
-  if (normalized.includes("オンライン診療") && normalized.includes("保険")) {
-    return "オンライン診療（保険）";
+  if (normalized.includes("オンライン診療")) {
+    if (normalized.includes("保険")) {
+      return "オンライン診療（保険）";
+    }
+    const hasSelfPayKeyword =
+      normalized.includes("自費") ||
+      normalized.includes("自由診療") ||
+      normalizedLower.includes("aga") ||
+      normalizedLower.includes("ed");
+    if (hasSelfPayKeyword) {
+      return "オンライン診療（自費）";
+    }
+  }
+  if (
+    normalized.includes("外国人") ||
+    normalized.includes("外国") ||
+    normalized.includes("海外") ||
+    normalizedLower.includes("foreign") ||
+    normalizedLower.includes("inbound")
+  ) {
+    return "外国人自費";
   }
 
   return null;

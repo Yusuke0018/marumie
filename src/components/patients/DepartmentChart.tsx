@@ -24,6 +24,12 @@ type DepartmentChartProps = {
   records: KarteRecordWithCategory[];
 };
 
+const PRIORITY_DEPARTMENTS = new Set([
+  "オンライン診療（保険）",
+  "オンライン診療（自費）",
+  "外国人自費",
+]);
+
 const formatMonthLabel = (month: string): string => {
   const [year, monthNum] = month.split("-");
   return `${year}年${monthNum}月`;
@@ -36,7 +42,7 @@ export const DepartmentChart = ({ records }: DepartmentChartProps) => {
     const deptCounts = new Map<string, number>();
     for (const record of records) {
       const dept = record.department?.trim() || "診療科未分類";
-      if (dept.includes("自費")) continue;
+      if (dept.includes("自費") && !PRIORITY_DEPARTMENTS.has(dept)) continue;
       deptCounts.set(dept, (deptCounts.get(dept) || 0) + 1);
     }
     return Array.from(deptCounts.entries())

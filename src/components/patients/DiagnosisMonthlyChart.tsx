@@ -25,6 +25,8 @@ const COLORS: Record<DiagnosisDepartment, string> = {
   総合診療: "#2563eb",
   発熱外来: "#f97316",
   "オンライン診療（保険）": "#10b981",
+  "オンライン診療（自費）": "#0ea5e9",
+  "外国人自費": "#f43f5e",
 };
 
 const formatMonthLabel = (month: string): string => {
