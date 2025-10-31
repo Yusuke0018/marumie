@@ -1874,35 +1874,30 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
       slot.workingDays.add(record.dateIso);
     });
 
-    let hasAnyData = false;
-    const summaries = WORKING_DAY_TARGET_DEPARTMENTS.reduce(
-      (accumulator, department) => {
-        const slot = workMap.get(department)!;
-        const workingDaysCount = slot.workingDays.size;
-        if (workingDaysCount > 0) {
-          hasAnyData = true;
-        }
-        accumulator[department] = {
-          total: slot.total,
-          workingDays: workingDaysCount,
-          averagePerDay:
-            workingDaysCount > 0
-              ? roundTo1Decimal(slot.total / workingDaysCount)
-              : null,
-        };
-        return accumulator;
-      },
-      {} as Record<
-        (typeof WORKING_DAY_TARGET_DEPARTMENTS)[number],
-        {
-          total: number;
-          workingDays: number;
-          averagePerDay: number | null;
-        }
-      >,
+    const baseStats = WORKING_DAY_TARGET_DEPARTMENTS.map((department) => {
+      const slot = workMap.get(department)!;
+      return {
+        label: department,
+        total: slot.total,
+        workingDays: slot.workingDays.size,
+      };
+    });
+
+    const generalStat = baseStats.find((stat) => stat.label === "総合診療");
+    const internalStat = baseStats.find((stat) => stat.label === "内科");
+
+    const combinedStat = {
+      label: "総合診療＋内科",
+      total: (generalStat?.total ?? 0) + (internalStat?.total ?? 0),
+      workingDays: (generalStat?.workingDays ?? 0) + (internalStat?.workingDays ?? 0),
+    };
+
+    const statsList = [combinedStat, ...baseStats];
+    const hasAnyData = statsList.some(
+      (stat) => stat.total > 0 || stat.workingDays > 0,
     );
 
-    return hasAnyData ? summaries : null;
+    return hasAnyData ? statsList : null;
   }, [filteredClassified]);
 
   const previousDepartmentStats = useMemo<Map<string, DepartmentStat>>(() => {
@@ -5149,38 +5144,27 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
                   <div className="rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-soft">
                     <div className="flex items-center justify-between gap-3">
                       <h3 className="text-sm font-semibold text-slate-700">
-                        稼働日数と1日平均（期間内集計）
+                        稼働日数サマリ（期間内集計）
                       </h3>
                       <span className="text-[11px] font-medium text-slate-400">
                         ※ 1名以上受診があった日を稼働日として集計
                       </span>
                     </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                      {WORKING_DAY_TARGET_DEPARTMENTS.map((department) => {
-                        const stats = departmentWorkingDayStats[department];
-                        const averageLabel =
-                          stats.averagePerDay !== null
-                            ? `${stats.averagePerDay.toLocaleString("ja-JP", {
-                                minimumFractionDigits: 1,
-                                maximumFractionDigits: 1,
-                              })}名`
-                            : "—";
-                        return (
-                          <div
-                            key={department}
-                            className="rounded-2xl border border-slate-100 bg-white p-4 shadow-soft"
-                          >
-                            <p className="text-xs font-semibold text-slate-500">{department}</p>
-                            <p className="mt-1 text-xl font-bold text-slate-900">
-                              {stats.total.toLocaleString("ja-JP")}名
-                            </p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              稼働日数: {stats.workingDays.toLocaleString("ja-JP")}日
-                            </p>
-                            <p className="text-xs text-slate-500">1日平均: {averageLabel}</p>
-                          </div>
-                        );
-                      })}
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      {departmentWorkingDayStats.map((stats) => (
+                        <div
+                          key={stats.label}
+                          className="rounded-2xl border border-slate-100 bg-white p-4 shadow-soft"
+                        >
+                          <p className="text-xs font-semibold text-slate-500">{stats.label}</p>
+                          <p className="mt-1 text-xl font-bold text-slate-900">
+                            {stats.total.toLocaleString("ja-JP")}名
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            稼働日数: {stats.workingDays.toLocaleString("ja-JP")}日
+                          </p>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
