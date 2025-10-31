@@ -1605,6 +1605,22 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
 
   const isSingleMonthPeriod = startMonth === endMonth;
 
+  const currentInsightRecords = useMemo(() => {
+    if (periodFilteredRecords.length === 0) {
+      return [] as KarteRecordWithCategory[];
+    }
+
+    if (isSingleMonthPeriod || !endMonth) {
+      return periodFilteredRecords;
+    }
+
+    const lastMonthRecords = periodFilteredRecords.filter(
+      (record) => record.monthKey === endMonth,
+    );
+
+    return lastMonthRecords.length > 0 ? lastMonthRecords : periodFilteredRecords;
+  }, [periodFilteredRecords, isSingleMonthPeriod, endMonth]);
+
   // 単月表示時の前月データを取得
   const previousMonthStat = useMemo<KarteMonthlyStat | null>(() => {
     if (!isSingleMonthPeriod || !startMonth) {
@@ -1663,7 +1679,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
   }, [classifiedRecords, startMonth, endMonth, isSingleMonthPeriod]);
 
   const departmentStats = useMemo<DepartmentStat[]>(() => {
-    if (filteredClassified.length === 0) {
+    if (currentInsightRecords.length === 0) {
       return [];
     }
 
@@ -1681,7 +1697,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
       }
     >();
 
-    for (const record of filteredClassified) {
+    for (const record of currentInsightRecords) {
       const departmentRaw = record.department?.trim() ?? "";
       if (departmentRaw.includes("自費")) {
         continue;
@@ -1758,7 +1774,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
         }
         return a.department.localeCompare(b.department, "ja");
       });
-  }, [filteredClassified]);
+  }, [currentInsightRecords]);
 
   const previousDepartmentStats = useMemo<Map<string, DepartmentStat>>(() => {
     if (previousPeriodRecords.length === 0) {
@@ -4995,7 +5011,7 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
                         <p className="text-[11px] text-slate-500">
                           ※ 円グラフは診療科別のシェアを示し、凡例で科を選択して比較できます。
                         </p>
-                        <DepartmentChart records={filteredClassified} />
+                        <DepartmentChart records={currentInsightRecords} />
                       </div>
                     )}
                   </>

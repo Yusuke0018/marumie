@@ -238,11 +238,9 @@ export default function ABTestPage() {
     const dates: string[] = [];
 
     const current = new Date(start);
-    let dayCount = 0;
-    while (current <= end && dayCount < 30) {
+    while (current <= end) {
       dates.push(formatDateToIso(current));
       current.setDate(current.getDate() + 1);
-      dayCount++;
     }
 
     setDateRanges(
@@ -256,11 +254,6 @@ export default function ABTestPage() {
   const setSelectedDates = (id: string, dates: Date[] | undefined) => {
     if (!dates) {
       setDateRanges(dateRanges.map((r) => (r.id === id ? { ...r, dates: [] } : r)));
-      return;
-    }
-
-    if (dates.length > 30) {
-      alert("最大30日まで選択できます");
       return;
     }
 
@@ -489,7 +482,7 @@ export default function ABTestPage() {
                 <div className="space-y-3">
                   <div>
                     <label className="text-xs font-semibold text-slate-700 mb-2 block">
-                      カレンダーから日付を選択（最大30日）
+                      カレンダーから日付を選択
                     </label>
                     <div className="border border-slate-200 rounded-lg p-3 bg-slate-50">
                       <DayPicker
@@ -499,7 +492,6 @@ export default function ABTestPage() {
                           .filter((value): value is Date => value !== null)}
                         onSelect={(dates) => setSelectedDates(range.id, dates)}
                         locale={ja}
-                        max={30}
                         modifiersStyles={{
                           selected: {
                             backgroundColor: range.color,
