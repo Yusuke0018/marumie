@@ -5092,7 +5092,7 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
                         <p className="text-[11px] text-slate-500">
                           ※ 円グラフは診療科別のシェアを示し、凡例で科を選択して比較できます。
                         </p>
-                        <DepartmentChart records={currentInsightRecords} />
+                        <DepartmentChart records={filteredClassified} />
                       </div>
                     )}
                   </>
