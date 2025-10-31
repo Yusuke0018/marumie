@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import Papa from "papaparse";
 import { DayPicker } from "react-day-picker";
 import { ja } from "date-fns/locale";
@@ -279,137 +279,144 @@ export default function ABTestPage() {
   };
 
   // 集計関数
-  const calculateMetrics = (dates: string[]): ComparisonMetrics => {
-    const filteredRecords = karteData.filter((record) =>
-      dates.includes(record.dateIso)
-    );
+  const calculateMetrics = useCallback(
+    (dates: string[]): ComparisonMetrics => {
+      const filteredRecords = karteData.filter((record) =>
+        dates.includes(record.dateIso)
+      );
 
-    // 年齢計算
-    const ages: number[] = [];
-    const ageDistribution: Record<string, number> = {
-      "10代以下": 0,
-      "20代": 0,
-      "30代": 0,
-      "40代": 0,
-      "50代": 0,
-      "60代": 0,
-      "70代": 0,
-      "80代以上": 0,
-    };
+      // 年齢計算
+      const ages: number[] = [];
+      const ageDistribution: Record<string, number> = {
+        "10代以下": 0,
+        "20代": 0,
+        "30代": 0,
+        "40代": 0,
+        "50代": 0,
+        "60代": 0,
+        "70代": 0,
+        "80代以上": 0,
+      };
 
-    filteredRecords.forEach((record) => {
-      if (record.birthDateIso) {
-        const birthDate = new Date(record.birthDateIso);
-        const visitDate = new Date(record.dateIso);
-        let age = visitDate.getFullYear() - birthDate.getFullYear();
-        const monthDiff = visitDate.getMonth() - birthDate.getMonth();
-        if (monthDiff < 0 || (monthDiff === 0 && visitDate.getDate() < birthDate.getDate())) {
-          age--;
+      filteredRecords.forEach((record) => {
+        if (record.birthDateIso) {
+          const birthDate = new Date(record.birthDateIso);
+          const visitDate = new Date(record.dateIso);
+          let age = visitDate.getFullYear() - birthDate.getFullYear();
+          const monthDiff = visitDate.getMonth() - birthDate.getMonth();
+          if (monthDiff < 0 || (monthDiff === 0 && visitDate.getDate() < birthDate.getDate())) {
+            age--;
+          }
+          if (age >= 0 && age < 120) {
+            ages.push(age);
+            if (age < 20) ageDistribution["10代以下"]++;
+            else if (age < 30) ageDistribution["20代"]++;
+            else if (age < 40) ageDistribution["30代"]++;
+            else if (age < 50) ageDistribution["40代"]++;
+            else if (age < 60) ageDistribution["50代"]++;
+            else if (age < 70) ageDistribution["60代"]++;
+            else if (age < 80) ageDistribution["70代"]++;
+            else ageDistribution["80代以上"]++;
+          }
         }
-        if (age >= 0 && age < 120) {
-          ages.push(age);
-          if (age < 20) ageDistribution["10代以下"]++;
-          else if (age < 30) ageDistribution["20代"]++;
-          else if (age < 40) ageDistribution["30代"]++;
-          else if (age < 50) ageDistribution["40代"]++;
-          else if (age < 60) ageDistribution["50代"]++;
-          else if (age < 70) ageDistribution["60代"]++;
-          else if (age < 80) ageDistribution["70代"]++;
-          else ageDistribution["80代以上"]++;
-        }
-      }
-    });
+      });
 
-    const averageAge = ages.length > 0 ? ages.reduce((a, b) => a + b, 0) / ages.length : null;
+      const averageAge =
+        ages.length > 0 ? ages.reduce((a, b) => a + b, 0) / ages.length : null;
 
-    // 診療科別
-    const normalizeDepartment = (dept: string) => dept.trim().replace(/[\s・●()（）【】\[\]\-]/g, "");
-    const generalDepartment = filteredRecords.filter((r) => {
-      const normalized = normalizeDepartment(r.department || "");
-      return normalized.includes("内科外来") || normalized.includes("外科外来") || normalized.includes("総合診療");
-    }).length;
+      // 診療科別
+      const normalizeDepartment = (dept: string) =>
+        dept.trim().replace(/[\s・●()（）【】\[\]\-]/g, "");
+      const generalDepartment = filteredRecords.filter((r) => {
+        const normalized = normalizeDepartment(r.department || "");
+        return (
+          normalized.includes("内科外来") ||
+          normalized.includes("外科外来") ||
+          normalized.includes("総合診療")
+        );
+      }).length;
 
-    const feverDepartment = filteredRecords.filter((r) => {
-      const normalized = normalizeDepartment(r.department || "");
-      return normalized.includes("発熱") || normalized.includes("風邪");
-    }).length;
+      const feverDepartment = filteredRecords.filter((r) => {
+        const normalized = normalizeDepartment(r.department || "");
+        return normalized.includes("発熱") || normalized.includes("風邪");
+      }).length;
 
-    const endoscopyDepartment = filteredRecords.filter((r) => {
-      const normalized = normalizeDepartment(r.department || "");
-      return normalized.includes("内視鏡") || normalized.includes("人間ドック");
-    }).length;
+      const endoscopyDepartment = filteredRecords.filter((r) => {
+        const normalized = normalizeDepartment(r.department || "");
+        return normalized.includes("内視鏡") || normalized.includes("人間ドック");
+      }).length;
 
-    // 曜日分布
-    const weekdayDistribution: Record<string, number> = {
-      月: 0,
-      火: 0,
-      水: 0,
-      木: 0,
-      金: 0,
-      土: 0,
-      日: 0,
-    };
+      // 曜日分布
+      const weekdayDistribution: Record<string, number> = {
+        月: 0,
+        火: 0,
+        水: 0,
+        木: 0,
+        金: 0,
+        土: 0,
+        日: 0,
+      };
 
-    filteredRecords.forEach((record) => {
-      const date = new Date(record.dateIso);
-      const weekday = date.getUTCDay();
-      const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
-      weekdayDistribution[weekdayLabels[weekday]]++;
-    });
+      filteredRecords.forEach((record) => {
+        const date = new Date(record.dateIso);
+        const weekday = date.getUTCDay();
+        const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
+        weekdayDistribution[weekdayLabels[weekday]]++;
+      });
 
-    // 保険種別分布
-    const insuranceDistribution: Record<string, number> = {};
-    filteredRecords.forEach(() => {
-      // 保険種別は仮でdepartmentから抽出（実際のデータ構造に応じて調整）
-      const insurance = "不明"; // TODO: 実際のカラムから取得
-      insuranceDistribution[insurance] = (insuranceDistribution[insurance] || 0) + 1;
-    });
+      // 保険種別分布
+      const insuranceDistribution: Record<string, number> = {};
+      filteredRecords.forEach(() => {
+        // 保険種別は仮でdepartmentから抽出（実際のデータ構造に応じて調整）
+        const insurance = "不明"; // TODO: 実際のカラムから取得
+        insuranceDistribution[insurance] =
+          (insuranceDistribution[insurance] || 0) + 1;
+      });
 
-    // 住所のユニーク数
-    const uniqueAddresses = new Set(
-      filteredRecords.map((r) => r.patientAddress).filter((addr) => addr)
-    ).size;
+      // 住所のユニーク数
+      const uniqueAddresses = new Set(
+        filteredRecords.map((r) => r.patientAddress).filter((addr) => addr)
+      ).size;
 
-    // 経済系
-    const points = filteredRecords.map((r) => r.points || 0);
-    const totalPoints = points.reduce((a, b) => a + b, 0);
-    const averagePoints = points.length > 0 ? totalPoints / points.length : 0;
+      // 経済系
+      const points = filteredRecords.map((r) => r.points || 0);
+      const totalPoints = points.reduce((a, b) => a + b, 0);
+      const averagePoints = points.length > 0 ? totalPoints / points.length : 0;
 
-    // 患者負担金は仮で点数の30%とする（実際のデータがあれば変更）
-    const totalPayment = totalPoints * 0.3;
-    const averagePayment = averagePoints * 0.3;
+      // 患者負担金は仮で点数の30%とする（実際のデータがあれば変更）
+      const totalPayment = totalPoints * 0.3;
+      const averagePayment = averagePoints * 0.3;
 
-    return {
-      totalPatients: filteredRecords.length,
-      pureFirstVisits: filteredRecords.filter((r) => r.visitType === "初診").length,
-      returningFirstVisits: 0, // TODO: カテゴリ化ロジック追加
-      revisitCount: filteredRecords.filter((r) => r.visitType === "再診").length,
-      generalDepartment,
-      feverDepartment,
-      endoscopyDepartment,
-      averageAge,
-      ageDistribution,
-      averagePoints,
-      averagePayment,
-      totalPoints,
-      totalPayment,
-      weekdayDistribution,
-      uniqueAddresses,
-      insuranceDistribution,
-    };
-  };
-
-  // 集計関数をuseCallbackでメモ化
-  const calculateMetricsCallback = useMemo(() => calculateMetrics, [karteData]);
+      return {
+        totalPatients: filteredRecords.length,
+        pureFirstVisits: filteredRecords.filter((r) => r.visitType === "初診").length,
+        returningFirstVisits: 0, // TODO: カテゴリ化ロジック追加
+        revisitCount: filteredRecords.filter((r) => r.visitType === "再診").length,
+        generalDepartment,
+        feverDepartment,
+        endoscopyDepartment,
+        averageAge,
+        ageDistribution,
+        averagePoints,
+        averagePayment,
+        totalPoints,
+        totalPayment,
+        weekdayDistribution,
+        uniqueAddresses,
+        insuranceDistribution,
+      };
+    },
+    [karteData]
+  );
 
   // 各期間の集計結果
   const metricsMap = useMemo(() => {
     const map: Record<string, ComparisonMetrics> = {};
     dateRanges.forEach((range) => {
-      map[range.id] = calculateMetricsCallback(range.dates);
+      map[range.id] = calculateMetrics(range.dates);
     });
     return map;
-  }, [dateRanges, calculateMetricsCallback]);
+  }, [dateRanges, calculateMetrics]);
 
   // 差分・増減率計算
   const calculateDiff = (baseValue: number, compareValue: number) => {
