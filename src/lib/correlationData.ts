@@ -1,406 +1,537 @@
 import type { Reservation } from "@/lib/reservationData";
 import type { KarteRecord } from "@/lib/karteAnalytics";
+import type { ListingCategory, ListingCategoryData } from "@/lib/listingData";
 import type { SurveyData } from "@/lib/surveyData";
-import type { ListingCategoryData, ListingData } from "@/lib/listingData";
 import {
   buildFirstSeenIndex,
   createPatientIdentityKey,
 } from "@/lib/patientIdentity";
 
-const GENERAL_RESERVATION_PATTERNS = [/総合診療/, /内科外科外来/, /内科外来/, /内科/];
-const FEVER_RESERVATION_PATTERN = /発熱/;
+export type SegmentKey = "all" | "general" | "fever" | "endoscopy";
 
-const GENERAL_KARTE_PATTERNS = [/総合診療/, /内科/];
-const FEVER_KARTE_PATTERN = /発熱/;
-// 内視鏡の簡易判定（胃/大腸/同義語）
-const ENDOSCOPY_STOMACH_PATTERN = /(胃|上部|胃カメラ|上部内視鏡|gastroscopy|egd)/i;
-const ENDOSCOPY_COLON_PATTERN = /(大腸|下部|大腸カメラ|下部内視鏡|colonoscopy)/i;
-
-type HourlyBuckets = {
-  general: number[];
-  fever: number[];
+export type HourlyPoint = {
+  isoHour: string;
+  date: string;
+  hour: number;
+  reservations: number;
+  trueFirst: number;
+  listingCv: number;
 };
 
-const createEmptyHourlyBuckets = (): HourlyBuckets => ({
-  general: Array.from({ length: 24 }, () => 0),
-  fever: Array.from({ length: 24 }, () => 0),
-});
+export type DailyPoint = {
+  date: string;
+  reservations: number;
+  trueFirst: number;
+  listingCv: number;
+  surveyGoogle: number;
+};
 
-const ensureHourlyBucket = (
-  map: Map<string, HourlyBuckets>,
-  dateKey: string,
-): HourlyBuckets => {
-  if (!map.has(dateKey)) {
-    map.set(dateKey, createEmptyHourlyBuckets());
+export type SegmentDataset = {
+  hourly: HourlyPoint[];
+  daily: DailyPoint[];
+  totals: {
+    reservations: number;
+    trueFirst: number;
+    listingCv: number;
+    surveyGoogle: number;
+  };
+};
+
+export type IncrementalityDataset = {
+  segments: Record<SegmentKey, SegmentDataset>;
+};
+
+export type LagCorrelationPoint = {
+  lag: number;
+  correlation: number;
+  pairedSamples: number;
+};
+
+export type DistributedLagResult = {
+  maxLag: number;
+  coefficients: number[]; // [intercept, lag0, lag1, ...]
+  totalEffect: number;
+  rSquared: number;
+  sampleSize: number;
+};
+
+type HourlyAccumulator = {
+  reservations: number;
+  trueFirst: number;
+  listingCv: number;
+};
+
+type SegmentHourlyMap = Record<SegmentKey, Map<string, HourlyAccumulator>>;
+
+type SurveyDailyMap = {
+  general: Map<string, number>;
+  fever: Map<string, number>;
+  endoscopy: Map<string, number>;
+};
+
+const FEVER_PATTERNS = [/発熱/, /風邪/];
+const GENERAL_PATTERNS = [/総合診療/, /内科/];
+const ENDOSCOPY_PATTERNS = [/内視鏡/, /胃/, /大腸/];
+
+const LISTING_SEGMENT_MAP: Record<ListingCategory, SegmentKey> = {
+  発熱外来: "fever",
+  内科: "general",
+  胃カメラ: "endoscopy",
+  大腸カメラ: "endoscopy",
+};
+
+const ensureHourlyAccumulator = (
+  maps: SegmentHourlyMap,
+  segment: SegmentKey,
+  hourKey: string,
+): HourlyAccumulator => {
+  const map = maps[segment];
+  if (!map.has(hourKey)) {
+    map.set(hourKey, { reservations: 0, trueFirst: 0, listingCv: 0 });
   }
-  return map.get(dateKey)!;
+  return map.get(hourKey)!;
 };
 
-type EndoscopyHourly = {
-  stomach: number[];
-  colon: number[];
-};
-
-const createEmptyEndoscopyHourly = (): EndoscopyHourly => ({
-  stomach: Array.from({ length: 24 }, () => 0),
-  colon: Array.from({ length: 24 }, () => 0),
-});
-
-const ensureEndoscopyBucket = (
-  map: Map<string, EndoscopyHourly>,
-  dateKey: string,
-): EndoscopyHourly => {
-  if (!map.has(dateKey)) {
-    map.set(dateKey, createEmptyEndoscopyHourly());
+const toHourKey = (iso: string | null | undefined): string | null => {
+  if (!iso) {
+    return null;
   }
-  return map.get(dateKey)!;
+  const match = iso.match(/^(\d{4}-\d{2}-\d{2})T(\d{2})/);
+  if (!match) {
+    return null;
+  }
+  const [, datePart, hourPart] = match;
+  return `${datePart}T${hourPart}:00:00+09:00`;
 };
 
-const normalizeGeneralDepartmentName = (department: string): "総合診療" | "内科" | null => {
-  if (department.includes("総合診療")) {
-    return "総合診療";
+const toDateKey = (value: string | null | undefined): string | null => {
+  if (!value) {
+    return null;
   }
-  if (department.includes("内科")) {
-    return "内科";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
   }
-  return null;
+  if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(value)) {
+    const [y, m, d] = value.split("/");
+    const month = `${Number(m)}`.padStart(2, "0");
+    const day = `${Number(d)}`.padStart(2, "0");
+    return `${y}-${month}-${day}`;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  const month = `${parsed.getMonth() + 1}`.padStart(2, "0");
+  const day = `${parsed.getDate()}`.padStart(2, "0");
+  return `${parsed.getFullYear()}-${month}-${day}`;
 };
 
-const categorizeReservationDepartment = (
-  department: string,
-): "general" | "fever" | null => {
+const buildIsoHourFromDate = (dateKey: string, hour: number): string => {
+  const hh = `${hour}`.padStart(2, "0");
+  return `${dateKey}T${hh}:00:00+09:00`;
+};
+
+const determineReservationSegment = (department: string | null | undefined): SegmentKey | null => {
   if (!department) {
     return null;
   }
-  if (FEVER_RESERVATION_PATTERN.test(department)) {
+  if (FEVER_PATTERNS.some((pattern) => pattern.test(department))) {
     return "fever";
   }
-  if (GENERAL_RESERVATION_PATTERNS.some((pattern) => pattern.test(department))) {
+  if (GENERAL_PATTERNS.some((pattern) => pattern.test(department))) {
     return "general";
   }
-  return null;
-};
-
-const categorizeKarteDepartment = (
-  department: string | null | undefined,
-): { type: "general" | "fever" | null; normalizedGeneral: "総合診療" | "内科" | null } => {
-  if (!department) {
-    return { type: null, normalizedGeneral: null };
-  }
-  if (FEVER_KARTE_PATTERN.test(department)) {
-    return { type: "fever", normalizedGeneral: null };
-  }
-  const normalized = normalizeGeneralDepartmentName(department);
-  if (
-    normalized ||
-    GENERAL_KARTE_PATTERNS.some((pattern) => pattern.test(department))
-  ) {
-    return { type: "general", normalizedGeneral: normalized };
-  }
-  return { type: null, normalizedGeneral: null };
-};
-
-const classifyEndoscopyFromDepartment = (
-  department: string | null | undefined,
-): "stomach" | "colon" | null => {
-  if (!department) return null;
-  const normalized = department.replace(/\s+/g, "");
-  // 明示ルールを最優先
-  if (normalized.includes("人間ドックA") || normalized.includes("胃カメラ")) {
-    return normalized.includes("大腸カメラ") || normalized.includes("胃カメラ併用")
-      ? "colon" // 併用は大腸側に集約
-      : "stomach";
-  }
-  if (
-    normalized.includes("大腸カメラ") ||
-    normalized.includes("胃カメラ併用") ||
-    normalized.includes("人間ドックB") ||
-    normalized.includes("内視鏡ドック")
-  ) {
-    return "colon";
-  }
-  // 補助パターン
-  const stomachLike = ENDOSCOPY_STOMACH_PATTERN.test(normalized);
-  const colonLike = ENDOSCOPY_COLON_PATTERN.test(normalized);
-  if (stomachLike && colonLike) return "colon"; // 両方該当時は大腸に集約
-  if (stomachLike) return "stomach";
-  if (colonLike) return "colon";
-  return null;
-};
-
-const getReservationTimestamp = (reservation: Reservation): string | null => {
-  // 予約時刻（D列: appointmentIso）を最優先
-  if (reservation.appointmentIso && reservation.appointmentIso.length >= 10) {
-    return reservation.appointmentIso;
-  }
-  if (reservation.bookingIso && reservation.bookingIso.length >= 10) {
-    return reservation.bookingIso;
-  }
-  if (reservation.receivedAtIso && reservation.receivedAtIso.length >= 10) {
-    return reservation.receivedAtIso;
+  if (ENDOSCOPY_PATTERNS.some((pattern) => pattern.test(department))) {
+    return "endoscopy";
   }
   return null;
 };
 
-const getReservationDateKey = (reservation: Reservation): string | null => {
-  // reservation.reservationDate は予約時刻ベース
-  if (reservation.reservationDate && reservation.reservationDate.length >= 10) {
-    return reservation.reservationDate;
+const isSameDate = (isoA: string | null | undefined, isoB: string | null | undefined): boolean => {
+  if (!isoA || !isoB) {
+    return false;
   }
-  if (reservation.bookingDate && reservation.bookingDate.length >= 10) {
-    return reservation.bookingDate;
-  }
-  const timestamp = getReservationTimestamp(reservation);
-  if (timestamp) {
-    return timestamp.slice(0, 10);
-  }
-  return null;
+  return isoA.slice(0, 10) === isoB.slice(0, 10);
 };
 
-const getListingDateKey = (entry: ListingData): string | null => {
-  const parsed = new Date(entry.date);
-  if (!Number.isNaN(parsed.getTime())) {
-    const year = parsed.getFullYear();
-    const month = `${parsed.getMonth() + 1}`.padStart(2, "0");
-    const day = `${parsed.getDate()}`.padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-  const match = entry.date.match(/(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
-  if (match) {
-    const [, year, month, day] = match;
-    const monthStr = `${Number(month)}`.padStart(2, "0");
-    const dayStr = `${Number(day)}`.padStart(2, "0");
-    return `${year}-${monthStr}-${dayStr}`;
-  }
-  return null;
-};
+const sumArray = (values: number[]): number => values.reduce((total, value) => total + value, 0);
 
-const getSurveyDateKey = (entry: SurveyData): string => entry.date;
-
-export type TrueFirstAggregation = {
-  trueFirstCounts: Map<string, HourlyBuckets>;
-  reservationCounts: Map<string, HourlyBuckets>;
-  generalDepartmentByDate: Map<string, "総合診療" | "内科" | "mixed">;
-  endoscopyTrueFirstByDate: Map<string, EndoscopyHourly>;
-  endoscopyReservationByDate: Map<string, EndoscopyHourly>;
-};
-
-export const buildTrueFirstAggregation = (
+export const buildIncrementalityDataset = (
   reservations: Reservation[],
   karteRecords: KarteRecord[],
-): TrueFirstAggregation => {
-  const generalDepartmentByDate = new Map<string, "総合診療" | "内科" | "mixed">();
-
-  const registerGeneralDepartment = (dateKey: string, department: "総合診療" | "内科") => {
-    const existing = generalDepartmentByDate.get(dateKey);
-    if (!existing) {
-      generalDepartmentByDate.set(dateKey, department);
-      return;
-    }
-    if (existing !== department) {
-      generalDepartmentByDate.set(dateKey, "mixed");
-    }
+  listingData: ListingCategoryData[],
+  surveyData: SurveyData[],
+): IncrementalityDataset => {
+  const hourlyMaps: SegmentHourlyMap = {
+    all: new Map<string, HourlyAccumulator>(),
+    general: new Map<string, HourlyAccumulator>(),
+    fever: new Map<string, HourlyAccumulator>(),
+    endoscopy: new Map<string, HourlyAccumulator>(),
   };
 
-  const events = [];
+  const surveyDaily: SurveyDailyMap = {
+    general: new Map<string, number>(),
+    fever: new Map<string, number>(),
+    endoscopy: new Map<string, number>(),
+  };
 
-  for (const reservation of reservations) {
-    const identityKey = createPatientIdentityKey({
-      patientNameNormalized: reservation.patientNameNormalized ?? undefined,
-      patientName: reservation.patientName ?? undefined,
-    });
-    // firstSeen は受信（またはbooking）基準で安定化
-    const occurredAt = reservation.receivedAtIso ?? reservation.bookingIso ?? null;
-    events.push({
-      identityKey,
-      occurredAt,
-    });
-
-    const dateKey = getReservationDateKey(reservation);
-    if (dateKey) {
-      const category = categorizeReservationDepartment(reservation.department);
-      if (category === "general") {
-        const normalized = normalizeGeneralDepartmentName(reservation.department);
-        if (normalized) {
-          registerGeneralDepartment(dateKey, normalized);
-        }
-      }
-    }
-  }
-
-  for (const record of karteRecords) {
-    const identityKey = createPatientIdentityKey({
-      patientNumber: record.patientNumber,
-      patientNameNormalized: record.patientNameNormalized ?? undefined,
-      birthDateIso: record.birthDateIso ?? undefined,
-    });
-    events.push({
-      identityKey,
-      occurredAt: record.dateIso ? `${record.dateIso}T00:00:00` : null,
-    });
-
-    if (record.dateIso) {
-      const category = categorizeKarteDepartment(record.department);
-      if (category.type === "general" && category.normalizedGeneral) {
-        registerGeneralDepartment(record.dateIso, category.normalizedGeneral);
-      }
-    }
-  }
-
-  const firstSeenIndex = buildFirstSeenIndex(events);
-  const trueFirstCounts = new Map<string, HourlyBuckets>();
-  const reservationCounts = new Map<string, HourlyBuckets>();
-  const endoscopyTrueFirstByDate = new Map<string, EndoscopyHourly>();
-  const endoscopyReservationByDate = new Map<string, EndoscopyHourly>();
-
-  // 同一患者・同一日に複数予約がある場合の重複カウント防止
-  const countedTrueFirstByDay = new Set<string>();
+  const identityEvents: Array<{ identityKey: string | null; occurredAt: string | null }> = [];
 
   reservations.forEach((reservation) => {
-    const timestamp = getReservationTimestamp(reservation);
-    const dateKey = getReservationDateKey(reservation);
-    const hour = reservation.reservationHour ?? reservation.bookingHour ?? -1;
-    if (!timestamp || !dateKey || hour < 0 || hour > 23) {
+    identityEvents.push({
+      identityKey: createPatientIdentityKey({
+        patientNameNormalized: reservation.patientNameNormalized ?? undefined,
+        patientName: reservation.patientName ?? undefined,
+      }),
+      occurredAt: reservation.receivedAtIso ?? reservation.bookingIso ?? reservation.appointmentIso ?? null,
+    });
+  });
+
+  karteRecords.forEach((record) => {
+    identityEvents.push({
+      identityKey: createPatientIdentityKey({
+        patientNumber: record.patientNumber,
+        patientNameNormalized: record.patientNameNormalized ?? undefined,
+        birthDateIso: record.birthDateIso ?? undefined,
+      }),
+      occurredAt: record.dateIso ? `${record.dateIso}T00:00:00+09:00` : null,
+    });
+  });
+
+  const firstSeenIndex = buildFirstSeenIndex(
+    identityEvents
+      .filter((event) => event.identityKey)
+      .map((event) => ({
+        identityKey: event.identityKey!,
+        occurredAt: event.occurredAt,
+      })),
+  );
+
+  reservations.forEach((reservation) => {
+    const timestamp = reservation.receivedAtIso ?? reservation.bookingIso ?? reservation.appointmentIso ?? null;
+    const hourKey = toHourKey(timestamp);
+    if (!hourKey) {
       return;
     }
 
-    const category = categorizeReservationDepartment(reservation.department);
-    const endoType = classifyEndoscopyFromDepartment(reservation.department);
-
-    // 総合診療・発熱外来のカウント
-    if (category) {
-      const reservationBucket = ensureHourlyBucket(reservationCounts, dateKey);
-      reservationBucket[category][hour] += 1;
-    }
-
-    // 内視鏡のカウント（総合診療・発熱外来とは独立）
-    if (endoType) {
-      const endoBucket = ensureEndoscopyBucket(endoscopyReservationByDate, dateKey);
-      endoBucket[endoType][hour] += 1;
-    }
-
+    const segment = determineReservationSegment(reservation.department);
     const identityKey = createPatientIdentityKey({
       patientNameNormalized: reservation.patientNameNormalized ?? undefined,
       patientName: reservation.patientName ?? undefined,
     });
-    if (!identityKey) {
-      return;
+
+    const firstSeen = identityKey ? firstSeenIndex.get(identityKey) ?? null : null;
+    const isTrueFirst = identityKey ? isSameDate(firstSeen, timestamp) : false;
+
+    const allAccumulator = ensureHourlyAccumulator(hourlyMaps, "all", hourKey);
+    allAccumulator.reservations += 1;
+    if (isTrueFirst) {
+      allAccumulator.trueFirst += 1;
     }
 
-    const firstSeen = firstSeenIndex.get(identityKey);
-    // 日単位で一致すれば真の初診とみなす
-    if (firstSeen && timestamp.slice(0, 10) === firstSeen.slice(0, 10)) {
-      const tfKey = `${identityKey}|${dateKey}`;
-      if (countedTrueFirstByDay.has(tfKey)) {
-        return;
-      }
-
-      // 総合診療・発熱外来の真の初診カウント
-      if (category) {
-        const trueFirstBucket = ensureHourlyBucket(trueFirstCounts, dateKey);
-        trueFirstBucket[category][hour] += 1;
-        countedTrueFirstByDay.add(tfKey);
-      }
-
-      // 内視鏡の真の初診カウント（総合診療・発熱外来とは独立）
-      if (endoType) {
-        const endoBucket = ensureEndoscopyBucket(endoscopyTrueFirstByDate, dateKey);
-        endoBucket[endoType][hour] += 1;
-        // 内視鏡のみの場合も重複カウント防止
-        if (!category) {
-          countedTrueFirstByDay.add(tfKey);
-        }
+    if (segment) {
+      const segmentAccumulator = ensureHourlyAccumulator(hourlyMaps, segment, hourKey);
+      segmentAccumulator.reservations += 1;
+      if (isTrueFirst) {
+        segmentAccumulator.trueFirst += 1;
       }
     }
   });
 
-  return {
-    trueFirstCounts,
-    reservationCounts,
-    generalDepartmentByDate,
-    endoscopyTrueFirstByDate,
-    endoscopyReservationByDate,
-  };
-};
-
-export type ListingAggregation = {
-  generalCvByDate: Map<string, number[]>;
-  feverCvByDate: Map<string, number[]>;
-  endoscopyCvByDate: Map<string, number[]>;
-};
-
-export const buildListingAggregation = (
-  listingData: ListingCategoryData[],
-): ListingAggregation => {
-  const generalCvByDate = new Map<string, number[]>();
-  const feverCvByDate = new Map<string, number[]>();
-  const endoscopyCvByDate = new Map<string, number[]>();
-
-  const registerListing = (
-    target: Map<string, number[]>,
-    dateKey: string,
-    hourly: number[],
-  ) => {
-    if (!target.has(dateKey)) {
-      target.set(dateKey, Array.from({ length: 24 }, () => 0));
-    }
-    const bucket = target.get(dateKey)!;
-    for (let hour = 0; hour < 24; hour += 1) {
-      bucket[hour] += hourly[hour] ?? 0;
-    }
-  };
-
   listingData.forEach((categoryData) => {
-    let targetMap: Map<string, number[]> = generalCvByDate;
-    if (categoryData.category === "発熱外来") {
-      targetMap = feverCvByDate;
+    const segment = LISTING_SEGMENT_MAP[categoryData.category];
+    if (!segment) {
+      return;
     }
-    if (categoryData.category === "胃カメラ" || categoryData.category === "大腸カメラ") {
-      targetMap = endoscopyCvByDate;
-    }
+
     categoryData.data.forEach((entry) => {
-      const dateKey = getListingDateKey(entry);
+      const dateKey = toDateKey(entry.date);
       if (!dateKey) {
         return;
       }
-      registerListing(targetMap, dateKey, entry.hourlyCV);
+      for (let hour = 0; hour < entry.hourlyCV.length; hour += 1) {
+        const value = entry.hourlyCV[hour] ?? 0;
+        if (value === 0) {
+          continue;
+        }
+        const hourKey = buildIsoHourFromDate(dateKey, hour);
+        const segmentAccumulator = ensureHourlyAccumulator(hourlyMaps, segment, hourKey);
+        segmentAccumulator.listingCv += value;
+        const allAccumulator = ensureHourlyAccumulator(hourlyMaps, "all", hourKey);
+        allAccumulator.listingCv += value;
+      }
     });
   });
 
-  return {
-    generalCvByDate,
-    feverCvByDate,
-    endoscopyCvByDate,
-  };
-};
+  surveyData.forEach((survey) => {
+    const dateKey = survey.date;
+    if (!dateKey) {
+      return;
+    }
 
-export type SurveyAggregation = {
-  generalGoogleByDate: Map<string, number>;
-  feverGoogleByDate: Map<string, number>;
-};
-
-export const buildSurveyAggregation = (surveyData: SurveyData[]): SurveyAggregation => {
-  const generalGoogleByDate = new Map<string, number>();
-  const feverGoogleByDate = new Map<string, number>();
-
-  surveyData.forEach((entry) => {
-    const dateKey = getSurveyDateKey(entry);
-    const existingGeneral = generalGoogleByDate.get(dateKey) ?? 0;
-    const existingFever = feverGoogleByDate.get(dateKey) ?? 0;
-
-    if (entry.fileType === "外来") {
-      generalGoogleByDate.set(dateKey, existingGeneral + entry.googleSearch);
-      feverGoogleByDate.set(
-        dateKey,
-        existingFever + entry.feverGoogleSearch,
-      );
-    } else {
-      generalGoogleByDate.set(dateKey, existingGeneral + entry.googleSearch);
+    if (survey.fileType === "外来") {
+      const general = (survey.googleSearch ?? 0) + (survey.googleMap ?? 0);
+      const fever = survey.feverGoogleSearch ?? 0;
+      if (general > 0) {
+        surveyDaily.general.set(dateKey, (surveyDaily.general.get(dateKey) ?? 0) + general);
+      }
+      if (fever > 0) {
+        surveyDaily.fever.set(dateKey, (surveyDaily.fever.get(dateKey) ?? 0) + fever);
+      }
+      if (general + fever > 0) {
+        surveyDaily.endoscopy.set(dateKey, (surveyDaily.endoscopy.get(dateKey) ?? 0));
+      }
+    } else if (survey.fileType === "内視鏡") {
+      const value = (survey.googleSearch ?? 0) + (survey.googleMap ?? 0);
+      if (value > 0) {
+        surveyDaily.endoscopy.set(dateKey, (surveyDaily.endoscopy.get(dateKey) ?? 0) + value);
+      }
     }
   });
 
+  const buildSegmentDataset = (segment: SegmentKey): SegmentDataset => {
+    const hourlyMap = hourlyMaps[segment];
+    const hourlyPoints: HourlyPoint[] = Array.from(hourlyMap.entries())
+      .map(([hourKey, acc]) => ({
+        isoHour: hourKey,
+        date: hourKey.slice(0, 10),
+        hour: Number.parseInt(hourKey.slice(11, 13), 10),
+        reservations: acc.reservations,
+        trueFirst: acc.trueFirst,
+        listingCv: acc.listingCv,
+      }))
+      .sort((a, b) => a.isoHour.localeCompare(b.isoHour));
+
+    const dailyMap = new Map<string, DailyPoint>();
+
+    hourlyPoints.forEach((point) => {
+      if (!dailyMap.has(point.date)) {
+        dailyMap.set(point.date, {
+          date: point.date,
+          reservations: 0,
+          trueFirst: 0,
+          listingCv: 0,
+          surveyGoogle: 0,
+        });
+      }
+      const daily = dailyMap.get(point.date)!;
+      daily.reservations += point.reservations;
+      daily.trueFirst += point.trueFirst;
+      daily.listingCv += point.listingCv;
+    });
+
+    const surveyMap =
+      segment === "fever"
+        ? surveyDaily.fever
+        : segment === "general"
+          ? surveyDaily.general
+          : segment === "endoscopy"
+            ? surveyDaily.endoscopy
+            : null;
+
+    if (surveyMap) {
+      surveyMap.forEach((value, dateKey) => {
+        if (!dailyMap.has(dateKey)) {
+          dailyMap.set(dateKey, {
+            date: dateKey,
+            reservations: 0,
+            trueFirst: 0,
+            listingCv: 0,
+            surveyGoogle: 0,
+          });
+        }
+        const daily = dailyMap.get(dateKey)!;
+        daily.surveyGoogle += value;
+      });
+    }
+
+    const dailyPoints = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+
+    const totals = dailyPoints.reduce(
+      (acc, item) => {
+        acc.reservations += item.reservations;
+        acc.trueFirst += item.trueFirst;
+        acc.listingCv += item.listingCv;
+        acc.surveyGoogle += item.surveyGoogle;
+        return acc;
+      },
+      { reservations: 0, trueFirst: 0, listingCv: 0, surveyGoogle: 0 },
+    );
+
+    return {
+      hourly: hourlyPoints,
+      daily: dailyPoints,
+      totals,
+    };
+  };
+
+  const segments: Record<SegmentKey, SegmentDataset> = {
+    all: buildSegmentDataset("all"),
+    general: buildSegmentDataset("general"),
+    fever: buildSegmentDataset("fever"),
+    endoscopy: buildSegmentDataset("endoscopy"),
+  };
+
+  return { segments };
+};
+
+const calculateCorrelation = (x: number[], y: number[]): number => {
+  if (x.length !== y.length || x.length === 0) {
+    return 0;
+  }
+  const n = x.length;
+  const sumX = sumArray(x);
+  const sumY = sumArray(y);
+  const sumXY = x.reduce((acc, value, index) => acc + value * y[index], 0);
+  const sumX2 = x.reduce((acc, value) => acc + value * value, 0);
+  const sumY2 = y.reduce((acc, value) => acc + value * value, 0);
+  const numerator = n * sumXY - sumX * sumY;
+  const denominator = Math.sqrt(Math.max((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY), 0));
+  if (denominator === 0) {
+    return 0;
+  }
+  return numerator / denominator;
+};
+
+export const computeLagCorrelations = (
+  hourly: HourlyPoint[],
+  maxLag: number,
+): LagCorrelationPoint[] => {
+  if (hourly.length === 0) {
+    return [];
+  }
+  const sorted = [...hourly].sort((a, b) => a.isoHour.localeCompare(b.isoHour));
+  const listingSeries = sorted.map((item) => item.listingCv);
+  const targetSeries = sorted.map((item) => item.trueFirst);
+  const results: LagCorrelationPoint[] = [];
+
+  for (let lag = -maxLag; lag <= maxLag; lag += 1) {
+    const alignedSource: number[] = [];
+    const alignedTarget: number[] = [];
+    for (let index = 0; index < listingSeries.length; index += 1) {
+      const shiftedIndex = index + lag;
+      if (shiftedIndex < 0 || shiftedIndex >= targetSeries.length) {
+        continue;
+      }
+      alignedSource.push(listingSeries[index]);
+      alignedTarget.push(targetSeries[shiftedIndex]);
+    }
+    if (alignedSource.length > 1) {
+      results.push({
+        lag,
+        correlation: calculateCorrelation(alignedSource, alignedTarget),
+        pairedSamples: alignedSource.length,
+      });
+    }
+  }
+
+  return results.sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation));
+};
+
+const solveLinearSystem = (matrix: number[][], rhs: number[]): number[] | null => {
+  const n = matrix.length;
+  const augmented = matrix.map((row, index) => [...row, rhs[index]]);
+
+  for (let col = 0; col < n; col += 1) {
+    let pivotRow = col;
+    let maxAbs = Math.abs(augmented[col][col]);
+    for (let row = col + 1; row < n; row += 1) {
+      const value = Math.abs(augmented[row][col]);
+      if (value > maxAbs) {
+        maxAbs = value;
+        pivotRow = row;
+      }
+    }
+
+    if (maxAbs < 1e-8) {
+      return null;
+    }
+
+    if (pivotRow !== col) {
+      const temp = augmented[col];
+      augmented[col] = augmented[pivotRow];
+      augmented[pivotRow] = temp;
+    }
+
+    const pivot = augmented[col][col];
+    for (let j = col; j <= n; j += 1) {
+      augmented[col][j] /= pivot;
+    }
+
+    for (let row = 0; row < n; row += 1) {
+      if (row === col) {
+        continue;
+      }
+      const factor = augmented[row][col];
+      for (let j = col; j <= n; j += 1) {
+        augmented[row][j] -= factor * augmented[col][j];
+      }
+    }
+  }
+
+  return augmented.map((row) => row[n]);
+};
+
+export const computeDistributedLagEffect = (
+  hourly: HourlyPoint[],
+  maxLag: number,
+): DistributedLagResult | null => {
+  if (hourly.length === 0 || maxLag < 0) {
+    return null;
+  }
+
+  const sorted = [...hourly].sort((a, b) => a.isoHour.localeCompare(b.isoHour));
+  const listingSeries = sorted.map((item) => item.listingCv);
+  const targetSeries = sorted.map((item) => item.trueFirst);
+
+  const rows: number[][] = [];
+  const y: number[] = [];
+
+  for (let index = maxLag; index < listingSeries.length; index += 1) {
+    const row: number[] = [1];
+    for (let lag = 0; lag <= maxLag; lag += 1) {
+      row.push(listingSeries[index - lag]);
+    }
+    rows.push(row);
+    y.push(targetSeries[index]);
+  }
+
+  if (rows.length < maxLag + 2) {
+    return null;
+  }
+
+  const columns = rows[0].length;
+  const xtx: number[][] = Array.from({ length: columns }, () => Array(columns).fill(0));
+  const xty: number[] = Array(columns).fill(0);
+
+  rows.forEach((row, rowIndex) => {
+    const target = y[rowIndex];
+    for (let i = 0; i < columns; i += 1) {
+      xty[i] += row[i] * target;
+      for (let j = 0; j < columns; j += 1) {
+        xtx[i][j] += row[i] * row[j];
+      }
+    }
+  });
+
+  const coefficients = solveLinearSystem(xtx, xty);
+  if (!coefficients) {
+    return null;
+  }
+
+  const predictions = rows.map((row) => row.reduce((acc, value, index) => acc + value * coefficients[index], 0));
+  const meanY = sumArray(y) / y.length;
+  const ssTot = y.reduce((acc, value) => acc + (value - meanY) ** 2, 0);
+  const ssRes = y.reduce((acc, value, index) => acc + (value - predictions[index]) ** 2, 0);
+  const rSquared = ssTot === 0 ? 1 : Math.max(0, 1 - ssRes / ssTot);
+
+  const totalEffect = coefficients.slice(1).reduce((acc, value) => acc + value, 0);
+
   return {
-    generalGoogleByDate,
-    feverGoogleByDate,
+    maxLag,
+    coefficients,
+    totalEffect,
+    rSquared,
+    sampleSize: rows.length,
   };
 };
