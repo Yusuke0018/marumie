@@ -451,6 +451,27 @@ export const parseReservationCsv = (content: string): Reservation[] => {
 
   const items: Reservation[] = [];
 
+  // 予約時刻（D列優先）を取得するためのヘルパー
+  const getReservationDateTimeRaw = (row: Record<string, string>): string | undefined => {
+    const candidates = [
+      "予約時刻",
+      "予約日時",
+      "予約時間",
+      "予約",
+    ];
+    for (const key of candidates) {
+      const v = row[key];
+      if (typeof v === "string" && v.trim().length > 0) return v;
+    }
+    // ヘッダ不一致時のフォールバック: D列（0始まりで index=3）を想定
+    const keys = Object.keys(row);
+    if (keys.length >= 4) {
+      const v = row[keys[3]]; // D列
+      if (typeof v === "string" && v.trim().length > 0) return v;
+    }
+    return undefined;
+  };
+
   for (const row of parsed.data) {
     const department = row["診療科"]?.trim();
     const received = parseJstDateTime(row["受信時刻JST"]);
@@ -460,7 +481,8 @@ export const parseReservationCsv = (content: string): Reservation[] => {
 
     const visitType = normalizeVisitType(row["初再診"]);
     // 予約時刻（D列相当）を優先
-    const appointment = parseJstDateTime(row["予約日時"]);
+    const appointmentRaw = getReservationDateTimeRaw(row);
+    const appointment = parseJstDateTime(appointmentRaw);
     // 受信時刻はフォールバックとして保持
     const receivedParsed: ParsedDateTime = {
       iso: received.iso,

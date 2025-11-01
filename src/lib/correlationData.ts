@@ -120,8 +120,11 @@ const classifyEndoscopyFromDepartment = (
     return "colon";
   }
   // 補助パターン
-  if (ENDOSCOPY_STOMACH_PATTERN.test(normalized)) return "stomach";
-  if (ENDOSCOPY_COLON_PATTERN.test(normalized)) return "colon";
+  const stomachLike = ENDOSCOPY_STOMACH_PATTERN.test(normalized);
+  const colonLike = ENDOSCOPY_COLON_PATTERN.test(normalized);
+  if (stomachLike && colonLike) return "colon"; // 両方該当時は大腸に集約
+  if (stomachLike) return "stomach";
+  if (colonLike) return "colon";
   return null;
 };
 
