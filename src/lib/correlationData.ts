@@ -105,17 +105,33 @@ const classifyEndoscopyFromDepartment = (
 ): "stomach" | "colon" | null => {
   if (!department) return null;
   const normalized = department.replace(/\s+/g, "");
+  // 明示ルールを最優先
+  if (normalized.includes("人間ドックA") || normalized.includes("胃カメラ")) {
+    return normalized.includes("大腸カメラ") || normalized.includes("胃カメラ併用")
+      ? "colon" // 併用は大腸側に集約
+      : "stomach";
+  }
+  if (
+    normalized.includes("大腸カメラ") ||
+    normalized.includes("胃カメラ併用") ||
+    normalized.includes("人間ドックB") ||
+    normalized.includes("内視鏡ドック")
+  ) {
+    return "colon";
+  }
+  // 補助パターン
   if (ENDOSCOPY_STOMACH_PATTERN.test(normalized)) return "stomach";
   if (ENDOSCOPY_COLON_PATTERN.test(normalized)) return "colon";
   return null;
 };
 
 const getReservationTimestamp = (reservation: Reservation): string | null => {
-  if (reservation.bookingIso && reservation.bookingIso.length >= 10) {
-    return reservation.bookingIso;
-  }
+  // 予約時刻（D列: appointmentIso）を最優先
   if (reservation.appointmentIso && reservation.appointmentIso.length >= 10) {
     return reservation.appointmentIso;
+  }
+  if (reservation.bookingIso && reservation.bookingIso.length >= 10) {
+    return reservation.bookingIso;
   }
   if (reservation.receivedAtIso && reservation.receivedAtIso.length >= 10) {
     return reservation.receivedAtIso;
@@ -124,15 +140,16 @@ const getReservationTimestamp = (reservation: Reservation): string | null => {
 };
 
 const getReservationDateKey = (reservation: Reservation): string | null => {
+  // reservation.reservationDate は予約時刻ベース
+  if (reservation.reservationDate && reservation.reservationDate.length >= 10) {
+    return reservation.reservationDate;
+  }
   if (reservation.bookingDate && reservation.bookingDate.length >= 10) {
     return reservation.bookingDate;
   }
   const timestamp = getReservationTimestamp(reservation);
   if (timestamp) {
     return timestamp.slice(0, 10);
-  }
-  if (reservation.reservationDate && reservation.reservationDate.length >= 10) {
-    return reservation.reservationDate;
   }
   return null;
 };
@@ -235,10 +252,7 @@ export const buildTrueFirstAggregation = (
   reservations.forEach((reservation) => {
     const timestamp = getReservationTimestamp(reservation);
     const dateKey = getReservationDateKey(reservation);
-    const hour =
-      reservation.bookingHour !== undefined && reservation.bookingHour !== null
-        ? reservation.bookingHour
-        : reservation.reservationHour;
+    const hour = reservation.reservationHour ?? reservation.bookingHour ?? -1;
     if (!timestamp || !dateKey || hour < 0 || hour > 23) {
       return;
     }

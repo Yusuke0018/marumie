@@ -459,8 +459,10 @@ export const parseReservationCsv = (content: string): Reservation[] => {
     }
 
     const visitType = normalizeVisitType(row["初再診"]);
+    // 予約時刻（D列相当）を優先
     const appointment = parseJstDateTime(row["予約日時"]);
-    const booking: ParsedDateTime = {
+    // 受信時刻はフォールバックとして保持
+    const receivedParsed: ParsedDateTime = {
       iso: received.iso,
       dateKey: received.dateKey,
       monthKey: received.monthKey,
@@ -523,14 +525,14 @@ export const parseReservationCsv = (content: string): Reservation[] => {
       }),
       department,
       visitType,
-      reservationDate: booking.dateKey,
-      reservationMonth: booking.monthKey,
-      reservationHour: booking.hour,
+      reservationDate: appointment?.dateKey ?? receivedParsed.dateKey,
+      reservationMonth: appointment?.monthKey ?? receivedParsed.monthKey,
+      reservationHour: appointment?.hour ?? receivedParsed.hour,
       receivedAtIso: received.iso,
       appointmentIso: appointment?.iso ?? null,
-      bookingIso: booking.iso,
-      bookingDate: booking.dateKey,
-      bookingHour: booking.hour,
+      bookingIso: receivedParsed.iso,
+      bookingDate: receivedParsed.dateKey,
+      bookingHour: receivedParsed.hour,
       patientId,
       patientName,
       patientNameNormalized,
