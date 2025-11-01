@@ -280,19 +280,22 @@ export default function CorrelationPage() {
       }
     });
 
-    const surveyMap =
-      selectedSegment === "fever"
-        ? surveyAggregation.feverGoogleByDate
-        : surveyAggregation.generalGoogleByDate;
-    surveyMap.forEach((_, dateKey) => {
-      const monthKey = dateKey.slice(0, 7);
-      if (
-        (!startMonth || monthKey >= startMonth) &&
-        (!endMonth || monthKey <= endMonth)
-      ) {
-        dates.add(dateKey);
-      }
-    });
+    // アンケートは endoscopy 系モードでは参照しない
+    if (selectedSegment === "general" || selectedSegment === "fever") {
+      const surveyMap =
+        selectedSegment === "fever"
+          ? surveyAggregation.feverGoogleByDate
+          : surveyAggregation.generalGoogleByDate;
+      surveyMap.forEach((_, dateKey) => {
+        const monthKey = dateKey.slice(0, 7);
+        if (
+          (!startMonth || monthKey >= startMonth) &&
+          (!endMonth || monthKey <= endMonth)
+        ) {
+          dates.add(dateKey);
+        }
+      });
+    }
 
     if (selectedSegment === "general" || selectedSegment === "fever") {
       trueFirstAggregation.trueFirstCounts.forEach((_, dateKey) => {
@@ -349,10 +352,13 @@ export default function CorrelationPage() {
       listingMap = listingAggregation.endoscopyCvByDate;
     }
 
+    // アンケートは endoscopy 系モードでは使用しない
     const surveyMap =
-      selectedSegment === "fever"
-        ? surveyAggregation.feverGoogleByDate
-        : surveyAggregation.generalGoogleByDate;
+      selectedSegment === "fever" || selectedSegment === "general"
+        ? selectedSegment === "fever"
+          ? surveyAggregation.feverGoogleByDate
+          : surveyAggregation.generalGoogleByDate
+        : new Map<string, number>();
 
     const trueFirstMap = trueFirstAggregation.trueFirstCounts;
     const reservationMap = trueFirstAggregation.reservationCounts;
@@ -508,7 +514,9 @@ export default function CorrelationPage() {
   const totalTrueFirst = sum(trueFirstSeries);
   const totalReservations = sum(reservationsSeries);
   const googleShare =
-    totalTrueFirst > 0 ? (surveyTotals / totalTrueFirst) * 100 : 0;
+    (selectedSegment === "general" || selectedSegment === "fever") && totalTrueFirst > 0
+      ? (surveyTotals / totalTrueFirst) * 100
+      : 0;
 
   const hasData =
     filteredDates.length > 0 &&
