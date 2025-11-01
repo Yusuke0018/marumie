@@ -432,6 +432,89 @@ const parseJstDateTime = (raw: string | undefined): ParsedDateTime | null => {
   };
 };
 
+const normalizeHeaderName = (value: string): string =>
+  toHalfWidthDigits(value)
+    .trim()
+    .replace(/\u3000/g, "")
+    .replace(/\s+/g, "")
+    .replace(/[（）()［］\[\]「」『』"']/g, "")
+    .replace(/[._\-]/g, "")
+    .replace(/\d+/g, "")
+    .toLowerCase();
+
+type HeaderInfo = {
+  raw: string;
+  normalized: string;
+};
+
+const buildHeaderInfo = (fields: string[] | undefined): HeaderInfo[] =>
+  (fields ?? []).map((field) => {
+    const trimmed = field.trim();
+    return {
+      raw: trimmed,
+      normalized: normalizeHeaderName(trimmed),
+    };
+  });
+
+const findHeaderKey = (
+  headers: HeaderInfo[],
+  candidates: string[],
+  fallbackKeywords: string[] = [],
+): string | null => {
+  for (const candidate of candidates) {
+    const normalizedCandidate = normalizeHeaderName(candidate);
+    const match = headers.find((header) => header.normalized === normalizedCandidate);
+    if (match) {
+      return match.raw;
+    }
+  }
+
+  for (const keyword of fallbackKeywords) {
+    const normalizedKeyword = normalizeHeaderName(keyword);
+    const match = headers.find((header) =>
+      header.normalized.includes(normalizedKeyword),
+    );
+    if (match) {
+      return match.raw;
+    }
+  }
+
+  return null;
+};
+
+const mergeCandidateKeys = (
+  primary: Array<string | null>,
+  defaults: string[],
+): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const key of [...primary, ...defaults]) {
+    if (typeof key !== "string") continue;
+    const trimmed = key.trim();
+    if (trimmed.length === 0 || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+  return result;
+};
+
+const parseDateFromRow = (
+  row: Record<string, string>,
+  candidateKeys: string[],
+): ParsedDateTime | null => {
+  for (const key of candidateKeys) {
+    const raw = row[key];
+    if (typeof raw !== "string") {
+      continue;
+    }
+    const parsed = parseJstDateTime(raw);
+    if (parsed) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
 export const parseReservationCsv = (content: string): Reservation[] => {
   const parsed = Papa.parse<Record<string, string>>(content, {
     header: true,
@@ -446,14 +529,139 @@ export const parseReservationCsv = (content: string): Reservation[] => {
   console.log('[parseReservationCsv] Total CSV rows:', parsed.data.length);
 
   const items: Reservation[] = [];
+  const headers = buildHeaderInfo(parsed.meta.fields);
+  const departmentKeys = mergeCandidateKeys(
+    [
+      findHeaderKey(headers, ["診療科", "診療科名", "診療科目", "診療科コード"], [
+        "診療科",
+        "診療",
+      ]),
+    ],
+    ["診療科", "診療科名", "診療科目", "科目"],
+  );
+  const receivedAtKeys = mergeCandidateKeys(
+    [
+      findHeaderKey(
+        headers,
+        [
+          "受信時刻JST",
+          "受信日時",
+          "受信時刻",
+          "受診日時",
+          "受診時刻",
+          "受付日時",
+          "受付時刻",
+          "予約受付日時",
+        ],
+        ["受信", "受診", "受付", "来院"],
+      ),
+    ],
+    [
+      "受信時刻JST",
+      "受信日時",
+      "受信時刻",
+      "受診日時",
+      "受診時刻",
+      "受付日時",
+      "受付時刻",
+      "来院日時",
+      "来院時刻",
+    ],
+  );
+  const appointmentKeys = mergeCandidateKeys(
+    [
+      findHeaderKey(
+        headers,
+        ["予約日時", "予約時刻", "予約時間", "来院希望日時", "来院希望時刻"],
+        ["予約", "来院希望"],
+      ),
+    ],
+    ["予約日時", "予約時刻", "予約時間", "来院希望日時", "来院希望時刻"],
+  );
+  const visitTypeKeys = mergeCandidateKeys(
+    [
+      findHeaderKey(headers, ["初再診", "初診再診", "初再診区分"], [
+        "初診",
+        "再診",
+      ]),
+    ],
+    ["初再診", "初診再診", "初再診区分"],
+  );
+  const patientIdKeys = mergeCandidateKeys(
+    [
+      findHeaderKey(headers, ["患者ID", "患者Id", "患者番号", "カルテID", "カルテ番号"], [
+        "患者id",
+        "カルテid",
+      ]),
+    ],
+    ["患者ID", "患者Id", "患者番号", "カルテID", "カルテ番号"],
+  );
+  const sameDayKeys = mergeCandidateKeys(
+    [findHeaderKey(headers, ["当日予約", "当日", "当日フラグ"], ["当日"])],
+    ["当日予約", "当日", "当日フラグ"],
+  );
+  const patientNameKeys = mergeCandidateKeys(
+    [
+      findHeaderKey(headers, ["患者氏名", "患者名", "氏名", "お名前"], [
+        "患者名",
+        "お名前",
+      ]),
+    ],
+    ["患者氏名", "患者名", "氏名", "お名前"],
+  );
+  const ageKeys = mergeCandidateKeys(
+    [
+      findHeaderKey(headers, ["年齢", "年齢（歳）", "年齢（満年齢）", "患者年齢"], [
+        "年齢",
+      ]),
+    ],
+    ["年齢", "年齢（歳）", "年齢（満年齢）", "患者年齢"],
+  );
+  const birthKeys = mergeCandidateKeys(
+    [
+      findHeaderKey(headers, ["生年月日", "誕生日", "生年月日（西暦）"], ["生年月日"]),
+    ],
+    ["生年月日", "誕生日", "生年月日（西暦）"],
+  );
+  const prefectureKeys = mergeCandidateKeys(
+    [findHeaderKey(headers, ["都道府県", "都道府県名"], ["都道府県"])],
+    ["都道府県", "都道府県名"],
+  );
+  const cityKeys = mergeCandidateKeys(
+    [findHeaderKey(headers, ["市区町村", "市区町村名"], ["市区町村"])],
+    ["市区町村", "市区町村名"],
+  );
+  const townKeys = mergeCandidateKeys(
+    [findHeaderKey(headers, ["町名", "大字町丁目名", "町丁目", "町域"], ["町", "丁目"])],
+    ["町名", "大字町丁目名", "町丁目", "町域"],
+  );
+  const addressPrimaryKeys = mergeCandidateKeys(
+    [
+      findHeaderKey(headers, ["住所", "患者住所", "住所1", "患者住所1"], [
+        "住所",
+        "患者住所",
+      ]),
+    ],
+    ["住所", "患者住所", "住所1", "患者住所1"],
+  );
+  const addressSecondaryKeys = mergeCandidateKeys(
+    [
+      findHeaderKey(headers, ["住所2", "患者住所2"], ["住所2", "患者住所2"]),
+    ],
+    ["住所2", "患者住所2"],
+  );
+  const addressTertiaryKeys = mergeCandidateKeys(
+    [
+      findHeaderKey(headers, ["住所3", "患者住所3"], ["住所3", "患者住所3"]),
+    ],
+    ["住所3", "患者住所3"],
+  );
 
   // 予約日時を取得するためのヘルパー（完全な日時を含む列を優先）
   const getReservationDateTimeRaw = (row: Record<string, string>): string | undefined => {
     const candidates = [
-      "予約日時",       // 「2025/10/24 9:00」形式
-      "予約時刻",       // フォールバック
-      "予約時間",       // フォールバック
-      "予約",           // フォールバック
+      ...appointmentKeys,
+      "予約", // フォールバック（旧CSV）
     ];
     for (const key of candidates) {
       const v = row[key];
@@ -463,57 +671,56 @@ export const parseReservationCsv = (content: string): Reservation[] => {
   };
 
   for (const row of parsed.data) {
-    const department = row["診療科"]?.trim();
-    const received = parseJstDateTime(row["受信時刻JST"]);
-    if (!department || !received) {
+    const departmentRaw = pickFirstNonEmpty(row, departmentKeys);
+    const department =
+      departmentRaw && departmentRaw.trim().length > 0
+        ? departmentRaw.trim()
+        : "未設定";
+
+    let received = parseDateFromRow(row, receivedAtKeys);
+    const appointment = parseDateFromRow(row, appointmentKeys);
+    if (!received && appointment) {
+      received = appointment;
+    }
+    if (!received) {
       continue;
     }
 
-    const visitType = normalizeVisitType(row["初再診"]);
-    // 予約時刻（D列相当）を優先
+    const visitType = normalizeVisitType(
+      pickFirstNonEmpty(row, visitTypeKeys) ?? undefined,
+    );
     const appointmentRaw = getReservationDateTimeRaw(row);
-    const appointment = parseJstDateTime(appointmentRaw);
-    // 受信時刻はフォールバックとして保持
+    const appointmentParsed = appointment ?? parseJstDateTime(appointmentRaw);
     const receivedParsed: ParsedDateTime = {
       iso: received.iso,
       dateKey: received.dateKey,
       monthKey: received.monthKey,
       hour: received.hour,
     };
-    const patientId = row["患者ID"]?.trim() ?? "";
-    const patientNameCandidate = pickFirstNonEmpty(row, [
-      "患者氏名",
-      "患者名",
-      "氏名",
-      "お名前",
-    ]);
+    const patientId = pickFirstNonEmpty(row, patientIdKeys)?.trim() ?? "";
+    const patientNameCandidate = pickFirstNonEmpty(row, patientNameKeys);
     const { raw: patientName, normalized: patientNameNormalized } = normalizePatientName(
       patientNameCandidate ?? undefined,
     );
 
     const ageValue = parseOptionalInteger(
-      pickFirstNonEmpty(row, ["年齢", "年齢（歳）", "年齢（満年齢）", "患者年齢"]),
+      pickFirstNonEmpty(row, ageKeys),
     );
     const birthIso = parseBirthDate(
-      pickFirstNonEmpty(row, ["生年月日", "誕生日", "生年月日（西暦）"]),
+      pickFirstNonEmpty(row, birthKeys),
     );
     const computedAge =
       ageValue ?? (birthIso ? calculateAgeFromBirth(birthIso, received.iso) : null);
 
     const patientPrefecture =
-      pickFirstNonEmpty(row, ["都道府県", "都道府県名"]) ?? null;
+      pickFirstNonEmpty(row, prefectureKeys) ?? null;
     const patientCity =
-      pickFirstNonEmpty(row, ["市区町村", "市区町村名"]) ?? null;
+      pickFirstNonEmpty(row, cityKeys) ?? null;
     const patientTown =
-      pickFirstNonEmpty(row, ["町名", "大字町丁目名", "町丁目", "町域"]) ?? null;
-    const addressPrimary = pickFirstNonEmpty(row, [
-      "住所",
-      "患者住所",
-      "住所1",
-      "患者住所1",
-    ]);
-    const addressSecondary = pickFirstNonEmpty(row, ["住所2", "患者住所2"]);
-    const addressTertiary = pickFirstNonEmpty(row, ["住所3", "患者住所3"]);
+      pickFirstNonEmpty(row, townKeys) ?? null;
+    const addressPrimary = pickFirstNonEmpty(row, addressPrimaryKeys);
+    const addressSecondary = pickFirstNonEmpty(row, addressSecondaryKeys);
+    const addressTertiary = pickFirstNonEmpty(row, addressTertiaryKeys);
     const addressParts = [addressPrimary, addressSecondary, addressTertiary].filter(
       (value): value is string => typeof value === "string" && value.length > 0,
     );
@@ -533,15 +740,15 @@ export const parseReservationCsv = (content: string): Reservation[] => {
         visitType,
         receivedIso: received.iso,
         patientId,
-        appointmentIso: appointment?.iso ?? null,
+        appointmentIso: appointmentParsed?.iso ?? null,
       }),
       department,
       visitType,
-      reservationDate: appointment?.dateKey ?? receivedParsed.dateKey,
-      reservationMonth: appointment?.monthKey ?? receivedParsed.monthKey,
-      reservationHour: appointment?.hour ?? receivedParsed.hour,
+      reservationDate: appointmentParsed?.dateKey ?? receivedParsed.dateKey,
+      reservationMonth: appointmentParsed?.monthKey ?? receivedParsed.monthKey,
+      reservationHour: appointmentParsed?.hour ?? receivedParsed.hour,
       receivedAtIso: received.iso,
-      appointmentIso: appointment?.iso ?? null,
+      appointmentIso: appointmentParsed?.iso ?? null,
       bookingIso: receivedParsed.iso,
       bookingDate: receivedParsed.dateKey,
       bookingHour: receivedParsed.hour,
@@ -553,7 +760,14 @@ export const parseReservationCsv = (content: string): Reservation[] => {
       patientCity,
       patientTown,
       patientAddress,
-      isSameDay: (row["当日予約"] ?? "").trim().toLowerCase() === "true",
+      isSameDay: (() => {
+        const raw = pickFirstNonEmpty(row, sameDayKeys);
+        if (!raw) return false;
+        const normalized = raw.trim().toLowerCase();
+        if (normalized === "true" || normalized === "1") return true;
+        if (normalized === "false" || normalized === "0") return false;
+        return normalized.includes("当日");
+      })(),
     };
 
     items.push(reservation);
