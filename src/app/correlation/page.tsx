@@ -307,9 +307,28 @@ export default function CorrelationPage() {
           dates.add(dateKey);
         }
       });
+      // 予約日も含めて日付セットを拡張（予約のみ存在する日の漏れ防止）
+      trueFirstAggregation.reservationCounts.forEach((_, dateKey) => {
+        const monthKey = dateKey.slice(0, 7);
+        if (
+          (!startMonth || monthKey >= startMonth) &&
+          (!endMonth || monthKey <= endMonth)
+        ) {
+          dates.add(dateKey);
+        }
+      });
     } else {
       // 内視鏡は専用マップからも日付キーを拾う
       trueFirstAggregation.endoscopyTrueFirstByDate.forEach((_, dateKey) => {
+        const monthKey = dateKey.slice(0, 7);
+        if (
+          (!startMonth || monthKey >= startMonth) &&
+          (!endMonth || monthKey <= endMonth)
+        ) {
+          dates.add(dateKey);
+        }
+      });
+      trueFirstAggregation.endoscopyReservationByDate.forEach((_, dateKey) => {
         const monthKey = dateKey.slice(0, 7);
         if (
           (!startMonth || monthKey >= startMonth) &&
@@ -328,7 +347,9 @@ export default function CorrelationPage() {
     surveyAggregation.feverGoogleByDate,
     surveyAggregation.generalGoogleByDate,
     trueFirstAggregation.trueFirstCounts,
+    trueFirstAggregation.reservationCounts,
     trueFirstAggregation.endoscopyTrueFirstByDate,
+    trueFirstAggregation.endoscopyReservationByDate,
     selectedSegment,
     startMonth,
     endMonth,

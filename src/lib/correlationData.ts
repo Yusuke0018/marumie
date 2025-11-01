@@ -209,7 +209,8 @@ export const buildTrueFirstAggregation = (
       patientNameNormalized: reservation.patientNameNormalized ?? undefined,
       patientName: reservation.patientName ?? undefined,
     });
-    const occurredAt = getReservationTimestamp(reservation);
+    // firstSeen は受信（またはbooking）基準で安定化
+    const occurredAt = reservation.receivedAtIso ?? reservation.bookingIso ?? null;
     events.push({
       identityKey,
       occurredAt,
@@ -252,6 +253,9 @@ export const buildTrueFirstAggregation = (
   const endoscopyTrueFirstByDate = new Map<string, EndoscopyHourly>();
   const endoscopyReservationByDate = new Map<string, EndoscopyHourly>();
 
+  // 同一患者・同一日に複数予約がある場合の重複カウント防止
+  const countedTrueFirstByDay = new Set<string>();
+
   reservations.forEach((reservation) => {
     const timestamp = getReservationTimestamp(reservation);
     const dateKey = getReservationDateKey(reservation);
@@ -282,9 +286,15 @@ export const buildTrueFirstAggregation = (
     }
 
     const firstSeen = firstSeenIndex.get(identityKey);
-    if (firstSeen && timestamp.localeCompare(firstSeen) === 0) {
+    // 日単位で一致すれば真の初診とみなす
+    if (firstSeen && timestamp.slice(0, 10) === firstSeen.slice(0, 10)) {
+      const tfKey = `${identityKey}|${dateKey}`;
+      if (countedTrueFirstByDay.has(tfKey)) {
+        return;
+      }
       const trueFirstBucket = ensureHourlyBucket(trueFirstCounts, dateKey);
       trueFirstBucket[category][hour] += 1;
+      countedTrueFirstByDay.add(tfKey);
       const endoType2 = classifyEndoscopyFromDepartment(reservation.department);
       if (endoType2) {
         const endoBucket = ensureEndoscopyBucket(endoscopyTrueFirstByDate, dateKey);

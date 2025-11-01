@@ -366,30 +366,24 @@ const isValidReservationRecord = (record: unknown): record is Reservation => {
 };
 
 const parseJstDateTime = (raw: string | undefined): ParsedDateTime | null => {
-  if (!raw) {
-    return null;
-  }
+  if (!raw) return null;
   const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
+  if (trimmed.length === 0) return null;
 
-  const parts = trimmed.split(" ");
-  const datePart = parts[0];
-  if (!datePart || datePart.split("/").length < 3) {
-    return null;
-  }
-  const timePartRaw = parts[1] ?? "00:00";
-  const [yearStr, monthStr, dayStr] = datePart.split("/");
-  const timeParts = timePartRaw.split(":");
-  const hourStr = timeParts[0];
-  const minuteStr = timeParts[1] ?? "00";
-
-  const year = Number(yearStr);
-  const month = Number(monthStr);
-  const day = Number(dayStr);
-  const hour = Number(hourStr);
-  const minute = Number(minuteStr);
+  // サポート形式:
+  // - yyyy/mm/dd[ HH:MM]
+  // - yyyy-mm-dd[ HH:MM]
+  // - yyyy/m/d[ H:M]
+  // - yyyy-mm-ddTHH:MM
+  const m = trimmed.match(
+    /(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})(?:[T\s](\d{1,2}):(\d{1,2}))?/
+  );
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const hour = m[4] !== undefined ? Number(m[4]) : 0;
+  const minute = m[5] !== undefined ? Number(m[5]) : 0;
 
   if (
     Number.isNaN(year) ||
