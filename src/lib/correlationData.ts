@@ -265,13 +265,15 @@ export const buildTrueFirstAggregation = (
     }
 
     const category = categorizeReservationDepartment(reservation.department);
-    if (!category) {
-      return;
+    const endoType = classifyEndoscopyFromDepartment(reservation.department);
+
+    // 総合診療・発熱外来のカウント
+    if (category) {
+      const reservationBucket = ensureHourlyBucket(reservationCounts, dateKey);
+      reservationBucket[category][hour] += 1;
     }
 
-    const reservationBucket = ensureHourlyBucket(reservationCounts, dateKey);
-    reservationBucket[category][hour] += 1;
-    const endoType = classifyEndoscopyFromDepartment(reservation.department);
+    // 内視鏡のカウント（総合診療・発熱外来とは独立）
     if (endoType) {
       const endoBucket = ensureEndoscopyBucket(endoscopyReservationByDate, dateKey);
       endoBucket[endoType][hour] += 1;
@@ -292,13 +294,22 @@ export const buildTrueFirstAggregation = (
       if (countedTrueFirstByDay.has(tfKey)) {
         return;
       }
-      const trueFirstBucket = ensureHourlyBucket(trueFirstCounts, dateKey);
-      trueFirstBucket[category][hour] += 1;
-      countedTrueFirstByDay.add(tfKey);
-      const endoType2 = classifyEndoscopyFromDepartment(reservation.department);
-      if (endoType2) {
+
+      // 総合診療・発熱外来の真の初診カウント
+      if (category) {
+        const trueFirstBucket = ensureHourlyBucket(trueFirstCounts, dateKey);
+        trueFirstBucket[category][hour] += 1;
+        countedTrueFirstByDay.add(tfKey);
+      }
+
+      // 内視鏡の真の初診カウント（総合診療・発熱外来とは独立）
+      if (endoType) {
         const endoBucket = ensureEndoscopyBucket(endoscopyTrueFirstByDate, dateKey);
-        endoBucket[endoType2][hour] += 1;
+        endoBucket[endoType][hour] += 1;
+        // 内視鏡のみの場合も重複カウント防止
+        if (!category) {
+          countedTrueFirstByDay.add(tfKey);
+        }
       }
     }
   });
