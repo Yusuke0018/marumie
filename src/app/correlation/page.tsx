@@ -811,7 +811,9 @@ export default function CorrelationPage() {
                 日次の指標比較
               </h2>
               <p className="text-xs text-slate-500">
-                リスティングCVと{trueFirstLabelWithCount}、アンケート上の Google 回答を日次で比較
+                {isEndoscopyMode
+                  ? `リスティングCVと${trueFirstLabelWithCount}を日次で比較`
+                  : `リスティングCVと${trueFirstLabelWithCount}、アンケート上の Google 回答を日次で比較`}
               </p>
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="h-72 w-full xl:h-80">
@@ -838,14 +840,16 @@ export default function CorrelationPage() {
                         stroke="#f97316"
                         strokeWidth={2}
                       />
-                      <Line
-                        yAxisId="right"
-                        type="monotone"
-                        dataKey="surveyGoogle"
-                        name="アンケート Google 回答"
-                        stroke="#10b981"
-                        strokeWidth={2}
-                      />
+                      {!isEndoscopyMode && (
+                        <Line
+                          yAxisId="right"
+                          type="monotone"
+                          dataKey="surveyGoogle"
+                          name="アンケート Google 回答"
+                          stroke="#10b981"
+                          strokeWidth={2}
+                        />
+                      )}
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -877,9 +881,11 @@ export default function CorrelationPage() {
                         <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                           予約総数
                         </th>
-                        <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Google 回答
-                        </th>
+                        {!isEndoscopyMode && (
+                          <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Google 回答
+                          </th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
@@ -897,9 +903,11 @@ export default function CorrelationPage() {
                           <td className="px-4 py-2 text-right text-sm text-slate-600">
                             {row.reservations.toLocaleString("ja-JP")}
                           </td>
-                          <td className="px-4 py-2 text-right text-sm text-slate-600">
-                            {row.surveyGoogle.toLocaleString("ja-JP")}
-                          </td>
+                          {!isEndoscopyMode && (
+                            <td className="px-4 py-2 text-right text-sm text-slate-600">
+                              {row.surveyGoogle.toLocaleString("ja-JP")}
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
