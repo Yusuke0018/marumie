@@ -582,6 +582,48 @@ export default function CorrelationPage() {
           </p>
         </section>
 
+        {/* データロード状況表示 */}
+        <section className="rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
+          <h2 className="text-sm font-semibold text-blue-900">データ読み込み状況</h2>
+          <div className="mt-3 grid gap-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-blue-700">予約ログ:</span>
+              <span className="font-mono text-blue-900">
+                {reservations.length}件
+                {reservations.length === 0 && " ⚠️ データがありません"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-blue-700">リスティングデータ:</span>
+              <span className="font-mono text-blue-900">
+                {listingData.reduce((sum, cat) => sum + cat.data.length, 0)}件
+                {listingData.length === 0 && " ⚠️ データがありません"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-blue-700">アンケートデータ:</span>
+              <span className="font-mono text-blue-900">
+                {surveyData.length}件
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-blue-700">カルテデータ:</span>
+              <span className="font-mono text-blue-900">
+                {karteRecords.length}件
+              </span>
+            </div>
+          </div>
+          {(reservations.length === 0 || listingData.length === 0) && (
+            <p className="mt-3 text-xs text-blue-700">
+              💡 データが0件の場合は、
+              <a href="/patients#data-management-panel" className="font-semibold underline">
+                データ管理パネル
+              </a>
+              からCSVをアップロードしてください。
+            </p>
+          )}
+        </section>
+
         <AnalysisFilterPortal
           months={availableMonths}
           startMonth={startMonth}
