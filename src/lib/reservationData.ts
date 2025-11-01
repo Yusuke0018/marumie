@@ -445,22 +445,16 @@ export const parseReservationCsv = (content: string): Reservation[] => {
 
   const items: Reservation[] = [];
 
-  // 予約時刻（D列優先）を取得するためのヘルパー
+  // 予約日時を取得するためのヘルパー（完全な日時を含む列を優先）
   const getReservationDateTimeRaw = (row: Record<string, string>): string | undefined => {
     const candidates = [
-      "予約時刻",
-      "予約日時",
-      "予約時間",
-      "予約",
+      "予約日時",       // 「2025/10/24 9:00」形式
+      "予約時刻",       // フォールバック
+      "予約時間",       // フォールバック
+      "予約",           // フォールバック
     ];
     for (const key of candidates) {
       const v = row[key];
-      if (typeof v === "string" && v.trim().length > 0) return v;
-    }
-    // ヘッダ不一致時のフォールバック: D列（0始まりで index=3）を想定
-    const keys = Object.keys(row);
-    if (keys.length >= 4) {
-      const v = row[keys[3]]; // D列
       if (typeof v === "string" && v.trim().length > 0) return v;
     }
     return undefined;
