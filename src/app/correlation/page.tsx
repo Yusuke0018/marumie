@@ -36,7 +36,12 @@ import { getCompressedItem } from "@/lib/storageCompression";
 import type { SurveyData } from "@/lib/surveyData";
 import { loadSurveyDataFromStorage } from "@/lib/surveyData";
 
-type SegmentKey = "general" | "fever";
+type SegmentKey =
+  | "general"
+  | "fever"
+  | "endoscopy" // 内視鏡（合計: 胃+大腸）
+  | "endoscopy-stomach" // 胃カメラ
+  | "endoscopy-colon"; // 大腸カメラ
 
 type HourlyChartPoint = {
   hour: string;
@@ -144,6 +149,9 @@ const correlationLevel = (value: number) => {
 const SEGMENT_LABEL: Record<SegmentKey, string> = {
   general: "総合診療・内科",
   fever: "発熱外来",
+  endoscopy: "内視鏡（合計）",
+  "endoscopy-stomach": "胃カメラ",
+  "endoscopy-colon": "大腸カメラ",
 };
 
 export default function CorrelationPage() {
@@ -191,7 +199,12 @@ export default function CorrelationPage() {
   const availableMonths = useMemo(() => {
     const months = new Set<string>();
     listingData.forEach((category) => {
-      if (category.category === "内科" || category.category === "発熱外来") {
+      if (
+        category.category === "内科" ||
+        category.category === "発熱外来" ||
+        category.category === "胃カメラ" ||
+        category.category === "大腸カメラ"
+      ) {
         category.data.forEach((entry) => {
           const monthKey = getMonthKey(entry.date);
           if (monthKey) {
@@ -247,10 +260,15 @@ export default function CorrelationPage() {
   const filteredDates = useMemo(() => {
     const dates = new Set<string>();
 
-    const listingMap =
-      selectedSegment === "fever"
-        ? listingAggregation.feverCvByDate
-        : listingAggregation.generalCvByDate;
+    let listingMap = listingAggregation.generalCvByDate;
+    if (selectedSegment === "fever") listingMap = listingAggregation.feverCvByDate;
+    if (
+      selectedSegment === "endoscopy" ||
+      selectedSegment === "endoscopy-stomach" ||
+      selectedSegment === "endoscopy-colon"
+    ) {
+      listingMap = listingAggregation.endoscopyCvByDate;
+    }
 
     listingMap.forEach((_, dateKey) => {
       const monthKey = dateKey.slice(0, 7);
@@ -276,23 +294,38 @@ export default function CorrelationPage() {
       }
     });
 
-    trueFirstAggregation.trueFirstCounts.forEach((_, dateKey) => {
-      const monthKey = dateKey.slice(0, 7);
-      if (
-        (!startMonth || monthKey >= startMonth) &&
-        (!endMonth || monthKey <= endMonth)
-      ) {
-        dates.add(dateKey);
-      }
-    });
+    if (selectedSegment === "general" || selectedSegment === "fever") {
+      trueFirstAggregation.trueFirstCounts.forEach((_, dateKey) => {
+        const monthKey = dateKey.slice(0, 7);
+        if (
+          (!startMonth || monthKey >= startMonth) &&
+          (!endMonth || monthKey <= endMonth)
+        ) {
+          dates.add(dateKey);
+        }
+      });
+    } else {
+      // 内視鏡は専用マップからも日付キーを拾う
+      trueFirstAggregation.endoscopyTrueFirstByDate.forEach((_, dateKey) => {
+        const monthKey = dateKey.slice(0, 7);
+        if (
+          (!startMonth || monthKey >= startMonth) &&
+          (!endMonth || monthKey <= endMonth)
+        ) {
+          dates.add(dateKey);
+        }
+      });
+    }
 
     return Array.from(dates).sort();
   }, [
     listingAggregation.feverCvByDate,
     listingAggregation.generalCvByDate,
+    listingAggregation.endoscopyCvByDate,
     surveyAggregation.feverGoogleByDate,
     surveyAggregation.generalGoogleByDate,
     trueFirstAggregation.trueFirstCounts,
+    trueFirstAggregation.endoscopyTrueFirstByDate,
     selectedSegment,
     startMonth,
     endMonth,
@@ -306,14 +339,21 @@ export default function CorrelationPage() {
     dailyChartData,
     surveyTotals,
   } = useMemo(() => {
-    const listingMap =
-      selectedSegment === "fever"
-        ? listingAggregation.feverCvByDate
-        : listingAggregation.generalCvByDate;
+    let listingMap = listingAggregation.generalCvByDate;
+    if (selectedSegment === "fever") listingMap = listingAggregation.feverCvByDate;
+    if (
+      selectedSegment === "endoscopy" ||
+      selectedSegment === "endoscopy-stomach" ||
+      selectedSegment === "endoscopy-colon"
+    ) {
+      listingMap = listingAggregation.endoscopyCvByDate;
+    }
+
     const surveyMap =
       selectedSegment === "fever"
         ? surveyAggregation.feverGoogleByDate
         : surveyAggregation.generalGoogleByDate;
+
     const trueFirstMap = trueFirstAggregation.trueFirstCounts;
     const reservationMap = trueFirstAggregation.reservationCounts;
 
@@ -338,14 +378,32 @@ export default function CorrelationPage() {
 
       for (let hour = 0; hour < 24; hour += 1) {
         const listingValue = listingHourly?.[hour] ?? 0;
-        const trueFirstValue =
-          trueFirstHourly?.[selectedSegment === "fever" ? "fever" : "general"]?.[
-            hour
-          ] ?? 0;
-        const reservationValue =
-          reservationHourly?.[selectedSegment === "fever" ? "fever" : "general"]?.[
-            hour
-          ] ?? 0;
+        let trueFirstValue = 0;
+        let reservationValue = 0;
+
+        if (selectedSegment === "fever" || selectedSegment === "general") {
+          trueFirstValue =
+            trueFirstHourly?.[selectedSegment === "fever" ? "fever" : "general"]?.[
+              hour
+            ] ?? 0;
+          reservationValue =
+            reservationHourly?.[selectedSegment === "fever" ? "fever" : "general"]?.[
+              hour
+            ] ?? 0;
+        } else {
+          const endoTrue = trueFirstAggregation.endoscopyTrueFirstByDate.get(dateKey);
+          const endoResv = trueFirstAggregation.endoscopyReservationByDate.get(dateKey);
+          if (selectedSegment === "endoscopy") {
+            trueFirstValue = (endoTrue?.stomach?.[hour] ?? 0) + (endoTrue?.colon?.[hour] ?? 0);
+            reservationValue = (endoResv?.stomach?.[hour] ?? 0) + (endoResv?.colon?.[hour] ?? 0);
+          } else if (selectedSegment === "endoscopy-stomach") {
+            trueFirstValue = endoTrue?.stomach?.[hour] ?? 0;
+            reservationValue = endoResv?.stomach?.[hour] ?? 0;
+          } else if (selectedSegment === "endoscopy-colon") {
+            trueFirstValue = endoTrue?.colon?.[hour] ?? 0;
+            reservationValue = endoResv?.colon?.[hour] ?? 0;
+          }
+        }
 
         hourlyBuckets[hour].listingCv += listingValue;
         hourlyBuckets[hour].trueFirst += trueFirstValue;
@@ -396,10 +454,13 @@ export default function CorrelationPage() {
     filteredDates,
     listingAggregation.feverCvByDate,
     listingAggregation.generalCvByDate,
+    listingAggregation.endoscopyCvByDate,
     surveyAggregation.feverGoogleByDate,
     surveyAggregation.generalGoogleByDate,
     trueFirstAggregation.trueFirstCounts,
     trueFirstAggregation.reservationCounts,
+    trueFirstAggregation.endoscopyTrueFirstByDate,
+    trueFirstAggregation.endoscopyReservationByDate,
     selectedSegment,
   ]);
 
@@ -505,8 +566,16 @@ export default function CorrelationPage() {
 
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm font-semibold text-slate-700">診療モード:</span>
-          <div className="flex gap-2">
-            {(["general", "fever"] as SegmentKey[]).map((segment) => (
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                "general",
+                "fever",
+                "endoscopy",
+                "endoscopy-stomach",
+                "endoscopy-colon",
+              ] as SegmentKey[]
+            ).map((segment) => (
               <button
                 key={segment}
                 onClick={() => setSelectedSegment(segment)}

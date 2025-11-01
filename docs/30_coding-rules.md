@@ -10,7 +10,11 @@ Heavyなチャートやグラフは `React.lazy` と `Suspense` で遅延読み�
 ## 推奨パターン
 - データ共有は`cloudflare-worker`のREST API経由で行い、直接R2へアクセスしない。[cloudflare-worker/src/index.ts:48-134]
 - 地図表示は `GeoDistributionMap` の集約ロジックを再利用し、直接Leafletへアクセスしない。[src/components/reservations/GeoDistributionMap.tsx:320-928]
- - 遅延読み込みでは Next の `dynamic()` も適宜活用し、初期バンドルを抑える。[src/app/map-analysis/page.tsx:131-134]
+- 遅延読み込みでは Next の `dynamic()` も適宜活用し、初期バンドルを抑える。[src/app/map-analysis/page.tsx:131-134]
 
 ## 実行環境
 - Node.js は CI と同じ v20 系を推奨します。`.nvmrc` か `package.json#engines` でバージョンを固定し、ローカル差異を抑制します。[.github/workflows/deploy.yml:1-120]
+
+## カテゴリ正規化（相関分析）
+- リスティングは「胃カメラ」「大腸カメラ」を内視鏡として集約し、相関では内視鏡（合計）をベースに比較します。[src/lib/correlationData.ts:120-200]
+- カルテ/予約は診療科の文言から「胃/上部」「大腸/下部」を簡易判定して、真の初診・予約カウントを時間帯別に集計します（該当なしは除外）。[src/lib/correlationData.ts:1-200]

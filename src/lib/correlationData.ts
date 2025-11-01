@@ -12,6 +12,9 @@ const FEVER_RESERVATION_PATTERN = /発熱/;
 
 const GENERAL_KARTE_PATTERNS = [/総合診療/, /内科/];
 const FEVER_KARTE_PATTERN = /発熱/;
+// 内視鏡の簡易判定（胃/大腸/同義語）
+const ENDOSCOPY_STOMACH_PATTERN = /(胃|上部|胃カメラ|上部内視鏡|gastroscopy|egd)/i;
+const ENDOSCOPY_COLON_PATTERN = /(大腸|下部|大腸カメラ|下部内視鏡|colonoscopy)/i;
 
 type HourlyBuckets = {
   general: number[];
@@ -29,6 +32,26 @@ const ensureHourlyBucket = (
 ): HourlyBuckets => {
   if (!map.has(dateKey)) {
     map.set(dateKey, createEmptyHourlyBuckets());
+  }
+  return map.get(dateKey)!;
+};
+
+type EndoscopyHourly = {
+  stomach: number[];
+  colon: number[];
+};
+
+const createEmptyEndoscopyHourly = (): EndoscopyHourly => ({
+  stomach: Array.from({ length: 24 }, () => 0),
+  colon: Array.from({ length: 24 }, () => 0),
+});
+
+const ensureEndoscopyBucket = (
+  map: Map<string, EndoscopyHourly>,
+  dateKey: string,
+): EndoscopyHourly => {
+  if (!map.has(dateKey)) {
+    map.set(dateKey, createEmptyEndoscopyHourly());
   }
   return map.get(dateKey)!;
 };
@@ -75,6 +98,16 @@ const categorizeKarteDepartment = (
     return { type: "general", normalizedGeneral: normalized };
   }
   return { type: null, normalizedGeneral: null };
+};
+
+const classifyEndoscopyFromDepartment = (
+  department: string | null | undefined,
+): "stomach" | "colon" | null => {
+  if (!department) return null;
+  const normalized = department.replace(/\s+/g, "");
+  if (ENDOSCOPY_STOMACH_PATTERN.test(normalized)) return "stomach";
+  if (ENDOSCOPY_COLON_PATTERN.test(normalized)) return "colon";
+  return null;
 };
 
 const getReservationTimestamp = (reservation: Reservation): string | null => {
@@ -128,6 +161,8 @@ export type TrueFirstAggregation = {
   trueFirstCounts: Map<string, HourlyBuckets>;
   reservationCounts: Map<string, HourlyBuckets>;
   generalDepartmentByDate: Map<string, "総合診療" | "内科" | "mixed">;
+  endoscopyTrueFirstByDate: Map<string, EndoscopyHourly>;
+  endoscopyReservationByDate: Map<string, EndoscopyHourly>;
 };
 
 export const buildTrueFirstAggregation = (
@@ -194,6 +229,8 @@ export const buildTrueFirstAggregation = (
   const firstSeenIndex = buildFirstSeenIndex(events);
   const trueFirstCounts = new Map<string, HourlyBuckets>();
   const reservationCounts = new Map<string, HourlyBuckets>();
+  const endoscopyTrueFirstByDate = new Map<string, EndoscopyHourly>();
+  const endoscopyReservationByDate = new Map<string, EndoscopyHourly>();
 
   reservations.forEach((reservation) => {
     const timestamp = getReservationTimestamp(reservation);
@@ -213,6 +250,11 @@ export const buildTrueFirstAggregation = (
 
     const reservationBucket = ensureHourlyBucket(reservationCounts, dateKey);
     reservationBucket[category][hour] += 1;
+    const endoType = classifyEndoscopyFromDepartment(reservation.department);
+    if (endoType) {
+      const endoBucket = ensureEndoscopyBucket(endoscopyReservationByDate, dateKey);
+      endoBucket[endoType][hour] += 1;
+    }
 
     const identityKey = createPatientIdentityKey({
       patientNameNormalized: reservation.patientNameNormalized ?? undefined,
@@ -226,6 +268,11 @@ export const buildTrueFirstAggregation = (
     if (firstSeen && timestamp.localeCompare(firstSeen) === 0) {
       const trueFirstBucket = ensureHourlyBucket(trueFirstCounts, dateKey);
       trueFirstBucket[category][hour] += 1;
+      const endoType2 = classifyEndoscopyFromDepartment(reservation.department);
+      if (endoType2) {
+        const endoBucket = ensureEndoscopyBucket(endoscopyTrueFirstByDate, dateKey);
+        endoBucket[endoType2][hour] += 1;
+      }
     }
   });
 
@@ -233,12 +280,15 @@ export const buildTrueFirstAggregation = (
     trueFirstCounts,
     reservationCounts,
     generalDepartmentByDate,
+    endoscopyTrueFirstByDate,
+    endoscopyReservationByDate,
   };
 };
 
 export type ListingAggregation = {
   generalCvByDate: Map<string, number[]>;
   feverCvByDate: Map<string, number[]>;
+  endoscopyCvByDate: Map<string, number[]>;
 };
 
 export const buildListingAggregation = (
@@ -246,6 +296,7 @@ export const buildListingAggregation = (
 ): ListingAggregation => {
   const generalCvByDate = new Map<string, number[]>();
   const feverCvByDate = new Map<string, number[]>();
+  const endoscopyCvByDate = new Map<string, number[]>();
 
   const registerListing = (
     target: Map<string, number[]>,
@@ -262,8 +313,13 @@ export const buildListingAggregation = (
   };
 
   listingData.forEach((categoryData) => {
-    const targetMap =
-      categoryData.category === "発熱外来" ? feverCvByDate : generalCvByDate;
+    let targetMap: Map<string, number[]> = generalCvByDate;
+    if (categoryData.category === "発熱外来") {
+      targetMap = feverCvByDate;
+    }
+    if (categoryData.category === "胃カメラ" || categoryData.category === "大腸カメラ") {
+      targetMap = endoscopyCvByDate;
+    }
     categoryData.data.forEach((entry) => {
       const dateKey = getListingDateKey(entry);
       if (!dateKey) {
@@ -276,6 +332,7 @@ export const buildListingAggregation = (
   return {
     generalCvByDate,
     feverCvByDate,
+    endoscopyCvByDate,
   };
 };
 
