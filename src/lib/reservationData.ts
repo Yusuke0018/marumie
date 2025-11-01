@@ -759,18 +759,21 @@ export const parseReservationCsv = (content: string): Reservation[] => {
       ? parseJstDateTime(appointmentTimeRaw)
       : null;
 
-    const baseDateForAppointment = appointmentDateCandidate ?? received;
-    let appointmentParsed: ParsedDateTime = baseDateForAppointment;
-    if (appointmentTimeCandidate && baseDateForAppointment) {
-      appointmentParsed = combineDateAndTime(
-        baseDateForAppointment,
-        appointmentTimeCandidate,
-      );
-    } else if (appointmentTimeCandidate) {
-      appointmentParsed = appointmentTimeCandidate;
-    } else if (appointmentDateCandidate) {
-      appointmentParsed = appointmentDateCandidate;
+    let appointmentParsed: ParsedDateTime | null = received;
+    if (!appointmentParsed) {
+      if (appointmentDateCandidate && appointmentTimeCandidate) {
+        appointmentParsed = combineDateAndTime(
+          appointmentDateCandidate,
+          appointmentTimeCandidate,
+        );
+      } else if (appointmentDateCandidate) {
+        appointmentParsed = appointmentDateCandidate;
+      } else if (appointmentTimeCandidate) {
+        appointmentParsed = appointmentTimeCandidate;
+      }
     }
+
+    const appointmentFinal = appointmentParsed ?? received;
 
     const visitType = normalizeVisitType(
       pickFirstNonEmpty(row, visitTypeKeys) ?? undefined,
@@ -825,15 +828,15 @@ export const parseReservationCsv = (content: string): Reservation[] => {
         visitType,
         receivedIso: received.iso,
         patientId,
-        appointmentIso: appointmentParsed?.iso ?? null,
+        appointmentIso: appointmentFinal?.iso ?? null,
       }),
       department,
       visitType,
-      reservationDate: appointmentParsed?.dateKey ?? receivedParsed.dateKey,
-      reservationMonth: appointmentParsed?.monthKey ?? receivedParsed.monthKey,
-      reservationHour: appointmentParsed?.hour ?? receivedParsed.hour,
+      reservationDate: appointmentFinal?.dateKey ?? receivedParsed.dateKey,
+      reservationMonth: appointmentFinal?.monthKey ?? receivedParsed.monthKey,
+      reservationHour: appointmentFinal?.hour ?? receivedParsed.hour,
       receivedAtIso: received.iso,
-      appointmentIso: appointmentParsed?.iso ?? null,
+      appointmentIso: appointmentFinal?.iso ?? null,
       bookingIso: receivedParsed.iso,
       bookingDate: receivedParsed.dateKey,
       bookingHour: receivedParsed.hour,
