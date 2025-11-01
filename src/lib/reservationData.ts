@@ -557,6 +557,10 @@ const parseDateFromRow = (
     }
     const parsed = parseJstDateTime(raw);
     if (parsed) {
+      const year = Number.parseInt(parsed.dateKey.slice(0, 4), 10);
+      if (!Number.isNaN(year) && year < 2000) {
+        continue;
+      }
       return parsed;
     }
   }
