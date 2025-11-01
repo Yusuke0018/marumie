@@ -181,8 +181,7 @@ export type TrueFirstAggregation = {
   trueFirstCounts: Map<string, HourlyBuckets>;
   reservationCounts: Map<string, HourlyBuckets>;
   generalDepartmentByDate: Map<string, "総合診療" | "内科" | "mixed">;
-  endoscopyTrueFirstByDate: Map<string, EndoscopyHourly>;
-  endoscopyReservationByDate: Map<string, EndoscopyHourly>;
+  endoscopyFirstReservationByDate: Map<string, EndoscopyHourly>;
 };
 
 export const buildTrueFirstAggregation = (
@@ -250,8 +249,7 @@ export const buildTrueFirstAggregation = (
   const firstSeenIndex = buildFirstSeenIndex(events);
   const trueFirstCounts = new Map<string, HourlyBuckets>();
   const reservationCounts = new Map<string, HourlyBuckets>();
-  const endoscopyTrueFirstByDate = new Map<string, EndoscopyHourly>();
-  const endoscopyReservationByDate = new Map<string, EndoscopyHourly>();
+  const endoscopyFirstReservationByDate = new Map<string, EndoscopyHourly>();
 
   // 同一患者・同一日に複数予約がある場合の重複カウント防止
   const countedTrueFirstByDay = new Set<string>();
@@ -273,9 +271,9 @@ export const buildTrueFirstAggregation = (
       reservationBucket[category][hour] += 1;
     }
 
-    // 内視鏡のカウント（総合診療・発熱外来とは独立）
-    if (endoType) {
-      const endoBucket = ensureEndoscopyBucket(endoscopyReservationByDate, dateKey);
+    // 内視鏡の初診予約カウント（visitTypeが「初診」の場合のみ）
+    if (endoType && reservation.visitType === "初診") {
+      const endoBucket = ensureEndoscopyBucket(endoscopyFirstReservationByDate, dateKey);
       endoBucket[endoType][hour] += 1;
     }
 
@@ -301,16 +299,6 @@ export const buildTrueFirstAggregation = (
         trueFirstBucket[category][hour] += 1;
         countedTrueFirstByDay.add(tfKey);
       }
-
-      // 内視鏡の真の初診カウント（総合診療・発熱外来とは独立）
-      if (endoType) {
-        const endoBucket = ensureEndoscopyBucket(endoscopyTrueFirstByDate, dateKey);
-        endoBucket[endoType][hour] += 1;
-        // 内視鏡のみの場合も重複カウント防止
-        if (!category) {
-          countedTrueFirstByDay.add(tfKey);
-        }
-      }
     }
   });
 
@@ -318,8 +306,7 @@ export const buildTrueFirstAggregation = (
     trueFirstCounts,
     reservationCounts,
     generalDepartmentByDate,
-    endoscopyTrueFirstByDate,
-    endoscopyReservationByDate,
+    endoscopyFirstReservationByDate,
   };
 };
 

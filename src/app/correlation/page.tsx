@@ -319,16 +319,7 @@ export default function CorrelationPage() {
       });
     } else {
       // 内視鏡は専用マップからも日付キーを拾う
-      trueFirstAggregation.endoscopyTrueFirstByDate.forEach((_, dateKey) => {
-        const monthKey = dateKey.slice(0, 7);
-        if (
-          (!startMonth || monthKey >= startMonth) &&
-          (!endMonth || monthKey <= endMonth)
-        ) {
-          dates.add(dateKey);
-        }
-      });
-      trueFirstAggregation.endoscopyReservationByDate.forEach((_, dateKey) => {
+      trueFirstAggregation.endoscopyFirstReservationByDate.forEach((_, dateKey) => {
         const monthKey = dateKey.slice(0, 7);
         if (
           (!startMonth || monthKey >= startMonth) &&
@@ -348,8 +339,7 @@ export default function CorrelationPage() {
     surveyAggregation.generalGoogleByDate,
     trueFirstAggregation.trueFirstCounts,
     trueFirstAggregation.reservationCounts,
-    trueFirstAggregation.endoscopyTrueFirstByDate,
-    trueFirstAggregation.endoscopyReservationByDate,
+    trueFirstAggregation.endoscopyFirstReservationByDate,
     selectedSegment,
     startMonth,
     endMonth,
@@ -418,17 +408,17 @@ export default function CorrelationPage() {
               hour
             ] ?? 0;
         } else {
-          const endoTrue = trueFirstAggregation.endoscopyTrueFirstByDate.get(dateKey);
-          const endoResv = trueFirstAggregation.endoscopyReservationByDate.get(dateKey);
+          // 内視鏡は初診予約のみカウント（真の初診は使わない）
+          const endoFirstResv = trueFirstAggregation.endoscopyFirstReservationByDate.get(dateKey);
           if (selectedSegment === "endoscopy") {
-            trueFirstValue = (endoTrue?.stomach?.[hour] ?? 0) + (endoTrue?.colon?.[hour] ?? 0);
-            reservationValue = (endoResv?.stomach?.[hour] ?? 0) + (endoResv?.colon?.[hour] ?? 0);
+            trueFirstValue = (endoFirstResv?.stomach?.[hour] ?? 0) + (endoFirstResv?.colon?.[hour] ?? 0);
+            reservationValue = trueFirstValue; // 初診予約数と同じ
           } else if (selectedSegment === "endoscopy-stomach") {
-            trueFirstValue = endoTrue?.stomach?.[hour] ?? 0;
-            reservationValue = endoResv?.stomach?.[hour] ?? 0;
+            trueFirstValue = endoFirstResv?.stomach?.[hour] ?? 0;
+            reservationValue = trueFirstValue; // 初診予約数と同じ
           } else if (selectedSegment === "endoscopy-colon") {
-            trueFirstValue = endoTrue?.colon?.[hour] ?? 0;
-            reservationValue = endoResv?.colon?.[hour] ?? 0;
+            trueFirstValue = endoFirstResv?.colon?.[hour] ?? 0;
+            reservationValue = trueFirstValue; // 初診予約数と同じ
           }
         }
 
@@ -486,8 +476,7 @@ export default function CorrelationPage() {
     surveyAggregation.generalGoogleByDate,
     trueFirstAggregation.trueFirstCounts,
     trueFirstAggregation.reservationCounts,
-    trueFirstAggregation.endoscopyTrueFirstByDate,
-    trueFirstAggregation.endoscopyReservationByDate,
+    trueFirstAggregation.endoscopyFirstReservationByDate,
     selectedSegment,
   ]);
 
