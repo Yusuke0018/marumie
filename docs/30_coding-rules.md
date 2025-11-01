@@ -10,3 +10,7 @@ Heavyなチャートやグラフは `React.lazy` と `Suspense` で遅延読み�
 ## 推奨パターン
 - データ共有は`cloudflare-worker`のREST API経由で行い、直接R2へアクセスしない。[cloudflare-worker/src/index.ts:48-134]
 - 地図表示は `GeoDistributionMap` の集約ロジックを再利用し、直接Leafletへアクセスしない。[src/components/reservations/GeoDistributionMap.tsx:320-928]
+ - 遅延読み込みでは Next の `dynamic()` も適宜活用し、初期バンドルを抑える。[src/app/map-analysis/page.tsx:131-134]
+
+## 実行環境
+- Node.js は CI と同じ v20 系を推奨します。`.nvmrc` か `package.json#engines` でバージョンを固定し、ローカル差異を抑制します。[.github/workflows/deploy.yml:1-120]

@@ -12,7 +12,13 @@
 Cloudflare Worker は `/api/upload` と `/api/data/:id` を提供し、R2バケットでデータ共有を行います。[cloudflare-worker/src/index.ts:48-134]
 地図表示は大阪府町丁目データと全国市区町村座標を組み合わせ、町丁目未特定の場合は市区町村代表点を描画します。[public/data/osaka_towns.json:1][public/data/municipalities.json:1][src/components/reservations/GeoDistributionMap.tsx:538-940]
 
+ABテスト分析(`/ab-test`)は、カルテCSVの取り込みまたは保存済みカルテデータを用いて、任意の複数期間を定義し、以下の指標を期間別に集計・比較します。患者数（真の初診・再診・再来）、診療科別件数、年齢分布、平均年齢、点数・支払の平均/合計、曜日分布、住所ユニーク数、保険区分分布などをRechartsで可視化し、差分・増減率を表示します。期間はカレンダー複数選択または開始日/終了日指定で操作できます。[src/app/ab-test/page.tsx:1-520]
+
 ## データ入力/出力
 - フロントCSV: 予約ログ・カルテ・アンケートをブラウザ圧縮保存する。[src/lib/storageCompression.ts:1-120]
 - 共有API: JSON文字列をR2へ保存しID付きURLを返却する。[cloudflare-worker/src/index.ts:48-75]
 - 地理マスター: `public/data/osaka_towns.json` と `public/data/municipalities.json` をロードし、町丁目と市区町村代表点を使い分ける。[src/components/reservations/GeoDistributionMap.tsx:538-940]
+
+## ビルド/ホスティング
+- Vercel: `npm run build` の標準ビルドを使用し、環境変数の追加設定は不要。
+- GitHub Pages: `GITHUB_PAGES=true` で `next export` を行い、`basePath='/marumie'` と `assetPrefix='/marumie/'` に切り替える。[next.config.mjs:1-20][.github/workflows/deploy.yml:1-120]
