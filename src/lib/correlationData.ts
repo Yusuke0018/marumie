@@ -271,8 +271,8 @@ export const buildTrueFirstAggregation = (
       reservationBucket[category][hour] += 1;
     }
 
-    // 内視鏡の初診予約カウント（visitTypeが「初診」の場合のみ）
-    if (endoType && reservation.visitType === "初診") {
+    // 内視鏡の予約カウント（診療科に基づく全予約）
+    if (endoType) {
       const endoBucket = ensureEndoscopyBucket(endoscopyFirstReservationByDate, dateKey);
       endoBucket[endoType][hour] += 1;
     }
