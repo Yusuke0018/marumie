@@ -375,15 +375,74 @@ const parseJstDateTime = (raw: string | undefined): ParsedDateTime | null => {
   // - yyyy-mm-dd[ HH:MM]
   // - yyyy/m/d[ H:M]
   // - yyyy-mm-ddTHH:MM
-  const m = trimmed.match(
+  const numericMatch = trimmed.match(
     /(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})(?:[T\s](\d{1,2}):(\d{1,2}))?/
   );
-  if (!m) return null;
-  const year = Number(m[1]);
-  const month = Number(m[2]);
-  const day = Number(m[3]);
-  const hour = m[4] !== undefined ? Number(m[4]) : 0;
-  const minute = m[5] !== undefined ? Number(m[5]) : 0;
+  if (numericMatch) {
+    const year = Number(numericMatch[1]);
+    const month = Number(numericMatch[2]);
+    const day = Number(numericMatch[3]);
+    const hour = numericMatch[4] !== undefined ? Number(numericMatch[4]) : 0;
+    const minute = numericMatch[5] !== undefined ? Number(numericMatch[5]) : 0;
+
+    if (
+      Number.isNaN(year) ||
+      Number.isNaN(month) ||
+      Number.isNaN(day) ||
+      Number.isNaN(hour) ||
+      Number.isNaN(minute)
+    ) {
+      return null;
+    }
+
+    if (
+      month < 1 ||
+      month > 12 ||
+      day < 1 ||
+      day > 31 ||
+      hour < 0 ||
+      hour > 23 ||
+      minute < 0 ||
+      minute > 59
+    ) {
+      return null;
+    }
+
+    const utcDate = new Date(Date.UTC(year, month - 1, day, hour, minute));
+    if (
+      utcDate.getUTCFullYear() !== year ||
+      utcDate.getUTCMonth() !== month - 1 ||
+      utcDate.getUTCDate() !== day ||
+      utcDate.getUTCHours() !== hour ||
+      utcDate.getUTCMinutes() !== minute
+    ) {
+      return null;
+    }
+
+    const mm = month.toString().padStart(2, "0");
+    const dd = day.toString().padStart(2, "0");
+    const hh = hour.toString().padStart(2, "0");
+    const mi = minute.toString().padStart(2, "0");
+
+    return {
+      iso: `${year}-${mm}-${dd}T${hh}:${mi}:00+09:00`,
+      dateKey: `${year}-${mm}-${dd}`,
+      monthKey: `${year}-${mm}`,
+      hour,
+    };
+  }
+
+  // 英語表記 (e.g. "Thu Oct 02 2025 11:31:00 GMT+0900 (日本標準時)") に対応
+  const parsedDate = new Date(trimmed);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  const year = parsedDate.getFullYear();
+  const month = parsedDate.getMonth() + 1;
+  const day = parsedDate.getDate();
+  const hour = parsedDate.getHours();
+  const minute = parsedDate.getMinutes();
 
   if (
     Number.isNaN(year) ||
@@ -404,17 +463,6 @@ const parseJstDateTime = (raw: string | undefined): ParsedDateTime | null => {
     hour > 23 ||
     minute < 0 ||
     minute > 59
-  ) {
-    return null;
-  }
-
-  const utcDate = new Date(Date.UTC(year, month - 1, day, hour, minute));
-  if (
-    utcDate.getUTCFullYear() !== year ||
-    utcDate.getUTCMonth() !== month - 1 ||
-    utcDate.getUTCDate() !== day ||
-    utcDate.getUTCHours() !== hour ||
-    utcDate.getUTCMinutes() !== minute
   ) {
     return null;
   }
