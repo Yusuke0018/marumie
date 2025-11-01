@@ -616,15 +616,19 @@ export const parseReservationCsv = (content: string): Reservation[] => {
       "来院時刻",
     ],
   );
+  const appointmentPreference = [
+    "予約時刻_時分",
+    "予約時刻",
+    "予約時間",
+    "予約日時",
+    "来院希望日時",
+    "来院希望時刻",
+  ];
   const appointmentKeys = mergeCandidateKeys(
     [
-      findHeaderKey(
-        headers,
-        ["予約日時", "予約時刻", "予約時間", "来院希望日時", "来院希望時刻"],
-        ["予約", "来院希望"],
-      ),
+      findHeaderKey(headers, appointmentPreference, ["予約", "来院希望"]),
     ],
-    ["予約日時", "予約時刻", "予約時間", "来院希望日時", "来院希望時刻"],
+    appointmentPreference,
   );
   const visitTypeKeys = mergeCandidateKeys(
     [
