@@ -528,6 +528,16 @@ export default function CorrelationPage() {
       ? (surveyTotals / totalTrueFirst) * 100
       : 0;
 
+  // 内視鏡モードかどうか
+  const isEndoscopyMode =
+    selectedSegment === "endoscopy" ||
+    selectedSegment === "endoscopy-stomach" ||
+    selectedSegment === "endoscopy-colon";
+
+  // グラフラベル用
+  const trueFirstLabel = isEndoscopyMode ? "初診予約" : "真の初診";
+  const trueFirstLabelWithCount = isEndoscopyMode ? "初診予約件数" : "真の初診件数";
+
   const hasData =
     filteredDates.length > 0 &&
     (totalListing > 0 || totalTrueFirst > 0 || totalReservations > 0);
@@ -537,12 +547,12 @@ export default function CorrelationPage() {
       peakLag.lag === 0
         ? "ほぼ同時"
         : peakLag.lag > 0
-          ? `${peakLag.lag}時間後に真の初診が伸びています`
-          : `${Math.abs(peakLag.lag)}時間前から真の初診が立ち上がっています`;
+          ? `${peakLag.lag}時間後に${trueFirstLabel}が伸びています`
+          : `${Math.abs(peakLag.lag)}時間前から${trueFirstLabel}が立ち上がっています`;
     const googleSentence =
       googleShare >= 20
-        ? `Google流入は真の初診の約${googleShare.toFixed(1)}%を占めており、施策の寄与が高い状態です。`
-        : `Google流入は真の初診の約${googleShare.toFixed(1)}%に留まっており、さらなる強化余地があります。`;
+        ? `Google流入は${trueFirstLabel}の約${googleShare.toFixed(1)}%を占めており、施策の寄与が高い状態です。`
+        : `Google流入は${trueFirstLabel}の約${googleShare.toFixed(1)}%に留まっており、さらなる強化余地があります。`;
     const alignment =
       dailyCorrelation >= 0.5
         ? "日次推移も概ね同じ動きです。"
@@ -553,7 +563,7 @@ export default function CorrelationPage() {
       googleSentence,
       alignment,
     };
-  }, [selectedSegment, peakLag, googleShare, dailyCorrelation]);
+  }, [selectedSegment, peakLag, googleShare, dailyCorrelation, trueFirstLabel]);
 
   return (
     <main className="min-h-screen bg-background">
@@ -629,7 +639,7 @@ export default function CorrelationPage() {
                 </p>
                 <p className="text-xs text-slate-500">
                   リスティング CV が {Math.abs(peakLag.lag)} 時間{" "}
-                  {peakLag.lag >= 0 ? "後" : "前"}に真の初診と最も同期
+                  {peakLag.lag >= 0 ? "後" : "前"}に{trueFirstLabel}と最も同期
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-soft">
@@ -662,7 +672,7 @@ export default function CorrelationPage() {
                   {googleShare.toFixed(1)}%
                 </p>
                 <p className="text-xs text-slate-500">
-                  アンケート Google / 真の初診
+                  アンケート Google / {trueFirstLabel}
                 </p>
               </div>
             </section>
@@ -674,7 +684,7 @@ export default function CorrelationPage() {
                     時間帯別の重ね合わせ
                   </h2>
                   <p className="text-xs text-slate-500">
-                    リスティング CV（棒）・真の初診（線）・予約総数（点線）を 24 時間で比較
+                    リスティング CV（棒）・{trueFirstLabel}（線）・予約総数（点線）を 24 時間で比較
                   </p>
                 </div>
               </div>
@@ -707,7 +717,7 @@ export default function CorrelationPage() {
                       type="monotone"
                       strokeWidth={2}
                       dataKey="trueFirst"
-                      name="真の初診件数"
+                      name={trueFirstLabelWithCount}
                       stroke="#f97316"
                     />
                     <Line
@@ -727,7 +737,7 @@ export default function CorrelationPage() {
               <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
                 <h2 className="text-lg font-semibold text-slate-900">ラグ相関の推移</h2>
                 <p className="text-xs text-slate-500">
-                  -12〜+12 時間の範囲で CV→真の初診の結び付きを計測
+                  -12〜+12 時間の範囲で CV→{trueFirstLabel}の結び付きを計測
                 </p>
                 <div className="mt-4 h-64 w-full">
                   <ResponsiveContainer>
@@ -755,7 +765,7 @@ export default function CorrelationPage() {
               <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
                 <h2 className="text-lg font-semibold text-slate-900">散布図（最適ラグ）</h2>
                 <p className="text-xs text-slate-500">
-                  最も相関が高かったラグでの CV割合 vs 真の初診割合
+                  最も相関が高かったラグでの CV割合 vs {trueFirstLabel}割合
                 </p>
                 <div className="mt-4 h-64 w-full">
                   <ResponsiveContainer>
@@ -770,7 +780,7 @@ export default function CorrelationPage() {
                       <YAxis
                         type="number"
                         dataKey="y"
-                        name="真の初診割合"
+                        name={`${trueFirstLabel}割合`}
                         unit="%"
                       />
                       <Tooltip
@@ -801,7 +811,7 @@ export default function CorrelationPage() {
                 日次の指標比較
               </h2>
               <p className="text-xs text-slate-500">
-                リスティングCVと真の初診件数、アンケート上の Google 回答を日次で比較
+                リスティングCVと{trueFirstLabelWithCount}、アンケート上の Google 回答を日次で比較
               </p>
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="h-72 w-full xl:h-80">
@@ -824,7 +834,7 @@ export default function CorrelationPage() {
                         yAxisId="left"
                         type="monotone"
                         dataKey="trueFirst"
-                        name="真の初診"
+                        name={trueFirstLabel}
                         stroke="#f97316"
                         strokeWidth={2}
                       />
@@ -862,7 +872,7 @@ export default function CorrelationPage() {
                           リスティングCV
                         </th>
                         <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          真の初診
+                          {trueFirstLabel}
                         </th>
                         <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
                           予約総数
