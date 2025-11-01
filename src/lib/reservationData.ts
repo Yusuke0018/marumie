@@ -60,6 +60,7 @@ type ParsedDateTime = {
   dateKey: string;
   monthKey: string;
   hour: number;
+  minute: number;
 };
 
 export const RESERVATION_STORAGE_KEY = "clinic-analytics/reservations/v1";
@@ -429,6 +430,7 @@ const parseJstDateTime = (raw: string | undefined): ParsedDateTime | null => {
       dateKey: `${year}-${mm}-${dd}`,
       monthKey: `${year}-${mm}`,
       hour,
+      minute,
     };
   }
 
@@ -477,6 +479,7 @@ const parseJstDateTime = (raw: string | undefined): ParsedDateTime | null => {
     dateKey: `${year}-${mm}-${dd}`,
     monthKey: `${year}-${mm}`,
     hour,
+    minute,
   };
 };
 
@@ -557,14 +560,27 @@ const parseDateFromRow = (
     }
     const parsed = parseJstDateTime(raw);
     if (parsed) {
-      const year = Number.parseInt(parsed.dateKey.slice(0, 4), 10);
-      if (!Number.isNaN(year) && year < 2000) {
-        continue;
-      }
       return parsed;
     }
   }
   return null;
+};
+
+const combineDateAndTime = (
+  dateSource: ParsedDateTime,
+  timeSource: ParsedDateTime,
+): ParsedDateTime => {
+  const [yearStr, monthStr, dayStr] = dateSource.dateKey.split("-");
+  const pad = (value: number) => value.toString().padStart(2, "0");
+  const hour = timeSource.hour;
+  const minute = timeSource.minute;
+  return {
+    iso: `${yearStr}-${monthStr}-${dayStr}T${pad(hour)}:${pad(minute)}:00+09:00`,
+    dateKey: `${yearStr}-${monthStr}-${dayStr}`,
+    monthKey: dateSource.monthKey,
+    hour,
+    minute,
+  };
 };
 
 export const parseReservationCsv = (content: string): Reservation[] => {
@@ -620,19 +636,28 @@ export const parseReservationCsv = (content: string): Reservation[] => {
       "来院時刻",
     ],
   );
-  const appointmentPreference = [
+  const appointmentTimePreference = [
     "予約時刻_時分",
     "予約時刻",
     "予約時間",
+  ];
+  const appointmentTimeKeys = mergeCandidateKeys(
+    [
+      findHeaderKey(headers, appointmentTimePreference, ["予約時刻", "予約時間"]),
+    ],
+    appointmentTimePreference,
+  );
+  const appointmentDatePreference = [
     "予約日時",
     "来院希望日時",
-    "来院希望時刻",
+    "来院希望日",
+    "予約日",
   ];
-  const appointmentKeys = mergeCandidateKeys(
+  const appointmentDateKeys = mergeCandidateKeys(
     [
-      findHeaderKey(headers, appointmentPreference, ["予約", "来院希望"]),
+      findHeaderKey(headers, appointmentDatePreference, ["予約", "来院希望", "日"]),
     ],
-    appointmentPreference,
+    appointmentDatePreference,
   );
   const visitTypeKeys = mergeCandidateKeys(
     [
@@ -713,19 +738,6 @@ export const parseReservationCsv = (content: string): Reservation[] => {
     ["住所3", "患者住所3"],
   );
 
-  // 予約日時を取得するためのヘルパー（完全な日時を含む列を優先）
-  const getReservationDateTimeRaw = (row: Record<string, string>): string | undefined => {
-    const candidates = [
-      ...appointmentKeys,
-      "予約", // フォールバック（旧CSV）
-    ];
-    for (const key of candidates) {
-      const v = row[key];
-      if (typeof v === "string" && v.trim().length > 0) return v;
-    }
-    return undefined;
-  };
-
   for (const row of parsed.data) {
     const departmentRaw = pickFirstNonEmpty(row, departmentKeys);
     const department =
@@ -734,24 +746,41 @@ export const parseReservationCsv = (content: string): Reservation[] => {
         : "未設定";
 
     let received = parseDateFromRow(row, receivedAtKeys);
-    const appointment = parseDateFromRow(row, appointmentKeys);
-    if (!received && appointment) {
-      received = appointment;
+    const appointmentDateCandidate = parseDateFromRow(row, appointmentDateKeys);
+    if (!received && appointmentDateCandidate) {
+      received = appointmentDateCandidate;
     }
     if (!received) {
       continue;
     }
 
+    const appointmentTimeRaw = pickFirstNonEmpty(row, appointmentTimeKeys);
+    const appointmentTimeCandidate = appointmentTimeRaw
+      ? parseJstDateTime(appointmentTimeRaw)
+      : null;
+
+    const baseDateForAppointment = appointmentDateCandidate ?? received;
+    let appointmentParsed: ParsedDateTime = baseDateForAppointment;
+    if (appointmentTimeCandidate && baseDateForAppointment) {
+      appointmentParsed = combineDateAndTime(
+        baseDateForAppointment,
+        appointmentTimeCandidate,
+      );
+    } else if (appointmentTimeCandidate) {
+      appointmentParsed = appointmentTimeCandidate;
+    } else if (appointmentDateCandidate) {
+      appointmentParsed = appointmentDateCandidate;
+    }
+
     const visitType = normalizeVisitType(
       pickFirstNonEmpty(row, visitTypeKeys) ?? undefined,
     );
-    const appointmentRaw = getReservationDateTimeRaw(row);
-    const appointmentParsed = appointment ?? parseJstDateTime(appointmentRaw);
     const receivedParsed: ParsedDateTime = {
       iso: received.iso,
       dateKey: received.dateKey,
       monthKey: received.monthKey,
       hour: received.hour,
+      minute: received.minute,
     };
     const patientId = pickFirstNonEmpty(row, patientIdKeys)?.trim() ?? "";
     const patientNameCandidate = pickFirstNonEmpty(row, patientNameKeys);
