@@ -1185,6 +1185,8 @@ const formatTimestampLabel = (value: string | null) =>
   value ? new Date(value).toLocaleString("ja-JP") : "未登録";
 
 function PatientAnalysisPageContent() {
+  // 一時的に多変量解析の表示を無効化
+  const ENABLE_MULTIVARIATE = false;
   const lifestyleOnly = useContext(LifestyleViewContext);
   const [records, setRecords] = useState<KarteRecord[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -4908,14 +4910,19 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
         {!lifestyleOnly && (
         <SectionCard
           title="視点別インサイト"
-          description="多変量解析・診療科別・時間帯別の視点から主要指標とグラフを比較します。"
+          description="診療科別・時間帯別の視点から主要指標とグラフを比較します。"
         >
           <div className="flex flex-wrap gap-2">
             {(
               [
                 { id: "department", label: "診療科" },
                 { id: "time", label: "曜日別" },
-                { id: "channel", label: "多変量解析" },
+                ...(ENABLE_MULTIVARIATE
+                  ? ([{ id: "channel", label: "多変量解析" }] as Array<{
+                      id: typeof insightTab;
+                      label: string;
+                    }>)
+                  : ([] as Array<{ id: typeof insightTab; label: string }>)),
               ] as Array<{ id: typeof insightTab; label: string }>
             ).map((tab) => (
               <button
@@ -5235,7 +5242,7 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
                 )}
               </div>
             )}
-            {insightTab === "channel" && (
+            {ENABLE_MULTIVARIATE && insightTab === "channel" && (
               <div className="space-y-6">
                 {multivariateInsights.hasData && selectedSegmentInsight?.hasData ? (
                   <>
