@@ -443,6 +443,8 @@ export const parseReservationCsv = (content: string): Reservation[] => {
     throw new Error(parsed.errors[0]?.message ?? "CSV parsing error");
   }
 
+  console.log('[parseReservationCsv] Total CSV rows:', parsed.data.length);
+
   const items: Reservation[] = [];
 
   // 予約日時を取得するためのヘルパー（完全な日時を含む列を優先）
@@ -557,14 +559,23 @@ export const parseReservationCsv = (content: string): Reservation[] => {
     items.push(reservation);
   }
 
+  console.log('[parseReservationCsv] Parsed items:', items.length);
+
   const deduplicated = new Map<string, Reservation>();
   for (const item of items) {
     deduplicated.set(item.key, item);
   }
 
-  return Array.from(deduplicated.values()).sort((a, b) =>
+  const result = Array.from(deduplicated.values()).sort((a, b) =>
     a.receivedAtIso.localeCompare(b.receivedAtIso),
   );
+
+  console.log('[parseReservationCsv] After deduplication:', result.length);
+  if (result.length > 0) {
+    console.log('[parseReservationCsv] First item:', result[0]);
+  }
+
+  return result;
 };
 
 export const mergeReservations = (
@@ -601,15 +612,28 @@ export const loadReservationsFromStorage = (): Reservation[] => {
   try {
     const stored = window.localStorage.getItem(RESERVATION_STORAGE_KEY);
     if (!stored) {
+      console.log('[loadReservationsFromStorage] No data in localStorage');
       return [];
     }
     const parsed = JSON.parse(stored) as Reservation[];
     if (!Array.isArray(parsed)) {
+      console.log('[loadReservationsFromStorage] Stored data is not an array');
       return [];
     }
-    return parsed.filter(isValidReservationRecord);
+    console.log('[loadReservationsFromStorage] Raw data count:', parsed.length);
+    const filtered = parsed.filter(isValidReservationRecord);
+    console.log('[loadReservationsFromStorage] After validation:', filtered.length);
+    if (parsed.length !== filtered.length) {
+      console.warn('[loadReservationsFromStorage] Validation filtered out', parsed.length - filtered.length, 'records');
+      // 最初の無効なレコードをログ出力
+      const invalid = parsed.find(item => !isValidReservationRecord(item));
+      if (invalid) {
+        console.warn('[loadReservationsFromStorage] First invalid record:', invalid);
+      }
+    }
+    return filtered;
   } catch (error) {
-    console.error(error);
+    console.error('[loadReservationsFromStorage] Error:', error);
     return [];
   }
 };
