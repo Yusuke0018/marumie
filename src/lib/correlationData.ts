@@ -2,10 +2,7 @@ import type { Reservation } from "@/lib/reservationData";
 import type { KarteRecord } from "@/lib/karteAnalytics";
 import type { ListingCategory, ListingCategoryData } from "@/lib/listingData";
 import type { SurveyData } from "@/lib/surveyData";
-import {
-  buildFirstSeenIndex,
-  createPatientIdentityKey,
-} from "@/lib/patientIdentity";
+// 予約の「初診」だけをターゲット系列として扱う方針に切替
 
 export type SegmentKey = "all" | "general" | "fever" | "endoscopy";
 
@@ -147,12 +144,7 @@ const determineReservationSegment = (department: string | null | undefined): Seg
   return null;
 };
 
-const isSameDate = (isoA: string | null | undefined, isoB: string | null | undefined): boolean => {
-  if (!isoA || !isoB) {
-    return false;
-  }
-  return isoA.slice(0, 10) === isoB.slice(0, 10);
-};
+// 真の初診判定で使用していた日付一致判定は不要になったため削除
 
 const sumArray = (values: number[]): number => values.reduce((total, value) => total + value, 0);
 
@@ -175,37 +167,8 @@ export const buildIncrementalityDataset = (
     endoscopy: new Map<string, number>(),
   };
 
-  const identityEvents: Array<{ identityKey: string | null; occurredAt: string | null }> = [];
-
-  reservations.forEach((reservation) => {
-    identityEvents.push({
-      identityKey: createPatientIdentityKey({
-        patientNameNormalized: reservation.patientNameNormalized ?? undefined,
-        patientName: reservation.patientName ?? undefined,
-      }),
-      occurredAt: reservation.receivedAtIso ?? reservation.bookingIso ?? reservation.appointmentIso ?? null,
-    });
-  });
-
-  karteRecords.forEach((record) => {
-    identityEvents.push({
-      identityKey: createPatientIdentityKey({
-        patientNumber: record.patientNumber,
-        patientNameNormalized: record.patientNameNormalized ?? undefined,
-        birthDateIso: record.birthDateIso ?? undefined,
-      }),
-      occurredAt: record.dateIso ? `${record.dateIso}T00:00:00+09:00` : null,
-    });
-  });
-
-  const firstSeenIndex = buildFirstSeenIndex(
-    identityEvents
-      .filter((event) => event.identityKey)
-      .map((event) => ({
-        identityKey: event.identityKey!,
-        occurredAt: event.occurredAt,
-      })),
-  );
+  // 真の初診集計は複雑性と誤差の原因となっていたため、
+  // 本データセットでは予約ログ上の「初診」のみを新患 proxy として計上します。
 
   reservations.forEach((reservation) => {
     const timestamp = reservation.receivedAtIso ?? reservation.bookingIso ?? reservation.appointmentIso ?? null;
@@ -215,24 +178,18 @@ export const buildIncrementalityDataset = (
     }
 
     const segment = determineReservationSegment(reservation.department);
-    const identityKey = createPatientIdentityKey({
-      patientNameNormalized: reservation.patientNameNormalized ?? undefined,
-      patientName: reservation.patientName ?? undefined,
-    });
-
-    const firstSeen = identityKey ? firstSeenIndex.get(identityKey) ?? null : null;
-    const isTrueFirst = identityKey ? isSameDate(firstSeen, timestamp) : false;
+    const isReservationFirst = reservation.visitType === "初診";
 
     const allAccumulator = ensureHourlyAccumulator(hourlyMaps, "all", hourKey);
     allAccumulator.reservations += 1;
-    if (isTrueFirst) {
+    if (isReservationFirst) {
       allAccumulator.trueFirst += 1;
     }
 
     if (segment) {
       const segmentAccumulator = ensureHourlyAccumulator(hourlyMaps, segment, hourKey);
       segmentAccumulator.reservations += 1;
-      if (isTrueFirst) {
+      if (isReservationFirst) {
         segmentAccumulator.trueFirst += 1;
       }
     }
