@@ -22,3 +22,12 @@ ABテスト分析(`/ab-test`)は、カルテCSVの取り込みまたは保存済
 ## ビルド/ホスティング
 - Vercel: `npm run build` の標準ビルドを使用し、環境変数の追加設定は不要。
 - GitHub Pages: `GITHUB_PAGES=true` で `next export` を行い、`basePath='/marumie'` と `assetPrefix='/marumie/'` に切り替える。[next.config.mjs:1-20][.github/workflows/deploy.yml:1-120]
+
+## データ共有API（Cloudflare Worker）
+- 目的: CSV を R2 に保存し、ID で Next.js アプリから取得可能にする。[cloudflare-worker/src/index.ts:1-200]
+- エンドポイント:
+  - `POST /api/upload` … Body(JSON): `{ type: 'reservation'|'listing'|'survey'|'karte', category?: string, data: string }` を受け取り、`{ id, url }` を返却。`url` はアプリURLに `?data=<id>` を付与したもの。[cloudflare-worker/src/index.ts:52-98]
+  - `GET /api/data/:id` … 保存済みオブジェクト(JSON)を返却。見つからない場合は 404。[cloudflare-worker/src/index.ts:100-152]
+  - `GET /api/health` … ヘルスチェック。[cloudflare-worker/src/index.ts:154-168]
+- CORS: `http://localhost:3000-3002` と `https://yusuke0018.github.io`、および `*.vercel.app`（プレビュー）を許可。[cloudflare-worker/src/index.ts:16-36]
+- フロント連携: `NEXT_PUBLIC_WORKER_URL` を `src/lib/dataShare.ts` で参照（ローカル/本番の切替を統一）。[src/lib/dataShare.ts:1-50]

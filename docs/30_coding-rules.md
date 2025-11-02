@@ -14,6 +14,7 @@ Heavyなチャートやグラフは `React.lazy` と `Suspense` で遅延読み�
 
 ## 実行環境
 - Node.js は CI と同じ v20 系を推奨します。`.nvmrc` か `package.json#engines` でバージョンを固定し、ローカル差異を抑制します。[.github/workflows/deploy.yml:1-120]
+- ローカル開発では `nvm use 20` を実行し、CI（Pages/Vercel/Worker）と同一の Node 20 で検証します。[.nvmrc:1][package.json:39][.github/workflows/deploy-vercel.yml:14-21][.github/workflows/deploy-cf-worker.yml:17-24]
 
 ## カテゴリ正規化（相関分析）
 - リスティングは「胃カメラ」「大腸カメラ」を内視鏡として集約し、相関では内視鏡（合計）をベースに比較します。[src/lib/correlationData.ts:120-200]
