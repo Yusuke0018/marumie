@@ -302,7 +302,7 @@ export default function CorrelationPage(): JSX.Element {
 
     const metrics: SummaryMetric[] = [
       {
-        label: "総真の初診",
+        label: "総初診（予約）",
         value: `${formatNumber(totalTrueFirst)} 件`,
       },
       {
@@ -310,7 +310,7 @@ export default function CorrelationPage(): JSX.Element {
         value: `${formatNumber(totalCv)} 件`,
       },
       {
-        label: "CV→新患比率",
+        label: "CV→初診比率",
         value: totalCv > 0 ? formatPercent(ratio) : "—",
       },
       {
@@ -390,7 +390,7 @@ export default function CorrelationPage(): JSX.Element {
     const renderMessage = (base: string) => {
       const parts: string[] = [base];
       if (totalCv > 0) {
-        parts.push(`CV→新患比率 ${formatPercent(ratio, 1)}`);
+        parts.push(`CV→初診比率 ${formatPercent(ratio, 1)}`);
       }
       if (totals.surveyGoogle > 0) {
         parts.push(`Google上限比 ${formatPercent(coverage, 1)}`);
@@ -403,7 +403,7 @@ export default function CorrelationPage(): JSX.Element {
       if (lift >= 0.5) {
         return {
           status: "positive",
-          headline: "広告が明確に新患を押し上げています",
+          headline: "広告が初診（予約）を明確に押し上げています",
           message: renderMessage(`推定増分 ${lift.toFixed(2)} 件/ CV1件`),
           badge: "EFFECTIVE",
         };
@@ -427,7 +427,7 @@ export default function CorrelationPage(): JSX.Element {
       if (lift <= 0) {
         return {
           status: "negative",
-          headline: "広告CVが新患増に結び付いていません",
+          headline: "広告CVが初診増に結び付いていません",
           message: renderMessage(`推定増分 ${lift.toFixed(2)} 件/ CV1件`),
           badge: "NO LIFT",
         };
@@ -452,15 +452,15 @@ export default function CorrelationPage(): JSX.Element {
     if (ratio >= 0.7) {
       return {
         status: "positive",
-        headline: "広告CVが新患に強く結び付いています",
-        message: renderMessage("CVの多くが純新規につながっています"),
+        headline: "広告CVが初診に強く結び付いています",
+        message: renderMessage("CVの多くが初診につながっています"),
         badge: "LIKELY EFFECTIVE",
       };
     }
     if (ratio >= 0.4) {
       return {
         status: "moderate",
-        headline: "広告CVは一部新患に寄与しています",
+        headline: "広告CVは一部初診に寄与しています",
         message: renderMessage("更なる検証で増分を確かめましょう"),
         badge: "NEEDS REVIEW",
       };
@@ -468,7 +468,7 @@ export default function CorrelationPage(): JSX.Element {
     if (ratio > 0) {
       return {
         status: "weak",
-        headline: "広告CVの多くが新患化していません",
+        headline: "広告CVの多くが初診化していません",
         message: renderMessage("CV定義や計測内容を見直してください"),
         badge: "LOW IMPACT",
       };
@@ -508,7 +508,7 @@ export default function CorrelationPage(): JSX.Element {
                 相関分析とインクリメンタリティ評価
               </h1>
               <p className="max-w-2xl text-sm leading-relaxed text-slate-700">
-                広告CVと真の初診（純新規患者）の動きを時系列で突き合わせ、サニティチェックからラグ相関、分布ラグ推定まで一貫して確認できます。
+                広告CVと初診（予約ログ上の初診）の動きを時系列で突き合わせ、サニティチェックからラグ相関、分布ラグ推定まで一貫して確認できます。
               </p>
               <div className="rounded-2xl border border-blue-200 bg-white/90 p-5 shadow-sm backdrop-blur-sm">
                 <p className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-900">
@@ -518,7 +518,7 @@ export default function CorrelationPage(): JSX.Element {
                 <ul className="space-y-2 text-sm text-slate-700">
                   <li className="flex items-start gap-2">
                     <span className="mt-0.5 text-blue-600">•</span>
-                    <span>真の初診と広告CVの時間帯・日次推移</span>
+                    <span>予約の初診と広告CVの時間帯・日次推移</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="mt-0.5 text-blue-600">•</span>
@@ -611,7 +611,7 @@ export default function CorrelationPage(): JSX.Element {
                     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                       <MetricCard
                         icon={<Users className="h-5 w-5" />}
-                        label="総真の初診"
+                        label="総初診（予約）"
                         value={summaryMetrics[0]?.value || "—"}
                         iconColor="text-emerald-500"
                       />
@@ -623,7 +623,7 @@ export default function CorrelationPage(): JSX.Element {
                       />
                       <MetricCard
                         icon={<Activity className="h-5 w-5" />}
-                        label="CV→新患比率"
+                        label="CV→初診比率"
                         value={summaryMetrics[2]?.value || "—"}
                         iconColor="text-cyan-500"
                       />
@@ -657,7 +657,7 @@ export default function CorrelationPage(): JSX.Element {
                     {/* Time Series Chart */}
                     <ChartCard
                       title="時間帯別の推移"
-                      description="広告CVと真の初診の時間帯推移を重ねています。ラグがある場合は、ピークラグの値を参考に読み替えてください。"
+                      description="広告CVと初診（予約）の時間帯推移を重ねています。ラグがある場合は、ピークラグの値を参考に読み替えてください。"
                       icon={<LineChart className="h-5 w-5" />}
                     >
                       <div className="h-80 w-full">
@@ -694,7 +694,7 @@ export default function CorrelationPage(): JSX.Element {
                             <Line
                               type="monotone"
                               dataKey="trueFirst"
-                              name="真の初診"
+                              name="初診（予約）"
                               stroke="#10b981"
                               strokeWidth={2}
                               dot={false}
@@ -713,7 +713,7 @@ export default function CorrelationPage(): JSX.Element {
                       {/* Lag Correlation */}
                       <ChartCard
                         title="ラグ相関"
-                        description="広告CVの発生が真の初診をどの程度先導しているかを、±48時間のラグで相関分析しています。"
+                        description="広告CVの発生が初診（予約）をどの程度先導しているかを、±48時間のラグで相関分析しています。"
                         icon={<Clock className="h-5 w-5" />}
                       >
                         {lagCorrelations.length === 0 ? (
@@ -754,7 +754,7 @@ export default function CorrelationPage(): JSX.Element {
                       {/* Distributed Lag */}
                       <ChartCard
                         title="分布ラグ推定"
-                        description="過去24時間の広告CVを説明変数にとり、Poisson近似の線形回帰で真の初診の増分を推定しています。"
+                        description="過去24時間の広告CVを説明変数にとり、Poisson近似の線形回帰で初診（予約）の増分を推定しています。"
                         icon={<Zap className="h-5 w-5" />}
                       >
                         {!distributedLag ? (
@@ -895,7 +895,7 @@ export default function CorrelationPage(): JSX.Element {
                     </ChartCard>
                   </div>
                 )}
-              </div>
+            </div>
             </div>
           </>
         )}
