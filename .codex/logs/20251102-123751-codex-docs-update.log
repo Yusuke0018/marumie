@@ -1,0 +1,12 @@
+timestamp: 2025-11-02T12:37:51+09:00
+branch: main
+commit: e5f2d3130bf31150063ba657ff399403b9af9469
+changed_files:
+M	docs/20_spec.md
+M	docs/30_coding-rules.md
+M	docs/60_errors.md
+M	docs/70_changelog.md
+lint: run
+typecheck: run
+worker_tests: failed (4 failed)
+push: done

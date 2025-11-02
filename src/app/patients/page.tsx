@@ -118,6 +118,53 @@ import type { SharedDataBundle } from "@/lib/sharedBundle";
 import { normalizeNameForMatching } from "@/lib/patientIdentity";
 import { LifestyleViewContext } from "./LifestyleViewContext";
 
+
+// --- 大容量カルテ保存のフォールバックユーティリティ ---
+function extractSortedMonths(records: KarteRecord[]): string[] {
+  const set = new Set<string>();
+  for (const r of records) {
+    if (r.monthKey) set.add(r.monthKey);
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b));
+}
+
+function filterRecordsByLastMonths(records: KarteRecord[], keepMonths: number): KarteRecord[] {
+  const months = extractSortedMonths(records);
+  if (months.length <= keepMonths) return records;
+  const startIndex = Math.max(0, months.length - keepMonths);
+  const threshold = months[startIndex];
+  return records.filter((r) => r.monthKey >= threshold);
+}
+
+function saveKarteWithQuotaFallback(records: KarteRecord[], timestamp: string): {
+  saved: boolean;
+  prunedCount: number | null;
+  usedRecords: KarteRecord[];
+} {
+  try {
+    setCompressedItem(KARTE_STORAGE_KEY, JSON.stringify(records));
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(KARTE_TIMESTAMP_KEY, timestamp);
+    }
+    return { saved: true, prunedCount: null, usedRecords: records };
+  } catch {
+    const candidates = [18, 12, 9, 6, 3];
+    for (const keep of candidates) {
+      const pruned = filterRecordsByLastMonths(records, keep);
+      try {
+        setCompressedItem(KARTE_STORAGE_KEY, JSON.stringify(pruned));
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(KARTE_TIMESTAMP_KEY, timestamp);
+        }
+        return { saved: true, prunedCount: keep, usedRecords: pruned };
+      } catch {
+        // try next keep size
+      }
+    }
+    return { saved: false, prunedCount: null, usedRecords: records };
+  }
+}
+
 const MonthlyTrendChart = lazy(() =>
   import("@/components/patients/MonthlyTrendChart").then((m) => ({
     default: m.MonthlyTrendChart,
@@ -1273,19 +1320,16 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
       const karteTimestamp = bundle.karteTimestamp ?? fallbackTimestamp ?? generatedAt;
 
       setUploadError(null);
-    setShareUrl(null);
-    setRecords(karteRecords);
-    setLastUpdated(karteTimestamp);
-
-    if (typeof window !== "undefined") {
-      try {
-        setCompressedItem(KARTE_STORAGE_KEY, JSON.stringify(karteRecords));
-        window.localStorage.setItem(KARTE_TIMESTAMP_KEY, karteTimestamp);
-      } catch (error) {
-        console.error(error);
-        setUploadError("データの保存に失敗しました。データ量が多すぎる可能性があります。");
+      setShareUrl(null);
+      // 容量に応じてフォールバック保存（必要に応じて期間を絞る）
+      const result = saveKarteWithQuotaFallback(karteRecords, karteTimestamp);
+      setRecords(result.usedRecords);
+      setLastUpdated(karteTimestamp);
+      if (!result.saved) {
+        setUploadError("ローカル保存容量を超えました。共有URLでの保存をご検討ください。");
+      } else if (result.prunedCount) {
+        setUploadError(`保存容量超過のため直近${result.prunedCount}ヶ月分のみローカル保存しました。全件の保管は共有URLをご利用ください。`);
       }
-    }
 
       if (Array.isArray(bundle.reservations)) {
         const reservationsData = bundle.reservations as Reservation[];
@@ -1368,16 +1412,13 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
                 const timestamp = response.uploadedAt ?? new Date().toISOString();
                 setUploadError(null);
                 setShareUrl(null);
-                setRecords(parsed as KarteRecord[]);
+                const result = saveKarteWithQuotaFallback(parsed as KarteRecord[], timestamp);
+                setRecords(result.usedRecords);
                 setLastUpdated(timestamp);
-                if (typeof window !== "undefined") {
-                  try {
-                    setCompressedItem(KARTE_STORAGE_KEY, JSON.stringify(parsed));
-                    window.localStorage.setItem(KARTE_TIMESTAMP_KEY, timestamp);
-                  } catch (error) {
-                    console.error(error);
-                    setUploadError("データの保存に失敗しました。データ量が多すぎる可能性があります。");
-                  }
+                if (!result.saved) {
+                  setUploadError("ローカル保存容量を超えました。共有URLでの保存をご検討ください。");
+                } else if (result.prunedCount) {
+                  setUploadError(`保存容量超過のため直近${result.prunedCount}ヶ月分のみローカル保存しました。全件の保管は共有URLをご利用ください。`);
                 }
               } else if (
                 parsed &&
@@ -3426,20 +3467,16 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
           a.dateIso.localeCompare(b.dateIso),
         );
 
-        setRecords(merged);
         setShareUrl(null);
 
         const timestamp = new Date().toISOString();
+        const result = saveKarteWithQuotaFallback(merged, timestamp);
+        setRecords(result.usedRecords);
         setLastUpdated(timestamp);
-
-        if (typeof window !== "undefined") {
-          try {
-            setCompressedItem(KARTE_STORAGE_KEY, JSON.stringify(merged));
-            window.localStorage.setItem(KARTE_TIMESTAMP_KEY, timestamp);
-          } catch (storageError) {
-            console.error("保存エラー:", storageError);
-            throw new Error("データの保存に失敗しました。データ量が多すぎる可能性があります。");
-          }
+        if (!result.saved) {
+          throw new Error("ローカル保存容量を超えました。共有URLでの保存をご検討ください。");
+        } else if (result.prunedCount) {
+          setUploadError(`保存容量超過のため直近${result.prunedCount}ヶ月分のみローカル保存しました。全件の保管は共有URLをご利用ください。`);
         }
       } catch (error) {
         console.error(error);

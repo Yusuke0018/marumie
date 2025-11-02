@@ -7,4 +7,5 @@
 - Node バージョン差異によりローカルとCIで再現性が崩れる恐れがある。CIは Node 20 を使用しており、ローカルも v20 系へ固定する。（`.nvmrc` または `package.json#engines` で統一）[.github/workflows/deploy.yml:1-120]
 - Vercel Secrets 未設定時はデプロイステップがスキップされ、本番反映されないままになる可能性。main push 時にSecretsの有無をチェックするジョブや通知を追加して検知を強化する。[.github/workflows/deploy-vercel.yml:1-160]
  - ローカル Node v24.x での `npm ci` 実行時に `EBADENGINE` 警告が出るが、ビルドは成功する。再現性のため `nvm use 20` を徹底し、必要があれば `engines` の許容範囲拡大を検討する（当面は CI=20 を維持）。[package.json:39][.nvmrc:1]
- - `eslint@8.57.1` に EOL 警告が出る。`eslint-config-next@14.2.33` との互換性を確認し、v9 系への段階的アップグレードとCIでの lint 監視を検討する。[package.json:1-40]
+- `eslint@8.57.1` に EOL 警告が出る。`eslint-config-next@14.2.33` との互換性を確認し、v9 系への段階的アップグレードとCIでの lint 監視を検討する。[package.json:1-40]
+ - LocalStorage のクォータ超過（QuotaExceededError）でカルテ保存に失敗する場合がある。対策として圧縮データの動的チャンク保存（4MB→128KBまで段階縮小）と、カルテ保存時のフォールバック（直近18/12/9/6/3ヶ月のみ保存）を実装。全件保存が必要な場合は共有URL（R2）をご利用ください。[src/lib/storageCompression.ts:1-220][src/app/patients/page.tsx:1316]

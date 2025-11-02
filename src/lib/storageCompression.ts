@@ -460,6 +460,7 @@ const storePayload = (key: string, payload: string) => {
 
   clearChunkEntries(key);
 
+  // まずは単一キーでの保存を試みる
   if (payload.length <= CHUNK_SIZE) {
     try {
       window.localStorage.setItem(key, payload);
@@ -468,24 +469,45 @@ const storePayload = (key: string, payload: string) => {
       if (!isQuotaExceeded(error)) {
         throw error;
       }
-      // quotaに達した場合はチャンク保存へフォールバック
+      // quota に達した場合はチャンク保存へフォールバック
     }
   }
 
-  const chunkCount = Math.ceil(payload.length / CHUNK_SIZE);
-  try {
-    for (let index = 0; index < chunkCount; index += 1) {
-      const start = index * CHUNK_SIZE;
-      const chunk = payload.slice(start, start + CHUNK_SIZE);
-      window.localStorage.setItem(buildChunkKey(key, index), chunk);
+  // チャンク保存（サイズを段階的に縮小しながら試行）
+  const sizes = [CHUNK_SIZE, 2_000_000, 1_000_000, 512_000, 256_000, 128_000];
+  let lastError: unknown = null;
+
+  const tryChunkedSave = (chunkSize: number): boolean => {
+    const chunkCount = Math.ceil(payload.length / chunkSize);
+    try {
+      for (let index = 0; index < chunkCount; index += 1) {
+        const start = index * chunkSize;
+        const chunk = payload.slice(start, start + chunkSize);
+        window.localStorage.setItem(buildChunkKey(key, index), chunk);
+      }
+      window.localStorage.setItem(key, `${CHUNK_META_PREFIX}${chunkCount}`);
+      return true;
+    } catch (error) {
+      // 失敗した場合は部分的に保存されたチャンクを削除
+      for (let index = 0; index < chunkCount; index += 1) {
+        window.localStorage.removeItem(buildChunkKey(key, index));
+      }
+      lastError = error;
+      return false;
     }
-    window.localStorage.setItem(key, `${CHUNK_META_PREFIX}${chunkCount}`);
-  } catch (error) {
-    for (let index = 0; index < chunkCount; index += 1) {
-      window.localStorage.removeItem(buildChunkKey(key, index));
+  };
+
+  for (const size of sizes) {
+    if (tryChunkedSave(size)) {
+      return;
     }
-    throw error;
   }
+
+  // すべて失敗した場合は最後のエラーを投げる
+  if (lastError) {
+    throw lastError;
+  }
+  throw new Error("Failed to store payload in localStorage");
 };
 
 /**
