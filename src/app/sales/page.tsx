@@ -525,57 +525,57 @@ export default function SalesPage() {
                 <div className="flex flex-col gap-7">
                   {/* KPI Cards */}
                   <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="group relative overflow-hidden rounded-2xl border border-emerald-100/60 bg-gradient-to-br from-emerald-50 to-teal-50/50 p-6 shadow-md hover:shadow-xl transition-all">
-                      <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-emerald-200/30 blur-2xl" />
+                    <div className="group relative overflow-hidden rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
+                      <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-emerald-300/40 blur-2xl" />
                       <div className="relative">
-                        <div className="mb-3 inline-flex rounded-xl bg-emerald-100/80 p-2.5">
-                          <DollarSign className="h-5 w-5 text-emerald-700" />
+                        <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-500 p-2.5 shadow-md">
+                          <DollarSign className="h-5 w-5 text-white" />
                         </div>
-                        <p className="text-sm font-semibold text-slate-600">月次合計</p>
-                        <p className="mt-2 text-3xl font-black text-slate-900">
+                        <p className="text-sm font-semibold text-emerald-700">月次合計</p>
+                        <p className="mt-2 text-3xl font-black text-emerald-600">
                           {formatCurrency(selectedMonth.totalRevenue)}
                         </p>
                       </div>
                     </div>
 
-                    <div className="group relative overflow-hidden rounded-2xl border border-teal-100/60 bg-gradient-to-br from-teal-50 to-cyan-50/50 p-6 shadow-md hover:shadow-xl transition-all">
-                      <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-teal-200/30 blur-2xl" />
+                    <div className="group relative overflow-hidden rounded-2xl border border-blue-200/60 bg-gradient-to-br from-blue-50 to-blue-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
+                      <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-blue-300/40 blur-2xl" />
                       <div className="relative">
-                        <div className="mb-3 inline-flex rounded-xl bg-teal-100/80 p-2.5">
-                          <TrendingUp className="h-5 w-5 text-teal-700" />
+                        <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-blue-400 to-blue-500 p-2.5 shadow-md">
+                          <TrendingUp className="h-5 w-5 text-white" />
                         </div>
-                        <p className="text-sm font-semibold text-slate-600">平均日次売上</p>
-                        <p className="mt-2 text-3xl font-black text-slate-900">
+                        <p className="text-sm font-semibold text-blue-700">平均日次売上</p>
+                        <p className="mt-2 text-3xl font-black text-blue-600">
                           {formatCurrency(selectedMonth.averageDailyRevenue)}
                         </p>
                       </div>
                     </div>
 
-                    <div className="group relative overflow-hidden rounded-2xl border border-emerald-100/60 bg-gradient-to-br from-emerald-50 to-green-50/50 p-6 shadow-md hover:shadow-xl transition-all">
-                      <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-green-200/30 blur-2xl" />
+                    <div className="group relative overflow-hidden rounded-2xl border border-amber-200/60 bg-gradient-to-br from-amber-50 to-amber-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
+                      <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-amber-300/40 blur-2xl" />
                       <div className="relative">
-                        <div className="mb-3 inline-flex rounded-xl bg-green-100/80 p-2.5">
-                          <Award className="h-5 w-5 text-green-700" />
+                        <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 p-2.5 shadow-md">
+                          <Award className="h-5 w-5 text-white" />
                         </div>
-                        <p className="text-sm font-semibold text-slate-600">
+                        <p className="text-sm font-semibold text-amber-700">
                           最高日 ({bestDay ? `${bestDay.day}日` : "—"})
                         </p>
-                        <p className="mt-2 text-3xl font-black text-slate-900">
+                        <p className="mt-2 text-3xl font-black text-amber-600">
                           {bestDay ? formatCurrency(bestDay.totalRevenue) : "—"}
                         </p>
                       </div>
                     </div>
 
-                    <div className="group relative overflow-hidden rounded-2xl border border-slate-200/60 bg-gradient-to-br from-slate-50 to-gray-50/50 p-6 shadow-md hover:shadow-xl transition-all">
-                      <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-slate-200/30 blur-2xl" />
+                    <div className="group relative overflow-hidden rounded-2xl border border-purple-200/60 bg-gradient-to-br from-purple-50 to-purple-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
+                      <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-purple-300/40 blur-2xl" />
                       <div className="relative">
-                        <div className="mb-3 inline-flex rounded-xl bg-slate-100/80 p-2.5">
-                          <CalendarClock className="h-5 w-5 text-slate-700" />
+                        <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-purple-400 to-purple-500 p-2.5 shadow-md">
+                          <CalendarClock className="h-5 w-5 text-white" />
                         </div>
-                        <p className="text-sm font-semibold text-slate-600">
+                        <p className="text-sm font-semibold text-purple-700">
                           最低日 ({worstDay ? `${worstDay.day}日` : "—"})
                         </p>
-                        <p className="mt-2 text-3xl font-black text-slate-900">
+                        <p className="mt-2 text-3xl font-black text-purple-600">
                           {worstDay ? formatCurrency(worstDay.totalRevenue) : "—"}
                         </p>
                       </div>
@@ -641,26 +641,34 @@ export default function SalesPage() {
                       </div>
                       {composition && composition.segments.length > 0 ? (
                         <ul className="space-y-3">
-                          {composition.segments.map((segment) => (
-                            <li
-                              key={segment.label}
-                              className="flex items-center justify-between rounded-2xl border border-emerald-100/60 bg-white p-5 shadow-sm"
-                            >
-                              <span className="font-bold text-slate-800">
-                                {segment.label}
-                              </span>
-                              <div className="text-right">
-                                <div className="text-xl font-black text-slate-900">
-                                  {formatCurrency(segment.value)}
+                          {composition.segments.map((segment, index) => {
+                            const colors = [
+                              { bg: "from-rose-50 to-pink-50", border: "border-rose-200", text: "text-rose-700", value: "text-rose-600" },
+                              { bg: "from-blue-50 to-cyan-50", border: "border-blue-200", text: "text-blue-700", value: "text-blue-600" },
+                              { bg: "from-violet-50 to-purple-50", border: "border-violet-200", text: "text-violet-700", value: "text-violet-600" },
+                            ];
+                            const color = colors[index % colors.length];
+                            return (
+                              <li
+                                key={segment.label}
+                                className={`flex items-center justify-between rounded-2xl border ${color.border} bg-gradient-to-r ${color.bg} p-5 shadow-md hover:shadow-lg transition-all`}
+                              >
+                                <span className={`font-bold ${color.text}`}>
+                                  {segment.label}
+                                </span>
+                                <div className="text-right">
+                                  <div className={`text-xl font-black ${color.value}`}>
+                                    {formatCurrency(segment.value)}
+                                  </div>
+                                  <div className={`text-sm font-semibold ${color.text}`}>
+                                    {formatPercentage(segment.percentage)}
+                                  </div>
                                 </div>
-                                <div className="text-sm font-semibold text-emerald-600">
-                                  {formatPercentage(segment.percentage)}
-                                </div>
-                              </div>
-                            </li>
-                          ))}
-                          <li className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 p-5">
-                            <span className="font-bold text-slate-800">
+                              </li>
+                            );
+                          })}
+                          <li className="flex items-center justify-between rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-100 to-teal-100 p-5 shadow-lg">
+                            <span className="font-black text-emerald-800">
                               平均単価
                             </span>
                             <span className="text-xl font-black text-emerald-700">
@@ -691,25 +699,27 @@ export default function SalesPage() {
                           {topDays.map((day, index) => {
                             const weekday = getWeekdayName(day.date);
                             const type = getDayType(day.date);
+                            const rankColors = [
+                              { bg: "from-amber-50 to-yellow-50", border: "border-amber-200", badge: "from-amber-400 to-amber-500", text: "text-amber-700", value: "text-amber-600" },
+                              { bg: "from-slate-50 to-gray-50", border: "border-slate-200", badge: "from-slate-400 to-slate-500", text: "text-slate-700", value: "text-slate-600" },
+                              { bg: "from-orange-50 to-amber-50", border: "border-orange-200", badge: "from-orange-400 to-orange-500", text: "text-orange-700", value: "text-orange-600" },
+                              { bg: "from-sky-50 to-blue-50", border: "border-sky-200", badge: "from-sky-400 to-sky-500", text: "text-sky-700", value: "text-sky-600" },
+                              { bg: "from-indigo-50 to-violet-50", border: "border-indigo-200", badge: "from-indigo-400 to-indigo-500", text: "text-indigo-700", value: "text-indigo-600" },
+                            ];
+                            const color = rankColors[index];
                             return (
                               <li
                                 key={day.day}
-                                className={`flex items-center justify-between rounded-2xl border p-4 shadow-sm ${
-                                  index === 0
-                                    ? "border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50"
-                                    : "border-emerald-100/60 bg-white"
+                                className={`flex items-center justify-between rounded-2xl border ${color.border} bg-gradient-to-r ${color.bg} p-4 shadow-md hover:shadow-xl transition-all ${
+                                  index === 0 ? "scale-105 border-2" : ""
                                 }`}
                               >
                                 <div className="flex items-center gap-3">
-                                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl font-black ${
-                                    index === 0
-                                      ? "bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-md"
-                                      : "bg-slate-100 text-slate-600"
-                                  }`}>
+                                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl font-black bg-gradient-to-br ${color.badge} text-white shadow-md`}>
                                     {index + 1}
                                   </div>
                                   <div>
-                                    <div className="font-bold text-slate-800">
+                                    <div className={`font-bold ${color.text}`}>
                                       {day.day}日 ({weekday})
                                     </div>
                                     <div className="text-xs font-medium text-slate-500">
@@ -717,9 +727,7 @@ export default function SalesPage() {
                                     </div>
                                   </div>
                                 </div>
-                                <div className={`text-right ${index === 0 ? "text-xl" : "text-lg"} font-black ${
-                                  index === 0 ? "text-emerald-700" : "text-slate-900"
-                                }`}>
+                                <div className={`text-right ${index === 0 ? "text-xl" : "text-lg"} font-black ${color.value}`}>
                                   {formatCurrency(day.totalRevenue)}
                                 </div>
                               </li>
@@ -746,24 +754,33 @@ export default function SalesPage() {
                         </h3>
                       </div>
                       <ul className="grid gap-4 sm:grid-cols-2">
-                        {insights.map((insight) => (
-                          <li
-                            key={insight.title}
-                            className="flex items-start gap-3 rounded-2xl border border-emerald-100/60 bg-white/90 p-5 shadow-sm"
-                          >
-                            <div className="mt-1 rounded-full bg-emerald-100 p-1.5">
-                              <Sparkles className="h-4 w-4 text-emerald-600" />
-                            </div>
-                            <div>
-                              <p className="font-bold text-slate-800">
-                                {insight.title}
-                              </p>
-                              <p className="mt-1 text-sm text-slate-600">
-                                {insight.description}
-                              </p>
-                            </div>
-                          </li>
-                        ))}
+                        {insights.map((insight, index) => {
+                          const insightColors = [
+                            { bg: "from-emerald-50 to-teal-50", border: "border-emerald-200", icon: "bg-emerald-100", iconColor: "text-emerald-600", text: "text-emerald-800" },
+                            { bg: "from-blue-50 to-cyan-50", border: "border-blue-200", icon: "bg-blue-100", iconColor: "text-blue-600", text: "text-blue-800" },
+                            { bg: "from-purple-50 to-violet-50", border: "border-purple-200", icon: "bg-purple-100", iconColor: "text-purple-600", text: "text-purple-800" },
+                            { bg: "from-amber-50 to-orange-50", border: "border-amber-200", icon: "bg-amber-100", iconColor: "text-amber-600", text: "text-amber-800" },
+                          ];
+                          const color = insightColors[index % insightColors.length];
+                          return (
+                            <li
+                              key={insight.title}
+                              className={`flex items-start gap-3 rounded-2xl border ${color.border} bg-gradient-to-br ${color.bg} p-5 shadow-md hover:shadow-lg transition-all`}
+                            >
+                              <div className={`mt-1 rounded-full ${color.icon} p-2 shadow-sm`}>
+                                <Sparkles className={`h-4 w-4 ${color.iconColor}`} />
+                              </div>
+                              <div>
+                                <p className={`font-bold ${color.text}`}>
+                                  {insight.title}
+                                </p>
+                                <p className="mt-1 text-sm text-slate-600">
+                                  {insight.description}
+                                </p>
+                              </div>
+                            </li>
+                          );
+                        })}
                       </ul>
                     </div>
                   )}
