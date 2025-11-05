@@ -302,16 +302,16 @@ export const loadSalesDataFromStorage = (): SalesMonthlyData[] => {
 
 export const saveSalesDataToStorage = (
   data: SalesMonthlyData[],
-): void => {
+  timestampOverride?: string,
+): string => {
   if (typeof window === "undefined") {
-    return;
+    return timestampOverride ?? new Date().toISOString();
   }
   const sorted = [...data].sort((a, b) => a.id.localeCompare(b.id));
   setCompressedItem(SALES_STORAGE_KEY, JSON.stringify(sorted));
-  window.localStorage.setItem(
-    SALES_TIMESTAMP_KEY,
-    new Date().toISOString(),
-  );
+  const timestamp = timestampOverride ?? new Date().toISOString();
+  window.localStorage.setItem(SALES_TIMESTAMP_KEY, timestamp);
+  return timestamp;
 };
 
 export const clearSalesDataStorage = (): void => {

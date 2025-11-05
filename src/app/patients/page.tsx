@@ -89,6 +89,15 @@ import {
   LISTING_STORAGE_KEY,
   LISTING_TIMESTAMP_KEY,
 } from "@/lib/listingData";
+import {
+  type SalesMonthlyData,
+  parseSalesCsv,
+  loadSalesDataFromStorage,
+  saveSalesDataToStorage,
+  upsertSalesMonth,
+  clearSalesDataStorage,
+  SALES_TIMESTAMP_KEY,
+} from "@/lib/salesData";
 import { isHoliday } from "@/lib/dateUtils";
 import { AnalysisFilterPortal } from "@/components/AnalysisFilterPortal";
 import { useAnalysisPeriodRange } from "@/hooks/useAnalysisPeriodRange";
@@ -1306,6 +1315,33 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
   const [diagnosisUploadError, setDiagnosisUploadError] = useState<string | null>(null);
   const [showDiagnosisChart, setShowDiagnosisChart] = useState(false);
   const [showDiagnosisCategoryChart, setShowDiagnosisCategoryChart] = useState(false);
+  const [salesStatus, setSalesStatus] = useState<{
+    lastUpdated: string | null;
+    totalMonths: number;
+    totalRevenue: number;
+  }>({
+    lastUpdated: null,
+    totalMonths: 0,
+    totalRevenue: 0,
+  });
+  const [isUploadingSales, setIsUploadingSales] = useState(false);
+  const [salesUploadError, setSalesUploadError] = useState<string | null>(null);
+
+  const updateSalesSnapshot = useCallback(
+    (data: SalesMonthlyData[], explicitTimestamp?: string | null) => {
+      const timestamp =
+        explicitTimestamp ??
+        (typeof window !== "undefined"
+          ? window.localStorage.getItem(SALES_TIMESTAMP_KEY)
+          : null);
+      setSalesStatus({
+        lastUpdated: timestamp,
+        totalMonths: data.length,
+        totalRevenue: data.reduce((sum, month) => sum + month.totalRevenue, 0),
+      });
+    },
+    [],
+  );
 
   const bulkUploadInputRef = useRef<HTMLInputElement | null>(null);
   const [bulkQueue, setBulkQueue] = useState<File[]>([]);
@@ -1388,8 +1424,17 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
           byCategory: calculateDiagnosisCategoryTotals(diagnosisDataset),
         });
       }
+
+      if (Array.isArray(bundle.salesData)) {
+        const salesDataset = bundle.salesData as SalesMonthlyData[];
+        const salesTimestamp = saveSalesDataToStorage(
+          salesDataset,
+          bundle.salesTimestamp ?? fallbackTimestamp ?? generatedAt,
+        );
+        updateSalesSnapshot(salesDataset, salesTimestamp);
+      }
     },
-    [],
+    [updateSalesSnapshot],
   );
 
   useEffect(() => {
@@ -1460,8 +1505,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
         setUploadError("保存済みデータの読み込みに失敗しました。");
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [applySharedBundle, updateSalesSnapshot]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1505,10 +1549,13 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
         lastUpdated: listingTimestamp,
         totals,
       });
+
+      const existingSales = loadSalesDataFromStorage();
+      updateSalesSnapshot(existingSales);
     } catch (error) {
       console.error(error);
     }
-  }, []);
+  }, [updateSalesSnapshot]);
 
   const classifiedRecords = useMemo<KarteRecordWithCategory[]>(() => {
     if (records.length === 0) {
@@ -3682,6 +3729,41 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
     [],
   );
 
+  const importSalesFiles = useCallback(
+    async (files: File[], { silent }: { silent?: boolean } = {}) => {
+      if (files.length === 0) {
+        return;
+      }
+
+      if (!silent) {
+        setSalesUploadError(null);
+        setIsUploadingSales(true);
+      }
+
+      try {
+        let next = loadSalesDataFromStorage();
+        for (const file of files) {
+          const text = await file.text();
+          const parsed = parseSalesCsv(text, { fileName: file.name });
+          next = upsertSalesMonth(next, parsed);
+        }
+        saveSalesDataToStorage(next);
+        updateSalesSnapshot(next);
+      } catch (error) {
+        console.error(error);
+        if (!silent) {
+          setSalesUploadError("売上CSVの解析に失敗しました。フォーマットをご確認ください。");
+        }
+        throw error;
+      } finally {
+        if (!silent) {
+          setIsUploadingSales(false);
+        }
+      }
+    },
+    [updateSalesSnapshot],
+  );
+
   const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files ? Array.from(event.target.files) : [];
     try {
@@ -3748,6 +3830,20 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
     }
   };
 
+  const handleSalesUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const files = input.files ? Array.from(input.files) : [];
+    if (files.length === 0) {
+      return;
+    }
+
+    try {
+      await importSalesFiles(files);
+    } finally {
+      input.value = "";
+    }
+  };
+
   const handleBulkFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files ? Array.from(event.target.files) : [];
     if (files.length === 0) {
@@ -3796,6 +3892,7 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
       const reservationFiles: File[] = [];
       const surveyFiles: File[] = [];
       const diagnosisFiles: File[] = [];
+      const salesFiles: File[] = [];
       const unknownFiles: string[] = [];
 
       const determineListingCategory = (normalizedName: string): ListingCategory | null => {
@@ -3855,6 +3952,14 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
           }
           continue;
         }
+        if (
+          lowerName.includes("売上") ||
+          lowerName.includes("売り上げ") ||
+          lowerName.includes("sales")
+        ) {
+          salesFiles.push(file);
+          continue;
+        }
 
         unknownFiles.push(file.name);
       }
@@ -3884,6 +3989,9 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
       }
       if (diagnosisFiles.length > 0) {
         await runTask("傷病名", () => importDiagnosisFiles(diagnosisFiles, { silent: true }));
+      }
+      if (salesFiles.length > 0) {
+        await runTask("売上", () => importSalesFiles(salesFiles, { silent: true }));
       }
 
       for (const category of Object.keys(listingBuckets) as ListingCategory[]) {
@@ -3951,6 +4059,11 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
       const surveyData = loadSurveyDataFromStorage();
       const listingData = loadListingDataFromStorage();
       const diagnosisData = loadDiagnosisFromStorage();
+      const salesData = loadSalesDataFromStorage();
+      const salesTimestamp =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem(SALES_TIMESTAMP_KEY)
+          : null;
 
       const bundle: SharedDataBundle = {
         version: 1,
@@ -3965,6 +4078,8 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
         listingTimestamp: loadListingTimestamp(),
         diagnosisData,
         diagnosisTimestamp: loadDiagnosisTimestamp(),
+        salesData,
+        salesTimestamp,
       };
 
       const response = await uploadDataToR2({
@@ -4000,6 +4115,7 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
     window.localStorage.removeItem(LISTING_TIMESTAMP_KEY);
     window.localStorage.removeItem(DIAGNOSIS_STORAGE_KEY);
     window.localStorage.removeItem(DIAGNOSIS_TIMESTAMP_KEY);
+    clearSalesDataStorage();
     setRecords([]);
     setShareUrl(null);
     setLastUpdated(null);
@@ -4025,6 +4141,7 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
       byDepartment: createEmptyDiagnosisDepartmentTotals(),
       byCategory: createEmptyDiagnosisCategoryTotals(),
     });
+    updateSalesSnapshot([], null);
   };
 
   return (
@@ -5934,7 +6051,7 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
                     <div>
                       <p className="text-sm font-semibold text-slate-700">まとめてCSV取り込み</p>
                       <p className="text-xs text-slate-500">
-                        ファイル名に「カルテ」「予約」「アンケート」「リスティング」「傷病」などのキーワードを含めると自動で振り分けます。
+                        ファイル名に「カルテ」「予約」「アンケート」「リスティング」「傷病」「売上」などのキーワードを含めると自動で振り分けます。
                       </p>
                     </div>
                     <button
@@ -6147,17 +6264,70 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
                           className="hidden"
                         />
                       </label>
-                      {surveyUploadError && (
-                        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
-                          {surveyUploadError}
-                        </p>
-                      )}
-                    </div>
+                    {surveyUploadError && (
+                      <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                        {surveyUploadError}
+                      </p>
                     )}
-                    <div className="rounded-2xl border border-amber-200 bg-white/90 p-4 space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-amber-700">傷病名CSV（主病）</p>
+                  </div>
+                  )}
+                  {!lifestyleOnly && (
+                  <div className="rounded-2xl border border-sky-200 bg-white/90 p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-sky-700">売上CSV</p>
+                        <p className="text-xs text-slate-500">売上ダッシュボードで月次・曜日・日次の分析に利用します。</p>
+                      </div>
+                      <div className="text-right text-[11px] text-slate-500">
+                        <p>
+                          最終更新:{" "}
+                          {salesStatus.lastUpdated
+                            ? new Date(salesStatus.lastUpdated).toLocaleString("ja-JP")
+                            : "未登録"}
+                        </p>
+                        <p>
+                          登録月:{" "}
+                          {salesStatus.totalMonths > 0
+                            ? `${salesStatus.totalMonths.toLocaleString("ja-JP")}ヶ月`
+                            : "未登録"}
+                        </p>
+                        <p>
+                          合計売上:{" "}
+                          {salesStatus.totalRevenue > 0
+                            ? `¥${salesStatus.totalRevenue.toLocaleString("ja-JP")}`
+                            : "—"}
+                        </p>
+                      </div>
+                    </div>
+                    <label
+                      className={`flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                        isUploadingSales
+                          ? "pointer-events-none border-sky-100 bg-sky-50 text-sky-300"
+                          : "border-sky-200 text-sky-600 hover:bg-sky-50"
+                      }`}
+                    >
+                      <Upload className="h-4 w-4" />
+                      {isUploadingSales ? "アップロード中..." : "売上CSVを選択"}
+                      <input
+                        type="file"
+                        accept=".csv,text/csv"
+                        onChange={handleSalesUpload}
+                        multiple
+                        disabled={isUploadingSales}
+                        className="hidden"
+                      />
+                    </label>
+                    {salesUploadError && (
+                      <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                        {salesUploadError}
+                      </p>
+                    )}
+                  </div>
+                  )}
+                  <div className="rounded-2xl border border-amber-200 bg-white/90 p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-amber-700">傷病名CSV（主病）</p>
                           <p className="text-xs text-slate-500">新規主病トレンド分析セクションで利用します。</p>
                         </div>
                         <div className="text-right text-[11px] text-slate-500">

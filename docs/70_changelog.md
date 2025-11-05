@@ -33,4 +33,4 @@
 - docs構成とCI/CDワークフローの土台を追加し、自動デプロイ準備を整えた。(2025-10-12)
 - Cloudflare Worker のデプロイワークフローを追加し、main への push で自動 Publish、PR では Dry-run を実行するようにした。(2025-10-12)[.github/workflows/deploy-cf-worker.yml:1-50]
 - マップ分析に期間比較モード・ランキングカード・クリニック地点表示を追加し、町丁目未検出率を1%未満へ改善。(2025-10-12)
-- 売上分析ページ(`/sales`)を追加し、CSVアップロードから月次サマリ・曜日平均・日別推移を可視化できるようにした。ホームのナビゲーションカードとトップバーにも「売上分析」を追加し、専用の売上データモジュールとRechartsチャートを実装。[src/app/sales/page.tsx:1-400][src/lib/salesData.ts:1-260][src/components/sales/*.tsx:1-200][src/components/Navigation.tsx:1-220][src/app/page.tsx:391-460] (2025-11-08)
+- 売上分析ページ(`/sales`)を刷新し、データ管理経由の売上CSV取り込みに一本化。月次チャート・曜日平均（祝日/祝日前日を独立表示）・日別推移に加えて、売上構成比・トップ日ハイライト・追加インサイトを表示するよう改善した。データ管理パネルにも売上アップロード枠を追加し、共有バンドルへ売上データを含めるよう対応。[src/app/sales/page.tsx:1-520][src/lib/salesData.ts:1-280][src/app/patients/page.tsx:1240-6400][src/components/sales/*.tsx:1-200][src/components/Navigation.tsx:1-220][src/app/page.tsx:392-454] (2025-11-08)
