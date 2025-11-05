@@ -173,8 +173,13 @@ export default function HomePage() {
               isEndoscopyDepartment(record.department),
             ).length;
 
-            // 純初診数と再診数を計算
-            const classified = classifyKarteRecords(karteRecords);
+            // 純初診数を計算（総合診療＋発熱外来＋内科のみ）
+            const targetDepartments = ["総合診療", "発熱外来", "内科"];
+            const filteredRecords = karteRecords.filter((record) => {
+              const dept = record.department?.trim() || "";
+              return targetDepartments.includes(dept);
+            });
+            const classified = classifyKarteRecords(filteredRecords);
             const latestClassified = classified.filter(
               (record) => record.monthKey === latestMonth,
             );
@@ -333,8 +338,8 @@ export default function HomePage() {
       value: formatCount(stats.pureFirstVisits),
       unit: "人",
       hint: stats.kartePeriodLabel
-        ? `初めて来院された患者数（${stats.kartePeriodLabel}の集計）`
-        : "初めて来院された患者数",
+        ? `総合診療・発熱外来・内科の純初診（${stats.kartePeriodLabel}の集計）`
+        : "総合診療・発熱外来・内科の純初診",
       icon: UserPlus,
       gradient: "from-emerald-500 to-emerald-400",
     },
@@ -371,17 +376,17 @@ export default function HomePage() {
       icon: Activity,
       gradient: "from-amber-500 to-amber-400",
     },
-    {
-      id: "referral",
-      label: "内科 家族・友人紹介",
-      value: formatCount(stats.internalReferrals),
-      unit: "件",
-      hint: stats.surveyPeriodLabel
-        ? `外来アンケートから集計（${stats.surveyPeriodLabel}）`
-        : "外来アンケートから集計",
-      icon: Heart,
-      gradient: "from-rose-500 to-rose-400",
-    },
+    // {
+    //   id: "referral",
+    //   label: "内科 家族・友人紹介",
+    //   value: formatCount(stats.internalReferrals),
+    //   unit: "件",
+    //   hint: stats.surveyPeriodLabel
+    //     ? `外来アンケートから集計（${stats.surveyPeriodLabel}）`
+    //     : "外来アンケートから集計",
+    //   icon: Heart,
+    //   gradient: "from-rose-500 to-rose-400",
+    // },
   ];
 
   const navigationCards = [
@@ -460,7 +465,7 @@ export default function HomePage() {
                 リベ大総合クリニック大阪院をマルミエにするアプリです。
               </p>
               <p className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">
-                総患者数、純初診数、再診数、生活習慣病患者数、内科の家族・友人紹介など、
+                総患者数、純初診数（総合診療・発熱外来・内科）、生活習慣病患者数など、
                 重要なKPIをひと目で確認できます。詳細分析ページへスムーズにアクセスし、次のアクションへつなげてください。
               </p>
               <div className="flex flex-wrap items-center gap-3">
