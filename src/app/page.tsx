@@ -390,6 +390,14 @@ export default function HomePage() {
 
   const navigationCards = [
     {
+      href: "/sales" as const,
+      title: "売上分析",
+      description:
+        "売上CSVを取り込むと月次売上や曜日平均、日別傾向を可視化し、貢献度の高い日を把握できます。",
+      highlights: ["月次推移", "曜日別平均", "日別詳細"],
+      icon: Gauge,
+    },
+    {
       href: "/patients" as const,
       title: "患者分析",
       description:
