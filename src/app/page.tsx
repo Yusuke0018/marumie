@@ -6,7 +6,6 @@ import {
   Users,
   UserPlus,
   Activity,
-  Heart,
   ArrowRight,
   CalendarClock,
   ClipboardList,
