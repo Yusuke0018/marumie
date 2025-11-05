@@ -135,14 +135,8 @@ export default function SalesPage() {
     for (const day of selectedMonth.days) {
       const dayType = getDayType(day.date);
       const weekdayName = getWeekdayName(day.date);
-      let key: string;
-      if (dayType === "祝日" || dayType === "大型連休") {
-        key = "祝日";
-      } else if (dayType === "祝日前日") {
-        key = "祝日前日";
-      } else {
-        key = weekdayName;
-      }
+      const key =
+        dayType === "祝日" || dayType === "大型連休" ? "祝日" : weekdayName;
       if (!accumulator.has(key)) {
         accumulator.set(key, { label: key, total: 0, count: 0 });
       }
@@ -153,7 +147,6 @@ export default function SalesPage() {
 
     const orderedKeys = [
       ...WEEKDAY_ORDER,
-      ...(accumulator.has("祝日前日") ? ["祝日前日"] : []),
       ...(accumulator.has("祝日") ? ["祝日"] : []),
     ];
 
@@ -262,11 +255,6 @@ export default function SalesPage() {
     [weekdayAverageData],
   );
 
-  const preHolidayAverage = useMemo(
-    () => weekdayAverageData.find((item) => item.label === "祝日前日") ?? null,
-    [weekdayAverageData],
-  );
-
   const insights = useMemo(() => {
     if (!selectedMonth) {
       return [];
@@ -303,15 +291,6 @@ export default function SalesPage() {
       });
     }
 
-    if (preHolidayAverage) {
-      output.push({
-        title: "祝日前日の動向",
-        description: `祝日前日の平均売上は${formatCurrency(
-          preHolidayAverage.value,
-        )}です。`,
-      });
-    }
-
     if (topDays.length > 0 && selectedMonth.totalRevenue > 0) {
       const topShare =
         (topDays[0]!.totalRevenue / selectedMonth.totalRevenue) * 100;
@@ -336,7 +315,6 @@ export default function SalesPage() {
   }, [
     composition,
     holidayAverage,
-    preHolidayAverage,
     selectedMonth,
     topDays,
     weekdayHighlight,
