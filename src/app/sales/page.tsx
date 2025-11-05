@@ -700,6 +700,12 @@ export default function SalesPage() {
                               <th className="px-4 py-3 text-left font-semibold">
                                 日
                               </th>
+                              <th className="px-4 py-3 text-left font-semibold">
+                                曜日
+                              </th>
+                              <th className="px-4 py-3 text-left font-semibold">
+                                日タイプ
+                              </th>
                               <th className="px-4 py-3 text-right font-semibold">
                                 医療収益
                               </th>
@@ -721,33 +727,74 @@ export default function SalesPage() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-200 bg-white text-slate-700">
-                            {selectedMonth.days.map((day) => (
-                              <tr key={day.day} className="hover:bg-slate-50/80">
-                                <td className="px-4 py-3 font-semibold text-slate-600">
-                                  {day.day}日
-                                </td>
-                                <td className="px-4 py-3 text-right tabular-nums">
-                                  {formatCurrency(day.medicalRevenue)}
-                                </td>
-                                <td className="px-4 py-3 text-right tabular-nums">
-                                  {formatCurrency(day.selfPayRevenue)}
-                                </td>
-                                <td className="px-4 py-3 text-right tabular-nums">
-                                  {formatCurrency(day.otherRevenue)}
-                                </td>
-                                <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">
-                                  {formatCurrency(day.totalRevenue)}
-                                </td>
-                                <td className="px-4 py-3 text-right tabular-nums">
-                                  {day.peopleCount !== null
-                                    ? day.peopleCount.toLocaleString("ja-JP")
-                                    : "—"}
-                                </td>
-                                <td className="px-4 py-3 text-left">
-                                  {day.note ?? "—"}
-                                </td>
-                              </tr>
-                            ))}
+                            {selectedMonth.days.map((day) => {
+                              const weekday = getWeekdayName(day.date);
+                              const dayType = getDayType(day.date);
+                              const isHolidayType =
+                                dayType === "祝日" ||
+                                dayType === "大型連休" ||
+                                dayType === "連休初日" ||
+                                dayType === "連休中日" ||
+                                dayType === "連休最終日";
+                              return (
+                                <tr
+                                  key={day.day}
+                                  className={`hover:bg-slate-50/80 ${
+                                    isHolidayType
+                                      ? "bg-red-50/50 border-l-4 border-l-red-400"
+                                      : dayType === "日曜"
+                                        ? "bg-red-50/30"
+                                        : dayType === "土曜"
+                                          ? "bg-blue-50/30"
+                                          : ""
+                                  }`}
+                                >
+                                  <td className="px-4 py-3 font-semibold text-slate-600">
+                                    {day.day}日
+                                  </td>
+                                  <td className="px-4 py-3 text-left">
+                                    {weekday}
+                                  </td>
+                                  <td className="px-4 py-3 text-left">
+                                    <span
+                                      className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                        isHolidayType
+                                          ? "bg-red-100 text-red-700"
+                                          : dayType === "日曜"
+                                            ? "bg-red-50 text-red-600"
+                                            : dayType === "土曜"
+                                              ? "bg-blue-100 text-blue-700"
+                                              : dayType === "祝日前日"
+                                                ? "bg-yellow-100 text-yellow-700"
+                                                : "bg-slate-100 text-slate-600"
+                                      }`}
+                                    >
+                                      {dayType}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-right tabular-nums">
+                                    {formatCurrency(day.medicalRevenue)}
+                                  </td>
+                                  <td className="px-4 py-3 text-right tabular-nums">
+                                    {formatCurrency(day.selfPayRevenue)}
+                                  </td>
+                                  <td className="px-4 py-3 text-right tabular-nums">
+                                    {formatCurrency(day.otherRevenue)}
+                                  </td>
+                                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">
+                                    {formatCurrency(day.totalRevenue)}
+                                  </td>
+                                  <td className="px-4 py-3 text-right tabular-nums">
+                                    {day.peopleCount !== null
+                                      ? day.peopleCount.toLocaleString("ja-JP")
+                                      : "—"}
+                                  </td>
+                                  <td className="px-4 py-3 text-left">
+                                    {day.note ?? "—"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>

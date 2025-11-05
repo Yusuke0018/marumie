@@ -30,6 +30,7 @@ export type PeriodType = "3months" | "6months" | "1year" | "all";
 
 /**
  * 日付が祝日かどうかを判定
+ * 注: 国民の祝日（type: public）のみを判定し、銀行休業日や記念日は除外
  */
 export const isHoliday = (dateStr: string): boolean => {
   if (holidayCache.has(dateStr)) {
@@ -37,7 +38,10 @@ export const isHoliday = (dateStr: string): boolean => {
   }
   const date = new Date(dateStr);
   const holidays = hd.isHoliday(date);
-  const isHolidayDate = holidays !== false;
+  // 国民の祝日のみを判定（銀行休業日や記念日を除外）
+  const isHolidayDate = holidays !== false &&
+    Array.isArray(holidays) &&
+    holidays.some((h) => h.type === "public");
   holidayCache.set(dateStr, isHolidayDate);
   return isHolidayDate;
 };
