@@ -1,5 +1,7 @@
 # 変更履歴
 
+- ビルド環境の検証を実施。npm ci は成功（Node 20.x推奨、v22.21.0でもEBADENGINE警告のみで動作）、npm run build は Google Fonts へのネットワークアクセス制限がある環境でエラーとなる問題を確認（CI環境では正常動作）。Next.js 14.2.33 / eslint@8.57.1（EOL警告あり）の依存関係を確認し、docs/60_errors.md に記録。3つのワークフロー（GitHub Pages / Vercel / Cloudflare Worker）の構成を確認済み。(2025-11-05)
+
 - 相関分析ページ(`/correlation`)のUI/UXを大幅に改善。タブナビゲーション（サマリー・詳細分析・データ品質）を導入し、スタイリッシュなメトリクスカード、大型エフェクトバナー、モダンなチャートカードでユーザビリティを向上。グラスモーフィズム効果とグラデーション背景で見やすさとデザイン性を両立。(2025-11-02)[src/app/correlation/page.tsx:1-906][src/components/correlation/*.tsx:1-150]
 
 - ABテスト分析(`/ab-test`)を追加し、カルテデータの複数期間比較（患者数・年齢分布・診療科・点数など）と差分可視化（増減率表示）を実装。CSV取り込みとLocalStorage読み込みの双方に対応し、期間の複数選択や範囲指定をUIで操作できるようにした。(2025-11-01)[src/app/ab-test/page.tsx:1-520]
