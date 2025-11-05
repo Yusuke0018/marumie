@@ -46,9 +46,9 @@ export default function Navigation() {
     { href: "/patients/lifestyle" as const, label: "生活習慣病分析" },
     { href: "/reservations" as const, label: "予約分析" },
     { href: "/map-analysis" as const, label: "マップ分析" },
-    { href: "/survey" as const, label: "アンケート分析" },
-    { href: "/listing" as const, label: "リスティング分析" },
-    { href: "/correlation" as const, label: "相関分析" },
+    // { href: "/survey" as const, label: "アンケート分析" },
+    // { href: "/listing" as const, label: "リスティング分析" },
+    // { href: "/correlation" as const, label: "相関分析" },
     { href: "/ab-test" as const, label: "ABテスト" },
   ];
 
@@ -60,9 +60,9 @@ export default function Navigation() {
       [
         "/patients",
         "/reservations",
-        "/survey",
-        "/listing",
-        "/correlation",
+        // "/survey",
+        // "/listing",
+        // "/correlation",
         "/map-analysis",
       ].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)),
     [pathname],
