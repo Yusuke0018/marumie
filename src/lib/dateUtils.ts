@@ -5,14 +5,6 @@ const hd = new Holidays("JP");
 const holidayCache = new Map<string, boolean>();
 const weekdayIndexCache = new Map<string, number>();
 const weekdayNameCache = new Map<string, string>();
-const longWeekendCache = new Map<
-  string,
-  {
-    isLongWeekend: boolean;
-    position?: "first" | "middle" | "last";
-    length?: number;
-  }
->();
 const dayTypeCache = new Map<string, DayType>();
 
 export type DayType =
@@ -20,11 +12,7 @@ export type DayType =
   | "土曜"
   | "日曜"
   | "祝日"
-  | "祝日前日"
-  | "連休初日"
-  | "連休中日"
-  | "連休最終日"
-  | "大型連休";
+  | "祝日前日";
 
 export type PeriodType = "3months" | "6months" | "1year" | "all";
 
@@ -85,84 +73,6 @@ export const isPreHoliday = (dateStr: string): boolean => {
 };
 
 /**
- * 連休の判定（3日以上の休日が続く期間）
- */
-export const getLongWeekendInfo = (
-  dateStr: string,
-): {
-  isLongWeekend: boolean;
-  position?: "first" | "middle" | "last";
-  length?: number;
-} => {
-  if (longWeekendCache.has(dateStr)) {
-    return longWeekendCache.get(dateStr)!;
-  }
-
-  const date = new Date(dateStr);
-
-  // この日が休日でなければ連休ではない
-  if (!isHoliday(dateStr) && !isWeekend(dateStr)) {
-    const result = { isLongWeekend: false };
-    longWeekendCache.set(dateStr, result);
-    return result;
-  }
-
-  // 前後の休日を数える
-  let beforeCount = 0;
-  let afterCount = 0;
-
-  // 前の休日を数える
-  for (let i = 1; i <= 10; i++) {
-    const prevDate = new Date(date);
-    prevDate.setDate(prevDate.getDate() - i);
-    const prevDateStr = prevDate.toISOString().split("T")[0];
-    if (isHoliday(prevDateStr) || isWeekend(prevDateStr)) {
-      beforeCount++;
-    } else {
-      break;
-    }
-  }
-
-  // 後の休日を数える
-  for (let i = 1; i <= 10; i++) {
-    const nextDate = new Date(date);
-    nextDate.setDate(nextDate.getDate() + i);
-    const nextDateStr = nextDate.toISOString().split("T")[0];
-    if (isHoliday(nextDateStr) || isWeekend(nextDateStr)) {
-      afterCount++;
-    } else {
-      break;
-    }
-  }
-
-  const totalLength = beforeCount + 1 + afterCount;
-
-  // 3日以上なら連休
-  if (totalLength >= 3) {
-    let position: "first" | "middle" | "last";
-    if (beforeCount === 0) {
-      position = "first";
-    } else if (afterCount === 0) {
-      position = "last";
-    } else {
-      position = "middle";
-    }
-
-    const result = {
-      isLongWeekend: true,
-      position,
-      length: totalLength,
-    };
-    longWeekendCache.set(dateStr, result);
-    return result;
-  }
-
-  const result = { isLongWeekend: false };
-  longWeekendCache.set(dateStr, result);
-  return result;
-};
-
-/**
  * 日付の種類を判定
  */
 export const getDayType = (dateStr: string): DayType => {
@@ -170,38 +80,16 @@ export const getDayType = (dateStr: string): DayType => {
     return dayTypeCache.get(dateStr)!;
   }
 
-  const longWeekendInfo = getLongWeekendInfo(dateStr);
-
-  // 大型連休（5日以上）
-  if (longWeekendInfo.isLongWeekend && (longWeekendInfo.length ?? 0) >= 5) {
-    dayTypeCache.set(dateStr, "大型連休");
-    return "大型連休";
-  }
-
-  // 連休の位置
-  if (longWeekendInfo.isLongWeekend) {
-    if (longWeekendInfo.position === "first") {
-      dayTypeCache.set(dateStr, "連休初日");
-      return "連休初日";
-    } else if (longWeekendInfo.position === "last") {
-      dayTypeCache.set(dateStr, "連休最終日");
-      return "連休最終日";
-    } else {
-      dayTypeCache.set(dateStr, "連休中日");
-      return "連休中日";
-    }
-  }
-
-  // 祝日前日（平日のみ）
-  if (!isHoliday(dateStr) && !isWeekend(dateStr) && isPreHoliday(dateStr)) {
-    dayTypeCache.set(dateStr, "祝日前日");
-    return "祝日前日";
-  }
-
   // 祝日
   if (isHoliday(dateStr)) {
     dayTypeCache.set(dateStr, "祝日");
     return "祝日";
+  }
+
+  // 祝日前日（平日のみ）
+  if (!isWeekend(dateStr) && isPreHoliday(dateStr)) {
+    dayTypeCache.set(dateStr, "祝日前日");
+    return "祝日前日";
   }
 
   // 日曜

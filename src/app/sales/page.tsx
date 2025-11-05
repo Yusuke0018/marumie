@@ -135,13 +135,7 @@ export default function SalesPage() {
     for (const day of selectedMonth.days) {
       const dayType = getDayType(day.date);
       const weekdayName = getWeekdayName(day.date);
-      const isHolidayType =
-        dayType === "祝日" ||
-        dayType === "大型連休" ||
-        dayType === "連休初日" ||
-        dayType === "連休中日" ||
-        dayType === "連休最終日";
-      const key = isHolidayType ? "祝日" : weekdayName;
+      const key = dayType === "祝日" ? "祝日" : weekdayName;
       if (!accumulator.has(key)) {
         accumulator.set(key, { label: key, total: 0, count: 0 });
       }
@@ -730,17 +724,11 @@ export default function SalesPage() {
                             {selectedMonth.days.map((day) => {
                               const weekday = getWeekdayName(day.date);
                               const dayType = getDayType(day.date);
-                              const isHolidayType =
-                                dayType === "祝日" ||
-                                dayType === "大型連休" ||
-                                dayType === "連休初日" ||
-                                dayType === "連休中日" ||
-                                dayType === "連休最終日";
                               return (
                                 <tr
                                   key={day.day}
                                   className={`hover:bg-slate-50/80 ${
-                                    isHolidayType
+                                    dayType === "祝日"
                                       ? "bg-red-50/50 border-l-4 border-l-red-400"
                                       : dayType === "日曜"
                                         ? "bg-red-50/30"
@@ -758,7 +746,7 @@ export default function SalesPage() {
                                   <td className="px-4 py-3 text-left">
                                     <span
                                       className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${
-                                        isHolidayType
+                                        dayType === "祝日"
                                           ? "bg-red-100 text-red-700"
                                           : dayType === "日曜"
                                             ? "bg-red-50 text-red-600"
