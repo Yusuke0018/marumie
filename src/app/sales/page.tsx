@@ -19,7 +19,6 @@ import {
   Sparkles,
   TrendingUp,
   DollarSign,
-  Users,
   Award,
 } from "lucide-react";
 import {
