@@ -279,15 +279,13 @@ const DAY_TYPE_ORDER: BasicDayType[] = ["平日", "土曜", "日曜", "祝日"];
 const simplifyDayType = (dayType: DayType): BasicDayType => {
   switch (dayType) {
     case "祝日":
-    case "連休初日":
-    case "連休中日":
-    case "連休最終日":
-    case "大型連休":
       return "祝日";
     case "日曜":
       return "日曜";
     case "土曜":
       return "土曜";
+    case "祝日前日":
+    case "平日":
     default:
       return "平日";
   }
