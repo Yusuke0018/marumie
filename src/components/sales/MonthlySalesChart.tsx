@@ -40,23 +40,29 @@ export function MonthlySalesChart({
     <div className="h-80 w-full">
       <ResponsiveContainer>
         <BarChart data={data} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="4 4" stroke="#E2E8F0" />
+          <CartesianGrid strokeDasharray="4 4" stroke="#d1fae5" vertical={false} />
           <XAxis
             dataKey="label"
             tickLine={false}
             axisLine={false}
-            tick={{ fill: "#475569", fontSize: 12 }}
+            tick={{ fill: "#64748b", fontSize: 13, fontWeight: 500 }}
           />
           <YAxis
             tickLine={false}
             axisLine={false}
-            tick={{ fill: "#475569", fontSize: 12 }}
-            tickFormatter={(value) => `${Math.round(value / 1_000_000)}百万円`}
+            tick={{ fill: "#64748b", fontSize: 13, fontWeight: 500 }}
+            tickFormatter={(value) => `${Math.round(value / 1_000_000)}M`}
           />
           <Tooltip
-            cursor={{ fill: "rgba(14,165,233,0.08)" }}
-            formatter={(value: number) => formatCurrency(value)}
-            labelFormatter={(label) => `${label}の合計`}
+            cursor={{ fill: "rgba(16,185,129,0.08)" }}
+            contentStyle={{
+              backgroundColor: "white",
+              border: "1px solid #d1fae5",
+              borderRadius: "12px",
+              boxShadow: "0 10px 15px -3px rgba(16,185,129,0.1)",
+            }}
+            formatter={(value: number) => [formatCurrency(value), "売上"]}
+            labelFormatter={(label) => `${label}`}
           />
           <Bar
             dataKey="totalRevenue"
@@ -79,9 +85,9 @@ export function MonthlySalesChart({
                     : "url(#sales-bar)"
                 }
                 stroke={
-                  selectedId === entry.id ? "rgba(14,165,233,0.7)" : "transparent"
+                  selectedId === entry.id ? "rgba(16,185,129,0.6)" : "transparent"
                 }
-                strokeWidth={selectedId === entry.id ? 2 : 1}
+                strokeWidth={selectedId === entry.id ? 3 : 1}
               />
             ))}
           </Bar>
@@ -93,8 +99,8 @@ export function MonthlySalesChart({
               x2="0%"
               y2="100%"
             >
-              <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.9} />
-              <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0.7} />
+              <stop offset="0%" stopColor="#6ee7b7" stopOpacity={0.9} />
+              <stop offset="100%" stopColor="#34d399" stopOpacity={0.75} />
             </linearGradient>
             <linearGradient
               id="sales-bar-selected"
@@ -103,8 +109,8 @@ export function MonthlySalesChart({
               x2="0%"
               y2="100%"
             >
-              <stop offset="0%" stopColor="#34d399" stopOpacity={0.95} />
-              <stop offset="100%" stopColor="#10b981" stopOpacity={0.85} />
+              <stop offset="0%" stopColor="#10b981" stopOpacity={0.95} />
+              <stop offset="100%" stopColor="#059669" stopOpacity={0.9} />
             </linearGradient>
           </defs>
         </BarChart>

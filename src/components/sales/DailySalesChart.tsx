@@ -57,44 +57,51 @@ export function DailySalesChart({
               x2="0"
               y2="1"
             >
-              <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.8} />
-              <stop offset="95%" stopColor="#22d3ee" stopOpacity={0.1} />
+              <stop offset="5%" stopColor="#34d399" stopOpacity={0.7} />
+              <stop offset="95%" stopColor="#6ee7b7" stopOpacity={0.1} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="4 4" stroke="#E2E8F0" />
+          <CartesianGrid strokeDasharray="4 4" stroke="#d1fae5" vertical={false} />
           <XAxis
             dataKey="day"
             tickLine={false}
             axisLine={false}
-            tick={{ fill: "#475569", fontSize: 12 }}
+            tick={{ fill: "#64748b", fontSize: 13, fontWeight: 500 }}
             tickFormatter={(value) => `${value}日`}
           />
           <YAxis
             tickLine={false}
             axisLine={false}
-            tick={{ fill: "#475569", fontSize: 12 }}
+            tick={{ fill: "#64748b", fontSize: 13, fontWeight: 500 }}
             tickFormatter={(value) => `${Math.round(value / 1000)}千円`}
           />
           <Tooltip
-            formatter={(value: number) => formatCurrency(value)}
-            labelFormatter={(day: number) => `${day}日の売上`}
+            contentStyle={{
+              backgroundColor: "white",
+              border: "1px solid #d1fae5",
+              borderRadius: "12px",
+              boxShadow: "0 10px 15px -3px rgba(16,185,129,0.1)",
+            }}
+            formatter={(value: number) => [formatCurrency(value), "売上"]}
+            labelFormatter={(day: number) => `${day}日`}
           />
           <Area
             type="monotone"
             dataKey="totalRevenue"
-            stroke="#0ea5e9"
+            stroke="#10b981"
             strokeWidth={3}
             fillOpacity={1}
             fill="url(#daily-sales)"
-            activeDot={{ r: 7, fill: "#0ea5e9", stroke: "#0369a1", strokeWidth: 2 }}
+            activeDot={{ r: 7, fill: "#10b981", stroke: "#047857", strokeWidth: 2 }}
           />
           {highlightDay && highestPoint && highlightDay === highestPoint.day && (
             <ReferenceDot
               x={highestPoint.day}
               y={highestPoint.totalRevenue}
-              r={8}
-              fill="#f97316"
-              stroke="#fb923c"
+              r={9}
+              fill="#f59e0b"
+              stroke="#fbbf24"
+              strokeWidth={3}
             />
           )}
         </AreaChart>
