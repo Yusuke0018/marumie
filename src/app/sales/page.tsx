@@ -135,8 +135,13 @@ export default function SalesPage() {
     for (const day of selectedMonth.days) {
       const dayType = getDayType(day.date);
       const weekdayName = getWeekdayName(day.date);
-      const key =
-        dayType === "祝日" || dayType === "大型連休" ? "祝日" : weekdayName;
+      const isHolidayType =
+        dayType === "祝日" ||
+        dayType === "大型連休" ||
+        dayType === "連休初日" ||
+        dayType === "連休中日" ||
+        dayType === "連休最終日";
+      const key = isHolidayType ? "祝日" : weekdayName;
       if (!accumulator.has(key)) {
         accumulator.set(key, { label: key, total: 0, count: 0 });
       }
