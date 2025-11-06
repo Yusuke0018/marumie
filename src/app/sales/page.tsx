@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronUp,
   FileSpreadsheet,
+  Minus,
   RefreshCcw,
   Sparkles,
 } from "lucide-react";
@@ -58,6 +59,93 @@ const formatPercentage = (value: number): string =>
     maximumFractionDigits: 1,
   })}%`;
 
+const signedCurrencyFormatter = new Intl.NumberFormat("ja-JP", {
+  style: "currency",
+  currency: "JPY",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+  signDisplay: "exceptZero",
+});
+
+const signedPercentageFormatter = new Intl.NumberFormat("ja-JP", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+  signDisplay: "exceptZero",
+});
+
+const formatSignedCurrency = (value: number | null): string => {
+  if (value === null) {
+    return "—";
+  }
+  if (value === 0) {
+    return "±0円";
+  }
+  return signedCurrencyFormatter.format(value);
+};
+
+const formatSignedPercentage = (value: number | null): string => {
+  if (value === null || Number.isNaN(value)) {
+    return "—";
+  }
+  if (value === 0) {
+    return "±0.0%";
+  }
+  return `${signedPercentageFormatter.format(value)}%`;
+};
+
+type TrendTone = "up" | "down" | "flat" | "neutral";
+
+const getTrendTone = (diff: number | null): TrendTone => {
+  if (diff === null) {
+    return "neutral";
+  }
+  if (diff > 0) {
+    return "up";
+  }
+  if (diff < 0) {
+    return "down";
+  }
+  return "flat";
+};
+
+const trendToneStyles: Record<
+  TrendTone,
+  { container: string; accent: string; value: string; subtext: string }
+> = {
+  up: {
+    container: "border-emerald-200 bg-emerald-50/80",
+    accent: "bg-emerald-100 text-emerald-600",
+    value: "text-emerald-700",
+    subtext: "text-emerald-600",
+  },
+  down: {
+    container: "border-rose-200 bg-rose-50/80",
+    accent: "bg-rose-100 text-rose-600",
+    value: "text-rose-600",
+    subtext: "text-rose-500",
+  },
+  flat: {
+    container: "border-slate-200 bg-slate-50/80",
+    accent: "bg-slate-100 text-slate-500",
+    value: "text-slate-700",
+    subtext: "text-slate-500",
+  },
+  neutral: {
+    container: "border-dashed border-slate-200 bg-white/60",
+    accent: "bg-slate-100 text-slate-400",
+    value: "text-slate-500",
+    subtext: "text-slate-400",
+  },
+};
+
+type SalesComparisonCard = {
+  key: "prevMonth" | "prevYear";
+  label: string;
+  referenceLabel: string;
+  diff: number | null;
+  percent: number | null;
+};
+
 const WEEKDAY_ORDER = [
   "月曜",
   "火曜",
@@ -75,13 +163,14 @@ export default function SalesPage() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
   const hydrateFromStorage = useCallback(() => {
-    const stored = loadSalesDataFromStorage();
-    setSalesData(stored);
+    const loaded = loadSalesDataFromStorage();
+    const sorted = [...loaded].sort((a, b) => a.id.localeCompare(b.id));
+    setSalesData(sorted);
     setSelectedMonthId((currentId) => {
-      if (currentId && stored.some((month) => month.id === currentId)) {
+      if (currentId && sorted.some((month) => month.id === currentId)) {
         return currentId;
       }
-      return stored.length > 0 ? stored[stored.length - 1].id : null;
+      return sorted.length > 0 ? sorted[sorted.length - 1].id : null;
     });
     if (typeof window !== "undefined") {
       setLastUpdated(window.localStorage.getItem(SALES_TIMESTAMP_KEY));
@@ -120,6 +209,62 @@ export default function SalesPage() {
     }
     return salesData[salesData.length - 1]!;
   }, [salesData, selectedMonthId]);
+
+  const comparisonCards = useMemo(() => {
+    if (!selectedMonth) {
+      return [];
+    }
+
+    const findByYearMonth = (year: number, month: number) =>
+      salesData.find((item) => item.year === year && item.month === month) ??
+      null;
+
+    let prevYear = selectedMonth.year;
+    let prevMonth = selectedMonth.month - 1;
+    if (prevMonth < 1) {
+      prevMonth = 12;
+      prevYear -= 1;
+    }
+
+    const previousMonth = findByYearMonth(prevYear, prevMonth);
+    const previousYear = findByYearMonth(
+      selectedMonth.year - 1,
+      selectedMonth.month,
+    );
+
+    const buildCard = (
+      key: SalesComparisonCard["key"],
+      label: string,
+      reference: SalesMonthlyData | null,
+    ): SalesComparisonCard => {
+      if (!reference) {
+        return {
+          key,
+          label,
+          referenceLabel: "比較対象なし",
+          diff: null,
+          percent: null,
+        };
+      }
+      const diff = selectedMonth.totalRevenue - reference.totalRevenue;
+      const percent =
+        reference.totalRevenue === 0
+          ? null
+          : (diff / reference.totalRevenue) * 100;
+      return {
+        key,
+        label,
+        referenceLabel: reference.label,
+        diff,
+        percent,
+      };
+    };
+
+    return [
+      buildCard("prevMonth", "前月比", previousMonth),
+      buildCard("prevYear", "前年比", previousYear),
+    ];
+  }, [salesData, selectedMonth]);
 
   const latestMonth = useMemo(
     () => (salesData.length > 0 ? salesData[salesData.length - 1] : null),
@@ -529,6 +674,47 @@ export default function SalesPage() {
                         {worstDay ? formatCurrency(worstDay.totalRevenue) : "—"}
                       </p>
                     </div>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {comparisonCards.map((card) => {
+                      const tone = getTrendTone(card.diff);
+                      const styles = trendToneStyles[tone];
+                      const Icon =
+                        tone === "up"
+                          ? ChevronUp
+                          : tone === "down"
+                            ? ChevronDown
+                            : Minus;
+                      return (
+                        <div
+                          key={card.key}
+                          className={`rounded-2xl border p-5 text-sm shadow-inner transition ${styles.container}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="font-semibold text-slate-600">
+                              {card.label}
+                            </p>
+                            <span
+                              className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${styles.accent}`}
+                            >
+                              <Icon className="h-4 w-4" />
+                            </span>
+                          </div>
+                          <p className={`mt-3 text-2xl font-black ${styles.value}`}>
+                            {formatSignedCurrency(card.diff)}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {card.diff === null
+                              ? "比較対象の月がありません"
+                              : `比較対象: ${card.referenceLabel}`}
+                          </p>
+                          <p className={`mt-1 text-xs font-semibold ${styles.subtext}`}>
+                            {formatSignedPercentage(card.percent)}
+                          </p>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <div className="grid gap-8 lg:grid-cols-2">
