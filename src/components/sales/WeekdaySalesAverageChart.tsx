@@ -4,6 +4,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -22,6 +23,28 @@ export type WeekdayAveragePoint = {
   label: string;
   value: number;
 };
+
+const WEEKDAY_PASTEL_COLORS: Record<string, string> = {
+  月曜: "#BFDBFE",
+  火曜: "#BBF7D0",
+  水曜: "#FDE68A",
+  木曜: "#FBCFE8",
+  金曜: "#C4B5FD",
+  土曜: "#A5F3FC",
+  日曜: "#FCA5A5",
+  祝日: "#F5D0FE",
+};
+
+const FALLBACK_COLORS = [
+  "#BFDBFE",
+  "#BBF7D0",
+  "#FDE68A",
+  "#FBCFE8",
+  "#C4B5FD",
+  "#A5F3FC",
+  "#FCA5A5",
+  "#F5D0FE",
+];
 
 type WeekdaySalesAverageChartProps = {
   data: WeekdayAveragePoint[];
@@ -52,19 +75,13 @@ export function WeekdaySalesAverageChart({
             formatter={(value: number) => formatCurrency(value)}
             labelFormatter={(label) => `${label}平均`}
           />
-          <Bar dataKey="value" radius={[10, 10, 0, 0]} fill="url(#weekday-sales)">
-            <defs>
-              <linearGradient
-                id="weekday-sales"
-                x1="0%"
-                y1="0%"
-                x2="0%"
-                y2="100%"
-              >
-                <stop offset="0%" stopColor="#60a5fa" stopOpacity={0.95} />
-                <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.75} />
-              </linearGradient>
-            </defs>
+          <Bar dataKey="value" radius={[10, 10, 0, 0]}>
+            {data.map((entry, index) => {
+              const color =
+                WEEKDAY_PASTEL_COLORS[entry.label] ??
+                FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+              return <Cell key={`${entry.label}-${index}`} fill={color} />;
+            })}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
