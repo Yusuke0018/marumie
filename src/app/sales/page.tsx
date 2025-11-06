@@ -18,6 +18,9 @@ import {
   Minus,
   RefreshCcw,
   Sparkles,
+  TrendingUp,
+  DollarSign,
+  Award,
 } from "lucide-react";
 import {
   SALES_TIMESTAMP_KEY,
@@ -113,26 +116,30 @@ const trendToneStyles: Record<
   { container: string; accent: string; value: string; subtext: string }
 > = {
   up: {
-    container: "border-emerald-200 bg-emerald-50/80",
-    accent: "bg-emerald-100 text-emerald-600",
+    container:
+      "border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-teal-50/70",
+    accent: "bg-emerald-500/10 text-emerald-600",
     value: "text-emerald-700",
     subtext: "text-emerald-600",
   },
   down: {
-    container: "border-rose-200 bg-rose-50/80",
-    accent: "bg-rose-100 text-rose-600",
+    container:
+      "border border-rose-200/70 bg-gradient-to-br from-rose-50 to-rose-100/70",
+    accent: "bg-rose-500/10 text-rose-600",
     value: "text-rose-600",
     subtext: "text-rose-500",
   },
   flat: {
-    container: "border-slate-200 bg-slate-50/80",
-    accent: "bg-slate-100 text-slate-500",
+    container:
+      "border border-slate-200/70 bg-gradient-to-br from-slate-50 to-slate-100/60",
+    accent: "bg-slate-500/10 text-slate-500",
     value: "text-slate-700",
     subtext: "text-slate-500",
   },
   neutral: {
-    container: "border-dashed border-slate-200 bg-white/60",
-    accent: "bg-slate-100 text-slate-400",
+    container:
+      "border border-dashed border-slate-200/70 bg-white/70 backdrop-blur",
+    accent: "bg-slate-500/10 text-slate-400",
     value: "text-slate-500",
     subtext: "text-slate-400",
   },
@@ -511,6 +518,39 @@ export default function SalesPage() {
     [previousMonthWorstDay, worstDay],
   );
 
+  const monthlyTone = trendToneStyles[getTrendTone(monthlyDiff.diff)];
+  const averageDailyTone = trendToneStyles[getTrendTone(averageDailyDiff.diff)];
+  const bestDayTone = trendToneStyles[getTrendTone(bestDayDiff.diff)];
+  const worstDayTone = trendToneStyles[getTrendTone(worstDayDiff.diff)];
+  const monthlyTrend = getTrendTone(monthlyDiff.diff);
+  const averageDailyTrend = getTrendTone(averageDailyDiff.diff);
+  const bestDayTrend = getTrendTone(bestDayDiff.diff);
+  const worstDayTrend = getTrendTone(worstDayDiff.diff);
+  const MonthlyTrendIcon =
+    monthlyTrend === "up"
+      ? ChevronUp
+      : monthlyTrend === "down"
+        ? ChevronDown
+        : Minus;
+  const AverageTrendIcon =
+    averageDailyTrend === "up"
+      ? ChevronUp
+      : averageDailyTrend === "down"
+        ? ChevronDown
+        : Minus;
+  const BestDayTrendIcon =
+    bestDayTrend === "up"
+      ? ChevronUp
+      : bestDayTrend === "down"
+        ? ChevronDown
+        : Minus;
+  const WorstDayTrendIcon =
+    worstDayTrend === "up"
+      ? ChevronUp
+      : worstDayTrend === "down"
+        ? ChevronDown
+        : Minus;
+
   const insights = useMemo(() => {
     if (!selectedMonth) {
       return [];
@@ -579,38 +619,43 @@ export default function SalesPage() {
   const hasData = salesData.length > 0 && selectedMonth;
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-white via-sky-50/40 to-slate-50 pb-24">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-12">
-        <section className="overflow-hidden rounded-3xl border border-sky-100 bg-white/90 shadow-xl">
-          <div className="relative isolate px-6 py-14 sm:px-10 lg:px-16">
-            <div className="absolute -left-24 top-16 h-56 w-56 rounded-full bg-sky-200/40 blur-3xl" />
-            <div className="absolute -right-16 bottom-10 h-64 w-64 rounded-full bg-emerald-200/30 blur-3xl" />
-            <div className="relative z-10 flex flex-col gap-6">
-              <span className="inline-flex items-center gap-3 self-start rounded-full border border-sky-200 bg-sky-50/70 px-4 py-2 text-xs font-semibold text-sky-600 shadow-sm">
-                <FileSpreadsheet className="h-4 w-4" />
-                売上ダッシュボード
-              </span>
-              <h1 className="text-4xl font-black tracking-tight text-slate-900 sm:text-5xl">
-                月次売上と曜日トレンドを一目で把握
+    <main className="min-h-screen bg-gradient-to-br from-emerald-50/40 via-teal-50/30 to-cyan-50/40 pb-24">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-10">
+        {/* Hero Section */}
+        <section className="overflow-hidden rounded-3xl border border-emerald-100/60 bg-white/95 shadow-2xl shadow-emerald-500/5">
+          <div className="relative isolate px-8 py-16 sm:px-12 lg:px-20">
+            <div className="absolute -left-20 top-20 h-64 w-64 rounded-full bg-emerald-200/30 blur-3xl" />
+            <div className="absolute -right-20 bottom-16 h-72 w-72 rounded-full bg-teal-200/25 blur-3xl" />
+            <div className="relative z-10 flex flex-col gap-7">
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 p-3 shadow-lg shadow-emerald-500/30">
+                  <TrendingUp className="h-7 w-7 text-white" />
+                </div>
+                <span className="inline-flex items-center gap-2.5 rounded-full border border-emerald-200/80 bg-emerald-50/80 px-5 py-2.5 text-sm font-semibold text-emerald-700 shadow-sm">
+                  <FileSpreadsheet className="h-4.5 w-4.5" />
+                  売上ダッシュボード
+                </span>
+              </div>
+              <h1 className="text-5xl font-black tracking-tight text-slate-900 sm:text-6xl">
+                売上分析ダッシュボード
               </h1>
-              <p className="max-w-xl text-base leading-relaxed text-slate-600">
-                売上CSVは患者分析ページの「データ管理」からアップロードできます。
-                取り込んだデータはこのダッシュボードに即時反映され、月別推移・曜日平均・日別の詳細を同じUIで確認できます。
+              <p className="max-w-2xl text-lg leading-relaxed text-slate-600">
+                月次売上と曜日トレンドを可視化。データに基づいた意思決定をサポートします。
               </p>
-              <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+              <div className="flex flex-wrap items-center gap-4">
                 <Link
                   href="/patients"
-                  className="inline-flex items-center gap-2 rounded-full bg-sky-500 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-sky-500/30 transition hover:bg-sky-600"
+                  className="inline-flex items-center gap-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-emerald-500/30 transition-all hover:shadow-xl hover:shadow-emerald-500/40 hover:-translate-y-0.5"
                 >
                   データ管理を開く
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className="h-5 w-5" />
                 </Link>
                 <button
                   type="button"
                   onClick={hydrateFromStorage}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                  className="inline-flex items-center gap-2.5 rounded-full border-2 border-emerald-200 bg-white px-6 py-3 text-base font-semibold text-emerald-700 transition-all hover:bg-emerald-50 hover:border-emerald-300"
                 >
-                  <RefreshCcw className="h-4 w-4" />
+                  <RefreshCcw className="h-5 w-5" />
                   最新のデータを読み込み
                 </button>
               </div>
@@ -620,21 +665,21 @@ export default function SalesPage() {
 
         {hasData ? (
           <>
-            <section className="grid gap-8 lg:grid-cols-[1.2fr_1fr]">
-              <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white/95 shadow-lg">
-                <div className="flex items-center justify-between gap-4 p-8 pb-4">
+            {/* Monthly Overview */}
+            <section className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
+              <div className="overflow-hidden rounded-3xl border border-emerald-100/60 bg-white shadow-xl shadow-emerald-500/5">
+                <div className="flex items-center justify-between gap-4 border-b border-emerald-50 bg-gradient-to-r from-emerald-50/50 to-teal-50/30 px-8 py-6">
                   <div>
-                    <h2 className="text-xl font-bold text-slate-900">
+                    <h2 className="text-2xl font-bold text-slate-900">
                       月別の売上推移
                     </h2>
-                    <p className="text-sm text-slate-500">
-                      アップロード済みの月次データから合計売上を集計しています。
+                    <p className="mt-1 text-sm text-slate-600">
+                      アップロード済みの月次データから売上を集計
                     </p>
                   </div>
                   {lastUpdated && (
-                    <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
-                      <RefreshCcw className="h-3.5 w-3.5" />
-                      最終更新:{" "}
+                    <span className="inline-flex items-center gap-2 rounded-xl bg-white/80 px-4 py-2 text-xs font-medium text-slate-600 shadow-sm border border-emerald-100/50">
+                      <RefreshCcw className="h-3.5 w-3.5 text-emerald-600" />
                       {new Date(lastUpdated).toLocaleString("ja-JP", {
                         month: "long",
                         day: "numeric",
@@ -644,103 +689,124 @@ export default function SalesPage() {
                     </span>
                   )}
                 </div>
-                <Suspense
-                  fallback={
-                    <div className="h-80 w-full animate-pulse rounded-2xl bg-slate-100" />
-                  }
-                >
-                  <MonthlySalesChart
-                    data={monthlySummary}
-                    selectedId={selectedMonth?.id}
-                    onSelect={setSelectedMonthId}
-                  />
-                </Suspense>
+                <div className="p-6">
+                  <Suspense
+                    fallback={
+                      <div className="h-80 w-full animate-pulse rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50" />
+                    }
+                  >
+                    <MonthlySalesChart
+                      data={monthlySummary}
+                      selectedId={selectedMonth?.id}
+                      onSelect={setSelectedMonthId}
+                    />
+                  </Suspense>
+                </div>
               </div>
 
               <div className="flex flex-col gap-6">
                 {latestMonth ? (
-                  <div className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-lg">
-                    <h3 className="text-lg font-bold text-slate-900">
-                      直近の集計状況
-                    </h3>
-                    <div className="mt-4 space-y-3 text-sm text-slate-600">
-                      <div className="flex items-center justify-between">
-                        <span>対象月</span>
-                        <span className="font-semibold text-slate-800">
+                  <div className="rounded-3xl border border-emerald-100/60 bg-gradient-to-br from-white to-emerald-50/30 p-7 shadow-xl shadow-emerald-500/5">
+                    <div className="mb-5 flex items-center gap-3">
+                      <div className="rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 p-2.5 shadow-md">
+                        <Award className="h-5 w-5 text-white" />
+                      </div>
+                      <h3 className="text-xl font-bold text-slate-900">
+                        直近の集計状況
+                      </h3>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="rounded-2xl bg-white/80 p-5 border border-emerald-100/50 shadow-sm">
+                        <p className="text-sm font-medium text-slate-500">対象月</p>
+                        <p className="mt-2 text-2xl font-black text-emerald-700">
                           {latestMonth.label}
-                        </span>
+                        </p>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span>月次合計</span>
-                        <span className="font-semibold text-slate-800">
+                      <div className="rounded-2xl bg-white/80 p-5 border border-emerald-100/50 shadow-sm">
+                        <p className="text-sm font-medium text-slate-500">月次合計</p>
+                        <p className="mt-2 text-3xl font-black text-slate-900">
                           {formatCurrency(latestMonth.totalRevenue)}
-                        </span>
+                        </p>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span>平均日次売上</span>
-                        <span className="font-semibold text-slate-800">
-                          {formatCurrency(latestMonth.averageDailyRevenue)}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>延べ来院人数</span>
-                        <span className="font-semibold text-slate-800">
-                          {formatPeople(latestMonth.totalPeopleCount)}
-                        </span>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="rounded-2xl bg-white/80 p-4 border border-emerald-100/50 shadow-sm">
+                          <p className="text-xs font-medium text-slate-500">平均日次</p>
+                          <p className="mt-2 text-lg font-bold text-slate-900">
+                            {formatCurrency(latestMonth.averageDailyRevenue)}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl bg-white/80 p-4 border border-emerald-100/50 shadow-sm">
+                          <p className="text-xs font-medium text-slate-500">来院人数</p>
+                          <p className="mt-2 text-lg font-bold text-slate-900">
+                            {formatPeople(latestMonth.totalPeopleCount)}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-3xl border border-dashed border-slate-200 bg-white/60 p-6 text-sm text-slate-500 shadow-inner">
+                  <div className="rounded-3xl border-2 border-dashed border-emerald-200 bg-emerald-50/30 p-8 text-center text-sm text-slate-500 shadow-inner">
                     売上データを取り込むとここにサマリが表示されます。
                   </div>
                 )}
 
-                <div className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-lg">
-                  <h3 className="text-lg font-bold text-slate-900">
-                    データ管理のヒント
-                  </h3>
-                  <ul className="mt-4 space-y-3 text-sm text-slate-600">
-                    <li className="flex items-start gap-2">
-                      <Sparkles className="mt-0.5 h-4 w-4 text-sky-500" />
-                      売上CSVは「2025年売上表-2025_09.csv」のように年月を含めると自動で判別されます。
+                <div className="rounded-3xl border border-emerald-100/60 bg-white p-7 shadow-xl shadow-emerald-500/5">
+                  <div className="mb-4 flex items-center gap-2.5">
+                    <Sparkles className="h-5 w-5 text-emerald-600" />
+                    <h3 className="text-lg font-bold text-slate-900">
+                      データ管理のヒント
+                    </h3>
+                  </div>
+                  <ul className="space-y-3 text-sm text-slate-600">
+                    <li className="flex items-start gap-3 rounded-xl bg-emerald-50/50 p-3">
+                      <div className="mt-0.5 rounded-full bg-emerald-100 p-1">
+                        <div className="h-2 w-2 rounded-full bg-emerald-600" />
+                      </div>
+                      <span>
+                        売上CSVは「2025年売上表-2025_09.csv」のように年月を含めると自動判別されます
+                      </span>
                     </li>
-                    <li className="flex items-start gap-2">
-                      <Sparkles className="mt-0.5 h-4 w-4 text-sky-500" />
-                      まとめて取り込む場合はファイル名に「売上」を含めるとデータ管理で一括処理できます。
+                    <li className="flex items-start gap-3 rounded-xl bg-emerald-50/50 p-3">
+                      <div className="mt-0.5 rounded-full bg-emerald-100 p-1">
+                        <div className="h-2 w-2 rounded-full bg-emerald-600" />
+                      </div>
+                      <span>
+                        ファイル名に「売上」を含めるとデータ管理で一括処理できます
+                      </span>
                     </li>
                   </ul>
                   <Link
                     href="/patients"
-                    className="mt-4 inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+                    className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-emerald-200 bg-emerald-50/50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition-all hover:bg-emerald-100 hover:border-emerald-300"
                   >
                     データ管理セクションへ移動
-                    <ArrowRight className="h-3.5 w-3.5" />
+                    <ArrowRight className="h-4 w-4" />
                   </Link>
                 </div>
               </div>
             </section>
 
-            <section className="flex flex-col gap-8 rounded-3xl border border-slate-200 bg-white/95 p-8 shadow-xl">
-              <div className="flex flex-wrap items-center justify-between gap-4">
+            {/* Detailed Analysis */}
+            <section className="flex flex-col gap-7 rounded-3xl border border-emerald-100/60 bg-white p-8 shadow-xl shadow-emerald-500/5">
+              <div className="flex flex-wrap items-center justify-between gap-5">
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-900">
+                  <h2 className="text-3xl font-black text-slate-900">
                     月別の詳細分析
                   </h2>
-                  <p className="text-sm text-slate-500">
-                    表示したい月を切り替えて、曜日平均・日別推移・詳細テーブルを確認できます。
+                  <p className="mt-1 text-base text-slate-600">
+                    表示したい月を切り替えて、曜日平均・日別推移・詳細テーブルを確認
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2.5">
                   {salesData.map((month) => (
                     <button
                       key={month.id}
                       type="button"
                       onClick={() => setSelectedMonthId(month.id)}
-                      className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                      className={`rounded-full px-5 py-2.5 text-sm font-bold transition-all ${
                         month.id === selectedMonth?.id
-                          ? "bg-sky-500 text-white shadow-lg"
-                          : "border border-slate-200 text-slate-500 hover:bg-slate-100"
+                          ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/40 scale-105"
+                          : "border-2 border-emerald-200 text-slate-600 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700"
                       }`}
                     >
                       {month.label}
@@ -750,51 +816,91 @@ export default function SalesPage() {
               </div>
 
               {selectedMonth ? (
-                <div className="flex flex-col gap-8">
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="rounded-2xl border border-sky-100 bg-sky-50/80 p-5 text-sm text-slate-600">
-                      <p className="font-semibold text-slate-500">月次合計</p>
-                      <p className="mt-2 text-2xl font-black text-slate-900">
-                        {formatCurrency(selectedMonth.totalRevenue)}
-                      </p>
-                      <span className="mt-1 block text-xs text-slate-500">
-                        {buildMoMText(monthlyDiff.diff, monthlyDiff.percent)}
-                      </span>
+                <div className="flex flex-col gap-7">
+                  {/* KPI Cards */}
+                  <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="group relative overflow-hidden rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
+                      <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-emerald-300/40 blur-2xl" />
+                      <div className="relative">
+                        <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-500 p-2.5 shadow-md">
+                          <DollarSign className="h-5 w-5 text-white" />
+                        </div>
+                        <p className="text-sm font-semibold text-emerald-700">月次合計</p>
+                        <p className="mt-2 text-3xl font-black text-emerald-600">
+                          {formatCurrency(selectedMonth.totalRevenue)}
+                        </p>
+                        <div
+                          className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${monthlyTone.accent}`}
+                        >
+                          <MonthlyTrendIcon className="h-3.5 w-3.5" />
+                          <span>{buildMoMText(monthlyDiff.diff, monthlyDiff.percent)}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="rounded-2xl border border-sky-100 bg-sky-50/80 p-5 text-sm text-slate-600">
-                      <p className="font-semibold text-slate-500">平均日次売上</p>
-                      <p className="mt-2 text-2xl font-black text-slate-900">
-                        {formatCurrency(selectedMonth.averageDailyRevenue)}
-                      </p>
-                      <span className="mt-1 block text-xs text-slate-500">
-                        {buildMoMText(averageDailyDiff.diff, averageDailyDiff.percent)}
-                      </span>
+
+                    <div className="group relative overflow-hidden rounded-2xl border border-blue-200/60 bg-gradient-to-br from-blue-50 to-blue-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
+                      <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-blue-300/40 blur-2xl" />
+                      <div className="relative">
+                        <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-blue-400 to-blue-500 p-2.5 shadow-md">
+                          <TrendingUp className="h-5 w-5 text-white" />
+                        </div>
+                        <p className="text-sm font-semibold text-blue-700">平均日次売上</p>
+                        <p className="mt-2 text-3xl font-black text-blue-600">
+                          {formatCurrency(selectedMonth.averageDailyRevenue)}
+                        </p>
+                        <div
+                          className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${averageDailyTone.accent}`}
+                        >
+                          <AverageTrendIcon className="h-3.5 w-3.5" />
+                          <span>{buildMoMText(averageDailyDiff.diff, averageDailyDiff.percent)}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="rounded-2xl border border-sky-100 bg-sky-50/80 p-5 text-sm text-slate-600">
-                      <p className="font-semibold text-slate-500">
-                        最高日 ({bestDay ? `${bestDay.day}日` : "—"})
-                      </p>
-                      <p className="mt-2 text-2xl font-black text-slate-900">
-                        {bestDay ? formatCurrency(bestDay.totalRevenue) : "—"}
-                      </p>
-                      <span className="mt-1 block text-xs text-slate-500">
-                        {buildMoMText(bestDayDiff.diff, bestDayDiff.percent)}
-                      </span>
+
+                    <div className="group relative overflow-hidden rounded-2xl border border-amber-200/60 bg-gradient-to-br from-amber-50 to-amber-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
+                      <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-amber-300/40 blur-2xl" />
+                      <div className="relative">
+                        <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 p-2.5 shadow-md">
+                          <Award className="h-5 w-5 text-white" />
+                        </div>
+                        <p className="text-sm font-semibold text-amber-700">
+                          最高日 ({bestDay ? `${bestDay.day}日` : "—"})
+                        </p>
+                        <p className="mt-2 text-3xl font-black text-amber-600">
+                          {bestDay ? formatCurrency(bestDay.totalRevenue) : "—"}
+                        </p>
+                        <div
+                          className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${bestDayTone.accent}`}
+                        >
+                          <BestDayTrendIcon className="h-3.5 w-3.5" />
+                          <span>{buildMoMText(bestDayDiff.diff, bestDayDiff.percent)}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="rounded-2xl border border-sky-100 bg-sky-50/80 p-5 text-sm text-slate-600">
-                      <p className="font-semibold text-slate-500">
-                        最低日 ({worstDay ? `${worstDay.day}日` : "—"})
-                      </p>
-                      <p className="mt-2 text-2xl font-black text-slate-900">
-                        {worstDay ? formatCurrency(worstDay.totalRevenue) : "—"}
-                      </p>
-                      <span className="mt-1 block text-xs text-slate-500">
-                        {buildMoMText(worstDayDiff.diff, worstDayDiff.percent)}
-                      </span>
+
+                    <div className="group relative overflow-hidden rounded-2xl border border-purple-200/60 bg-gradient-to-br from-purple-50 to-purple-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
+                      <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-purple-300/40 blur-2xl" />
+                      <div className="relative">
+                        <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-purple-400 to-purple-500 p-2.5 shadow-md">
+                          <CalendarClock className="h-5 w-5 text-white" />
+                        </div>
+                        <p className="text-sm font-semibold text-purple-700">
+                          最低日 ({worstDay ? `${worstDay.day}日` : "—"})
+                        </p>
+                        <p className="mt-2 text-3xl font-black text-purple-600">
+                          {worstDay ? formatCurrency(worstDay.totalRevenue) : "—"}
+                        </p>
+                        <div
+                          className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${worstDayTone.accent}`}
+                        >
+                          <WorstDayTrendIcon className="h-3.5 w-3.5" />
+                          <span>{buildMoMText(worstDayDiff.diff, worstDayDiff.percent)}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-5 sm:grid-cols-2">
                     {comparisonCards.map((card) => {
                       const tone = getTrendTone(card.diff);
                       const styles = trendToneStyles[tone];
@@ -807,10 +913,10 @@ export default function SalesPage() {
                       return (
                         <div
                           key={card.key}
-                          className={`rounded-2xl border p-5 text-sm shadow-inner transition ${styles.container}`}
+                          className={`rounded-3xl p-5 shadow-lg transition-all hover:shadow-xl ${styles.container}`}
                         >
-                          <div className="flex items-center justify-between">
-                            <p className="font-semibold text-slate-600">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-semibold text-slate-700">
                               {card.label}
                             </p>
                             <span
@@ -822,7 +928,7 @@ export default function SalesPage() {
                           <p className={`mt-3 text-2xl font-black ${styles.value}`}>
                             {formatSignedCurrency(card.diff)}
                           </p>
-                          <p className="mt-1 text-xs text-slate-500">
+                          <p className={`mt-2 text-xs font-semibold ${styles.subtext}`}>
                             {card.diff === null
                               ? "比較対象の月がありません"
                               : `比較対象: ${card.referenceLabel}`}
@@ -835,37 +941,42 @@ export default function SalesPage() {
                     })}
                   </div>
 
-                  <div className="grid gap-8 lg:grid-cols-2">
-                    <div className="rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-inner">
-                      <div className="mb-4 flex items-center justify-between">
-                        <h3 className="text-lg font-semibold text-slate-800">
-                          曜日別平均売上
-                        </h3>
-                        <span className="text-xs text-slate-400">
-                          {selectedMonth.days.length}日分
-                        </span>
+                  {/* Charts */}
+                  <div className="grid gap-7 lg:grid-cols-2">
+                    <div className="rounded-3xl border border-emerald-100/60 bg-white p-6 shadow-lg">
+                      <div className="mb-5 flex items-center justify-between">
+                        <div>
+                          <h3 className="text-xl font-bold text-slate-900">
+                            曜日別平均売上
+                          </h3>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {selectedMonth.days.length}日分のデータ
+                          </p>
+                        </div>
                       </div>
                       <Suspense
                         fallback={
-                          <div className="h-72 w-full animate-pulse rounded-2xl bg-slate-100" />
+                          <div className="h-80 w-full animate-pulse rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50" />
                         }
                       >
                         <WeekdaySalesAverageChart data={weekdayAverageData} />
                       </Suspense>
                     </div>
 
-                    <div className="rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-inner">
-                      <div className="mb-4 flex items-center justify-between">
-                        <h3 className="text-lg font-semibold text-slate-800">
-                          日別売上推移
-                        </h3>
-                        <span className="text-xs text-slate-400">
-                          {bestDay ? `ピーク日: ${bestDay.day}日` : "ピーク未設定"}
-                        </span>
+                    <div className="rounded-3xl border border-emerald-100/60 bg-white p-6 shadow-lg">
+                      <div className="mb-5 flex items-center justify-between">
+                        <div>
+                          <h3 className="text-xl font-bold text-slate-900">
+                            日別売上推移
+                          </h3>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {bestDay ? `ピーク日: ${bestDay.day}日` : "ピーク未設定"}
+                          </p>
+                        </div>
                       </div>
                       <Suspense
                         fallback={
-                          <div className="h-72 w-full animate-pulse rounded-2xl bg-slate-100" />
+                          <div className="h-80 w-full animate-pulse rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50" />
                         }
                       >
                         <DailySalesChart
@@ -876,36 +987,50 @@ export default function SalesPage() {
                     </div>
                   </div>
 
-                  <div className="grid gap-8 lg:grid-cols-2">
-                    <div className="rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-inner">
-                      <h3 className="text-lg font-semibold text-slate-800">
-                        売上構成
-                      </h3>
+                  {/* Composition & Highlights */}
+                  <div className="grid gap-7 lg:grid-cols-2">
+                    <div className="rounded-3xl border border-emerald-100/60 bg-gradient-to-br from-white to-emerald-50/20 p-7 shadow-lg">
+                      <div className="mb-5 flex items-center gap-2.5">
+                        <div className="rounded-xl bg-emerald-100 p-2">
+                          <DollarSign className="h-5 w-5 text-emerald-700" />
+                        </div>
+                        <h3 className="text-xl font-bold text-slate-900">
+                          売上構成
+                        </h3>
+                      </div>
                       {composition && composition.segments.length > 0 ? (
-                        <ul className="mt-4 space-y-3 text-sm text-slate-600">
-                          {composition.segments.map((segment) => (
-                            <li
-                              key={segment.label}
-                              className="flex items-center justify-between rounded-2xl border border-slate-100 bg-white/60 px-4 py-3"
-                            >
-                              <span className="font-semibold text-slate-700">
-                                {segment.label}
-                              </span>
-                              <span className="text-right">
-                                <span className="block font-semibold text-slate-900">
-                                  {formatCurrency(segment.value)}
+                        <ul className="space-y-3">
+                          {composition.segments.map((segment, index) => {
+                            const colors = [
+                              { bg: "from-rose-50 to-pink-50", border: "border-rose-200", text: "text-rose-700", value: "text-rose-600" },
+                              { bg: "from-blue-50 to-cyan-50", border: "border-blue-200", text: "text-blue-700", value: "text-blue-600" },
+                              { bg: "from-violet-50 to-purple-50", border: "border-violet-200", text: "text-violet-700", value: "text-violet-600" },
+                            ];
+                            const color = colors[index % colors.length];
+                            return (
+                              <li
+                                key={segment.label}
+                                className={`flex items-center justify-between rounded-2xl border ${color.border} bg-gradient-to-r ${color.bg} p-5 shadow-md hover:shadow-lg transition-all`}
+                              >
+                                <span className={`font-bold ${color.text}`}>
+                                  {segment.label}
                                 </span>
-                                <span className="text-xs text-slate-400">
-                                  {formatPercentage(segment.percentage)}
-                                </span>
-                              </span>
-                            </li>
-                          ))}
-                          <li className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                            <span className="font-semibold text-slate-700">
+                                <div className="text-right">
+                                  <div className={`text-xl font-black ${color.value}`}>
+                                    {formatCurrency(segment.value)}
+                                  </div>
+                                  <div className={`text-sm font-semibold ${color.text}`}>
+                                    {formatPercentage(segment.percentage)}
+                                  </div>
+                                </div>
+                              </li>
+                            );
+                          })}
+                          <li className="flex items-center justify-between rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-100 to-teal-100 p-5 shadow-lg">
+                            <span className="font-black text-emerald-800">
                               平均単価
                             </span>
-                            <span className="text-right font-semibold text-slate-900">
+                            <span className="text-xl font-black text-emerald-700">
                               {composition.averagePerPerson !== null
                                 ? formatCurrency(composition.averagePerPerson)
                                 : "—"}
@@ -913,145 +1038,230 @@ export default function SalesPage() {
                           </li>
                         </ul>
                       ) : (
-                        <p className="mt-4 text-sm text-slate-500">
+                        <p className="text-sm text-slate-500">
                           有効な売上構成がまだありません。
                         </p>
                       )}
                     </div>
 
-                    <div className="rounded-3xl border border-slate-200 bg-white/90 p-6 shadow-inner">
-                      <h3 className="text-lg font-semibold text-slate-800">
-                        売上ハイライト
-                      </h3>
+                    <div className="rounded-3xl border border-emerald-100/60 bg-gradient-to-br from-white to-teal-50/20 p-7 shadow-lg">
+                      <div className="mb-5 flex items-center gap-2.5">
+                        <div className="rounded-xl bg-teal-100 p-2">
+                          <Award className="h-5 w-5 text-teal-700" />
+                        </div>
+                        <h3 className="text-xl font-bold text-slate-900">
+                          売上ハイライト
+                        </h3>
+                      </div>
                       {topDays.length > 0 ? (
-                        <ul className="mt-4 space-y-3 text-sm text-slate-600">
-                          {topDays.map((day) => {
+                        <ul className="space-y-3">
+                          {topDays.map((day, index) => {
                             const weekday = getWeekdayName(day.date);
                             const type = getDayType(day.date);
+                            const rankColors = [
+                              { bg: "from-amber-50 to-yellow-50", border: "border-amber-200", badge: "from-amber-400 to-amber-500", text: "text-amber-700", value: "text-amber-600" },
+                              { bg: "from-slate-50 to-gray-50", border: "border-slate-200", badge: "from-slate-400 to-slate-500", text: "text-slate-700", value: "text-slate-600" },
+                              { bg: "from-orange-50 to-amber-50", border: "border-orange-200", badge: "from-orange-400 to-orange-500", text: "text-orange-700", value: "text-orange-600" },
+                              { bg: "from-sky-50 to-blue-50", border: "border-sky-200", badge: "from-sky-400 to-sky-500", text: "text-sky-700", value: "text-sky-600" },
+                              { bg: "from-indigo-50 to-violet-50", border: "border-indigo-200", badge: "from-indigo-400 to-indigo-500", text: "text-indigo-700", value: "text-indigo-600" },
+                            ];
+                            const color = rankColors[index];
                             return (
                               <li
                                 key={day.day}
-                                className="flex items-center justify-between rounded-2xl border border-slate-100 bg-white/60 px-4 py-3"
+                                className={`flex items-center justify-between rounded-2xl border ${color.border} bg-gradient-to-r ${color.bg} p-4 shadow-md hover:shadow-xl transition-all ${
+                                  index === 0 ? "scale-105 border-2" : ""
+                                }`}
                               >
-                                <div className="flex flex-col">
-                                  <span className="font-semibold text-slate-700">
-                                    {day.day}日 ({weekday})
-                                  </span>
-                                  <span className="text-xs text-slate-400">
-                                    {type}
-                                  </span>
+                                <div className="flex items-center gap-3">
+                                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl font-black bg-gradient-to-br ${color.badge} text-white shadow-md`}>
+                                    {index + 1}
+                                  </div>
+                                  <div>
+                                    <div className={`font-bold ${color.text}`}>
+                                      {day.day}日 ({weekday})
+                                    </div>
+                                    <div className="text-xs font-medium text-slate-500">
+                                      {type}
+                                    </div>
+                                  </div>
                                 </div>
-                                <span className="flex items-center gap-3 font-semibold text-slate-900">
+                                <div className={`text-right ${index === 0 ? "text-xl" : "text-lg"} font-black ${color.value}`}>
                                   {formatCurrency(day.totalRevenue)}
-                                  <CalendarClock className="h-4 w-4 text-sky-500" />
-                                </span>
+                                </div>
                               </li>
                             );
                           })}
                         </ul>
                       ) : (
-                        <p className="mt-4 text-sm text-slate-500">
+                        <p className="text-sm text-slate-500">
                           売上データが登録されると上位日が表示されます。
                         </p>
                       )}
                     </div>
                   </div>
 
+                  {/* Insights */}
                   {insights.length > 0 && (
-                    <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white to-sky-50 p-6 shadow-inner">
-                      <h3 className="text-lg font-semibold text-slate-800">
-                        追加インサイト
-                      </h3>
-                      <ul className="mt-4 space-y-3 text-sm text-slate-600">
-                        {insights.map((insight) => (
-                          <li
-                            key={insight.title}
-                            className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-white/70 px-4 py-3"
-                          >
-                            <Sparkles className="mt-0.5 h-4 w-4 text-sky-500" />
-                            <div>
-                              <p className="font-semibold text-slate-700">
-                                {insight.title}
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                {insight.description}
-                              </p>
-                            </div>
-                          </li>
-                        ))}
+                    <div className="rounded-3xl border border-emerald-100/60 bg-gradient-to-br from-emerald-50/50 via-teal-50/30 to-cyan-50/30 p-7 shadow-lg">
+                      <div className="mb-5 flex items-center gap-2.5">
+                        <div className="rounded-xl bg-white p-2 shadow-sm">
+                          <Sparkles className="h-5 w-5 text-emerald-600" />
+                        </div>
+                        <h3 className="text-xl font-bold text-slate-900">
+                          追加インサイト
+                        </h3>
+                      </div>
+                      <ul className="grid gap-4 sm:grid-cols-2">
+                        {insights.map((insight, index) => {
+                          const insightColors = [
+                            { bg: "from-emerald-50 to-teal-50", border: "border-emerald-200", icon: "bg-emerald-100", iconColor: "text-emerald-600", text: "text-emerald-800" },
+                            { bg: "from-blue-50 to-cyan-50", border: "border-blue-200", icon: "bg-blue-100", iconColor: "text-blue-600", text: "text-blue-800" },
+                            { bg: "from-purple-50 to-violet-50", border: "border-purple-200", icon: "bg-purple-100", iconColor: "text-purple-600", text: "text-purple-800" },
+                            { bg: "from-amber-50 to-orange-50", border: "border-amber-200", icon: "bg-amber-100", iconColor: "text-amber-600", text: "text-amber-800" },
+                          ];
+                          const color = insightColors[index % insightColors.length];
+                          return (
+                            <li
+                              key={insight.title}
+                              className={`flex items-start gap-3 rounded-2xl border ${color.border} bg-gradient-to-br ${color.bg} p-5 shadow-md hover:shadow-lg transition-all`}
+                            >
+                              <div className={`mt-1 rounded-full ${color.icon} p-2 shadow-sm`}>
+                                <Sparkles className={`h-4 w-4 ${color.iconColor}`} />
+                              </div>
+                              <div>
+                                <p className={`font-bold ${color.text}`}>
+                                  {insight.title}
+                                </p>
+                                <p className="mt-1 text-sm text-slate-600">
+                                  {insight.description}
+                                </p>
+                              </div>
+                            </li>
+                          );
+                        })}
                       </ul>
                     </div>
                   )}
 
-                  <div className="rounded-3xl border border-slate-200 bg-white/90">
+                  {/* Details Table */}
+                  <div className="rounded-3xl border border-emerald-100/60 bg-white shadow-lg">
                     <button
                       type="button"
                       onClick={() => setDetailsOpen((value) => !value)}
-                      className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                      className="flex w-full items-center justify-between gap-4 rounded-t-3xl border-b border-emerald-100 bg-gradient-to-r from-emerald-50/50 to-teal-50/30 px-7 py-5 text-left transition-all hover:from-emerald-50 hover:to-teal-50"
                     >
-                      <span>日別の詳細データ</span>
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-xl bg-white p-2 shadow-sm">
+                          <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
+                        </div>
+                        <span className="text-lg font-bold text-slate-900">
+                          日別の詳細データ
+                        </span>
+                      </div>
                       {detailsOpen ? (
-                        <ChevronUp className="h-5 w-5 text-slate-400" />
+                        <ChevronUp className="h-6 w-6 text-slate-500" />
                       ) : (
-                        <ChevronDown className="h-5 w-5 text-slate-400" />
+                        <ChevronDown className="h-6 w-6 text-slate-500" />
                       )}
                     </button>
                     {detailsOpen && (
-                      <div className="max-h-[540px] overflow-y-auto border-t border-slate-100">
-                        <table className="min-w-full divide-y divide-slate-200 text-sm">
-                          <thead className="bg-slate-50 text-slate-500">
+                      <div className="max-h-[600px] overflow-y-auto">
+                        <table className="min-w-full divide-y divide-emerald-100 text-sm">
+                          <thead className="sticky top-0 bg-gradient-to-r from-emerald-50 to-teal-50/50 text-slate-700 backdrop-blur-sm">
                             <tr>
-                              <th className="px-4 py-3 text-left font-semibold">
+                              <th className="px-5 py-4 text-left font-bold">
                                 日
                               </th>
-                              <th className="px-4 py-3 text-right font-semibold">
+                              <th className="px-5 py-4 text-left font-bold">
+                                曜日
+                              </th>
+                              <th className="px-5 py-4 text-left font-bold">
+                                日タイプ
+                              </th>
+                              <th className="px-5 py-4 text-right font-bold">
                                 医療収益
                               </th>
-                              <th className="px-4 py-3 text-right font-semibold">
+                              <th className="px-5 py-4 text-right font-bold">
                                 自費
                               </th>
-                              <th className="px-4 py-3 text-right font-semibold">
+                              <th className="px-5 py-4 text-right font-bold">
                                 その他
                               </th>
-                              <th className="px-4 py-3 text-right font-semibold">
+                              <th className="px-5 py-4 text-right font-bold">
                                 合計
                               </th>
-                              <th className="px-4 py-3 text-right font-semibold">
+                              <th className="px-5 py-4 text-right font-bold">
                                 人数
                               </th>
-                              <th className="px-4 py-3 text-left font-semibold">
+                              <th className="px-5 py-4 text-left font-bold">
                                 メモ
                               </th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-200 bg-white text-slate-700">
-                            {selectedMonth.days.map((day) => (
-                              <tr key={day.day} className="hover:bg-slate-50/80">
-                                <td className="px-4 py-3 font-semibold text-slate-600">
-                                  {day.day}日
-                                </td>
-                                <td className="px-4 py-3 text-right tabular-nums">
-                                  {formatCurrency(day.medicalRevenue)}
-                                </td>
-                                <td className="px-4 py-3 text-right tabular-nums">
-                                  {formatCurrency(day.selfPayRevenue)}
-                                </td>
-                                <td className="px-4 py-3 text-right tabular-nums">
-                                  {formatCurrency(day.otherRevenue)}
-                                </td>
-                                <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">
-                                  {formatCurrency(day.totalRevenue)}
-                                </td>
-                                <td className="px-4 py-3 text-right tabular-nums">
-                                  {day.peopleCount !== null
-                                    ? day.peopleCount.toLocaleString("ja-JP")
-                                    : "—"}
-                                </td>
-                                <td className="px-4 py-3 text-left">
-                                  {day.note ?? "—"}
-                                </td>
-                              </tr>
-                            ))}
+                          <tbody className="divide-y divide-emerald-50/50 bg-white text-slate-700">
+                            {selectedMonth.days.map((day) => {
+                              const weekday = getWeekdayName(day.date);
+                              const dayType = getDayType(day.date);
+                              return (
+                                <tr
+                                  key={day.day}
+                                  className={`transition-colors hover:bg-emerald-50/30 ${
+                                    dayType === "祝日"
+                                      ? "border-l-4 border-l-emerald-500 bg-emerald-50/40"
+                                      : dayType === "日曜"
+                                        ? "bg-red-50/30"
+                                        : dayType === "土曜"
+                                          ? "bg-blue-50/30"
+                                          : ""
+                                  }`}
+                                >
+                                  <td className="px-5 py-4 font-bold text-slate-700">
+                                    {day.day}日
+                                  </td>
+                                  <td className="px-5 py-4 font-medium text-slate-600">
+                                    {weekday}
+                                  </td>
+                                  <td className="px-5 py-4">
+                                    <span
+                                      className={`inline-block rounded-full px-3 py-1 text-xs font-bold ${
+                                        dayType === "祝日"
+                                          ? "bg-emerald-100 text-emerald-700 shadow-sm"
+                                          : dayType === "日曜"
+                                            ? "bg-red-50 text-red-600"
+                                            : dayType === "土曜"
+                                              ? "bg-blue-100 text-blue-700"
+                                              : dayType === "祝日前日"
+                                                ? "bg-yellow-100 text-yellow-700"
+                                                : "bg-slate-100 text-slate-600"
+                                      }`}
+                                    >
+                                      {dayType}
+                                    </span>
+                                  </td>
+                                  <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                                    {formatCurrency(day.medicalRevenue)}
+                                  </td>
+                                  <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                                    {formatCurrency(day.selfPayRevenue)}
+                                  </td>
+                                  <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                                    {formatCurrency(day.otherRevenue)}
+                                  </td>
+                                  <td className="px-5 py-4 text-right text-lg font-black tabular-nums text-emerald-700">
+                                    {formatCurrency(day.totalRevenue)}
+                                  </td>
+                                  <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                                    {day.peopleCount !== null
+                                      ? day.peopleCount.toLocaleString("ja-JP")
+                                      : "—"}
+                                  </td>
+                                  <td className="px-5 py-4 text-left text-slate-600">
+                                    {day.note ?? "—"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -1059,22 +1269,27 @@ export default function SalesPage() {
                   </div>
                 </div>
               ) : (
-                <div className="rounded-3xl border border-dashed border-slate-200 bg-white/70 p-12 text-center text-sm text-slate-500">
+                <div className="rounded-3xl border-2 border-dashed border-emerald-200 bg-emerald-50/30 p-16 text-center text-base text-slate-500 shadow-inner">
                   表示する月を選択してください。
                 </div>
               )}
             </section>
           </>
         ) : (
-          <section className="rounded-3xl border border-dashed border-slate-200 bg-white/70 p-12 text-center text-slate-500">
-            売上CSVをデータ管理からアップロードすると、ここに分析結果が表示されます。
-            <div className="mt-6 flex justify-center">
+          <section className="rounded-3xl border-2 border-dashed border-emerald-200 bg-emerald-50/30 p-16 text-center text-slate-500 shadow-inner">
+            <div className="mx-auto max-w-md">
+              <div className="mx-auto mb-6 inline-flex rounded-full bg-emerald-100 p-4">
+                <FileSpreadsheet className="h-12 w-12 text-emerald-600" />
+              </div>
+              <p className="text-lg font-semibold">
+                売上CSVをデータ管理からアップロードすると、ここに分析結果が表示されます。
+              </p>
               <Link
                 href="/patients"
-                className="inline-flex items-center gap-2 rounded-full bg-sky-500 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-sky-500/30 transition hover:bg-sky-600"
+                className="mt-8 inline-flex items-center gap-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-emerald-500/30 transition-all hover:shadow-xl hover:shadow-emerald-500/40 hover:-translate-y-0.5"
               >
                 データ管理へ移動
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight className="h-5 w-5" />
               </Link>
             </div>
           </section>
