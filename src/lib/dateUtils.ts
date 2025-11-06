@@ -166,28 +166,6 @@ export const getDayType = (dateStr: string): DayType => {
     return dayTypeCache.get(dateStr)!;
   }
 
-  const longWeekendInfo = getLongWeekendInfo(dateStr);
-
-  // 大型連休（5日以上）
-  if (longWeekendInfo.isLongWeekend && (longWeekendInfo.length ?? 0) >= 5) {
-    dayTypeCache.set(dateStr, "大型連休");
-    return "大型連休";
-  }
-
-  // 連休の位置
-  if (longWeekendInfo.isLongWeekend) {
-    if (longWeekendInfo.position === "first") {
-      dayTypeCache.set(dateStr, "連休初日");
-      return "連休初日";
-    } else if (longWeekendInfo.position === "last") {
-      dayTypeCache.set(dateStr, "連休最終日");
-      return "連休最終日";
-    } else {
-      dayTypeCache.set(dateStr, "連休中日");
-      return "連休中日";
-    }
-  }
-
   // 祝日前日（平日のみ）
   if (!isHoliday(dateStr) && !isWeekend(dateStr) && isPreHoliday(dateStr)) {
     dayTypeCache.set(dateStr, "祝日前日");

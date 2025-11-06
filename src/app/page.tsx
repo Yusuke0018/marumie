@@ -477,12 +477,6 @@ export default function HomePage() {
               </p>
               <div className="flex flex-wrap items-center gap-3">
                 <Link
-                  href="/patients#data-management-panel"
-                  className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-600"
-                >
-                  データ管理を開く
-                </Link>
-                <Link
                   href="/patients"
                   className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-brand-200 hover:text-brand-600"
                 >

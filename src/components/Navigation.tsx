@@ -51,6 +51,7 @@ export default function Navigation() {
     // { href: "/listing" as const, label: "リスティング分析" },
     // { href: "/correlation" as const, label: "相関分析" },
     { href: "/ab-test" as const, label: "ABテスト" },
+    { href: "/data-management" as const, label: "データ管理" },
   ];
 
   const toggleMenu = () => setIsOpen((value) => !value);
