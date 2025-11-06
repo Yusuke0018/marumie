@@ -146,6 +146,33 @@ type SalesComparisonCard = {
   percent: number | null;
 };
 
+type DiffResult = {
+  diff: number | null;
+  percent: number | null;
+};
+
+const calculateDiff = (
+  current: number | null,
+  previous: number | null,
+): DiffResult => {
+  if (current === null || previous === null) {
+    return { diff: null, percent: null };
+  }
+  const diff = current - previous;
+  const percent = previous === 0 ? null : (diff / previous) * 100;
+  return { diff, percent };
+};
+
+const buildMoMText = (diff: number | null, percent: number | null): string => {
+  if (diff === null) {
+    return "前月データなし";
+  }
+  if (percent === null) {
+    return `前月比 ${formatSignedCurrency(diff)}`;
+  }
+  return `前月比 ${formatSignedCurrency(diff)} (${formatSignedPercentage(percent)})`;
+};
+
 const WEEKDAY_ORDER = [
   "月曜",
   "火曜",
@@ -210,27 +237,40 @@ export default function SalesPage() {
     return salesData[salesData.length - 1]!;
   }, [salesData, selectedMonthId]);
 
-  const comparisonCards = useMemo(() => {
+  const previousMonthData = useMemo(() => {
     if (!selectedMonth) {
-      return [];
+      return null;
     }
-
-    const findByYearMonth = (year: number, month: number) =>
-      salesData.find((item) => item.year === year && item.month === month) ??
-      null;
-
     let prevYear = selectedMonth.year;
     let prevMonth = selectedMonth.month - 1;
     if (prevMonth < 1) {
       prevMonth = 12;
       prevYear -= 1;
     }
-
-    const previousMonth = findByYearMonth(prevYear, prevMonth);
-    const previousYear = findByYearMonth(
-      selectedMonth.year - 1,
-      selectedMonth.month,
+    return (
+      salesData.find(
+        (item) => item.year === prevYear && item.month === prevMonth,
+      ) ?? null
     );
+  }, [salesData, selectedMonth]);
+
+  const previousYearData = useMemo(() => {
+    if (!selectedMonth) {
+      return null;
+    }
+    return (
+      salesData.find(
+        (item) =>
+          item.year === selectedMonth.year - 1 &&
+          item.month === selectedMonth.month,
+      ) ?? null
+    );
+  }, [salesData, selectedMonth]);
+
+  const comparisonCards = useMemo(() => {
+    if (!selectedMonth) {
+      return [];
+    }
 
     const buildCard = (
       key: SalesComparisonCard["key"],
@@ -261,10 +301,10 @@ export default function SalesPage() {
     };
 
     return [
-      buildCard("prevMonth", "前月比", previousMonth),
-      buildCard("prevYear", "前年比", previousYear),
+      buildCard("prevMonth", "前月比", previousMonthData),
+      buildCard("prevYear", "前年比", previousYearData),
     ];
-  }, [salesData, selectedMonth]);
+  }, [previousMonthData, previousYearData, selectedMonth]);
 
   const latestMonth = useMemo(
     () => (salesData.length > 0 ? salesData[salesData.length - 1] : null),
@@ -348,6 +388,36 @@ export default function SalesPage() {
     );
   }, [profitableDays]);
 
+  const previousMonthBestDay = useMemo(() => {
+    if (!previousMonthData) {
+      return null;
+    }
+    const days = previousMonthData.days.filter(
+      (day) => day.totalRevenue > 0,
+    );
+    if (days.length === 0) {
+      return null;
+    }
+    return days.reduce((acc, day) =>
+      day.totalRevenue > acc.totalRevenue ? day : acc,
+    );
+  }, [previousMonthData]);
+
+  const previousMonthWorstDay = useMemo(() => {
+    if (!previousMonthData) {
+      return null;
+    }
+    const days = previousMonthData.days.filter(
+      (day) => day.totalRevenue > 0,
+    );
+    if (days.length === 0) {
+      return null;
+    }
+    return days.reduce((acc, day) =>
+      day.totalRevenue < acc.totalRevenue ? day : acc,
+    );
+  }, [previousMonthData]);
+
   const composition = useMemo(() => {
     if (!selectedMonth) {
       return null;
@@ -403,6 +473,42 @@ export default function SalesPage() {
   const holidayAverage = useMemo(
     () => weekdayAverageData.find((item) => item.label === "祝日") ?? null,
     [weekdayAverageData],
+  );
+
+  const monthlyDiff = useMemo(
+    () =>
+      calculateDiff(
+        selectedMonth ? selectedMonth.totalRevenue : null,
+        previousMonthData ? previousMonthData.totalRevenue : null,
+      ),
+    [previousMonthData, selectedMonth],
+  );
+
+  const averageDailyDiff = useMemo(
+    () =>
+      calculateDiff(
+        selectedMonth ? selectedMonth.averageDailyRevenue : null,
+        previousMonthData ? previousMonthData.averageDailyRevenue : null,
+      ),
+    [previousMonthData, selectedMonth],
+  );
+
+  const bestDayDiff = useMemo(
+    () =>
+      calculateDiff(
+        bestDay ? bestDay.totalRevenue : null,
+        previousMonthBestDay ? previousMonthBestDay.totalRevenue : null,
+      ),
+    [bestDay, previousMonthBestDay],
+  );
+
+  const worstDayDiff = useMemo(
+    () =>
+      calculateDiff(
+        worstDay ? worstDay.totalRevenue : null,
+        previousMonthWorstDay ? previousMonthWorstDay.totalRevenue : null,
+      ),
+    [previousMonthWorstDay, worstDay],
   );
 
   const insights = useMemo(() => {
@@ -651,12 +757,18 @@ export default function SalesPage() {
                       <p className="mt-2 text-2xl font-black text-slate-900">
                         {formatCurrency(selectedMonth.totalRevenue)}
                       </p>
+                      <span className="mt-1 block text-xs text-slate-500">
+                        {buildMoMText(monthlyDiff.diff, monthlyDiff.percent)}
+                      </span>
                     </div>
                     <div className="rounded-2xl border border-sky-100 bg-sky-50/80 p-5 text-sm text-slate-600">
                       <p className="font-semibold text-slate-500">平均日次売上</p>
                       <p className="mt-2 text-2xl font-black text-slate-900">
                         {formatCurrency(selectedMonth.averageDailyRevenue)}
                       </p>
+                      <span className="mt-1 block text-xs text-slate-500">
+                        {buildMoMText(averageDailyDiff.diff, averageDailyDiff.percent)}
+                      </span>
                     </div>
                     <div className="rounded-2xl border border-sky-100 bg-sky-50/80 p-5 text-sm text-slate-600">
                       <p className="font-semibold text-slate-500">
@@ -665,6 +777,9 @@ export default function SalesPage() {
                       <p className="mt-2 text-2xl font-black text-slate-900">
                         {bestDay ? formatCurrency(bestDay.totalRevenue) : "—"}
                       </p>
+                      <span className="mt-1 block text-xs text-slate-500">
+                        {buildMoMText(bestDayDiff.diff, bestDayDiff.percent)}
+                      </span>
                     </div>
                     <div className="rounded-2xl border border-sky-100 bg-sky-50/80 p-5 text-sm text-slate-600">
                       <p className="font-semibold text-slate-500">
@@ -673,6 +788,9 @@ export default function SalesPage() {
                       <p className="mt-2 text-2xl font-black text-slate-900">
                         {worstDay ? formatCurrency(worstDay.totalRevenue) : "—"}
                       </p>
+                      <span className="mt-1 block text-xs text-slate-500">
+                        {buildMoMText(worstDayDiff.diff, worstDayDiff.percent)}
+                      </span>
                     </div>
                   </div>
 

@@ -1,6 +1,6 @@
 # 画面・データ仕様
 ホーム(`/`)は保存済みカルテやアンケートデータを読み込み、月次KPIと更新日をカード表示します。生活習慣病患者数と内科紹介件数のカードは診断・アンケートの最新期間を集計し、期間ラベルと最終更新日時を添えて提示します。[src/app/page.tsx:114-189][src/app/page.tsx:253][src/app/page.tsx:290][src/app/page.tsx:366][src/app/page.tsx:377]
-売上分析(`/sales`)はデータ管理で取り込んだ売上CSVを参照し、月別売上チャートと最新サマリ、前月比・前年比カード、曜日平均（祝日・祝日前日を独立集計）、日別推移、売上構成比やトップ日リスト、追加インサイト、詳細テーブルを提供します。月次チャートから表示月を切り替え、共有は患者分析ページのデータ管理経由で実施します。[src/app/sales/page.tsx:1-520][src/lib/salesData.ts:1-280][src/components/sales/MonthlySalesChart.tsx:1-140][src/components/sales/WeekdaySalesAverageChart.tsx:1-120][src/components/sales/DailySalesChart.tsx:1-140]
+売上分析(`/sales`)はデータ管理で取り込んだ売上CSVを参照し、月別売上チャートと最新サマリ、主要指標カードの前月比表示、前月比・前年比カード、曜日平均（祝日・祝日前日を独立集計）、日別推移、売上構成比やトップ日リスト、追加インサイト、詳細テーブルを提供します。月次チャートから表示月を切り替え、共有は患者分析ページのデータ管理経由で実施します。[src/app/sales/page.tsx:1-540][src/lib/salesData.ts:1-280][src/components/sales/MonthlySalesChart.tsx:1-140][src/components/sales/WeekdaySalesAverageChart.tsx:1-120][src/components/sales/DailySalesChart.tsx:1-140]
 予約分析(`/reservations`)は予約CSVをアップロードしてLocalStorageへ保持し、時間帯・曜日・診療科ごとのグラフと差分を表示します。[src/app/reservations/page.tsx:720-1045]
 マップ分析(`/map-analysis`)はカルテ記録をロードして町丁目別・年代別のヒートマップと統計サマリを描画します。[src/app/map-analysis/page.tsx:96-360]
 期間比較ビューは町丁目ごとの期間A・期間Bの割合を縦棒グラフで並置し、地図クリックで地区を追加しつつ差分バーと破線基準線で増減率を明示します。[src/app/map-analysis/page.tsx:960-1140]
