@@ -8,9 +8,7 @@ import {
   lazy,
   Suspense,
 } from "react";
-import Link from "next/link";
 import {
-  ArrowRight,
   CalendarClock,
   ChevronDown,
   ChevronUp,
@@ -643,13 +641,6 @@ export default function SalesPage() {
                 月次売上と曜日トレンドを可視化。データに基づいた意思決定をサポートします。
               </p>
               <div className="flex flex-wrap items-center gap-4">
-                <Link
-                  href="/patients"
-                  className="inline-flex items-center gap-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-emerald-500/30 transition-all hover:shadow-xl hover:shadow-emerald-500/40 hover:-translate-y-0.5"
-                >
-                  データ管理を開く
-                  <ArrowRight className="h-5 w-5" />
-                </Link>
                 <button
                   type="button"
                   onClick={hydrateFromStorage}
@@ -775,13 +766,9 @@ export default function SalesPage() {
                       </span>
                     </li>
                   </ul>
-                  <Link
-                    href="/patients"
-                    className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-emerald-200 bg-emerald-50/50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition-all hover:bg-emerald-100 hover:border-emerald-300"
-                  >
-                    データ管理セクションへ移動
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
+                  <p className="mt-5 rounded-xl border-2 border-emerald-200 bg-emerald-50/50 px-4 py-2.5 text-center text-sm font-semibold text-emerald-700">
+                    CSV の管理はデータ管理ページでまとめて実施できます。
+                  </p>
                 </div>
               </div>
             </section>
@@ -1282,15 +1269,11 @@ export default function SalesPage() {
                 <FileSpreadsheet className="h-12 w-12 text-emerald-600" />
               </div>
               <p className="text-lg font-semibold">
-                売上CSVをデータ管理からアップロードすると、ここに分析結果が表示されます。
+                売上CSVをデータ管理ページからアップロードすると、ここに分析結果が表示されます。
               </p>
-              <Link
-                href="/patients"
-                className="mt-8 inline-flex items-center gap-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-emerald-500/30 transition-all hover:shadow-xl hover:shadow-emerald-500/40 hover:-translate-y-0.5"
-              >
-                データ管理へ移動
-                <ArrowRight className="h-5 w-5" />
-              </Link>
+              <p className="mt-8 inline-flex items-center gap-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-emerald-500/30">
+                データ管理ページから売上CSVを登録するとグラフが表示されます。
+              </p>
             </div>
           </section>
         )}
