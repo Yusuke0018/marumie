@@ -16,8 +16,12 @@ import {
   RefreshCcw,
   Sparkles,
   TrendingUp,
+  TrendingDown,
+  Minus,
   DollarSign,
   Award,
+  Calendar,
+  ArrowRight,
 } from "lucide-react";
 import {
   SALES_TIMESTAMP_KEY,
@@ -66,6 +70,40 @@ const formatPercentage = (value: number): string =>
     maximumFractionDigits: 1,
   })}%`;
 
+const signedPercentageFormatter = new Intl.NumberFormat("ja-JP", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+  signDisplay: "exceptZero",
+});
+
+const formatSignedPercentage = (value: number | null): string => {
+  if (value === null || Number.isNaN(value)) {
+    return "—";
+  }
+  if (value === 0) {
+    return "±0.0%";
+  }
+  return `${signedPercentageFormatter.format(value)}%`;
+};
+
+const signedCurrencyFormatter = new Intl.NumberFormat("ja-JP", {
+  style: "currency",
+  currency: "JPY",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+  signDisplay: "exceptZero",
+});
+
+const formatSignedCurrency = (value: number | null): string => {
+  if (value === null) {
+    return "—";
+  }
+  if (value === 0) {
+    return "±0円";
+  }
+  return signedCurrencyFormatter.format(value);
+};
+
 const WEEKDAY_ORDER = [
   "月曜",
   "火曜",
@@ -88,6 +126,17 @@ type PeriodSummary = {
   monthCount: number;
   dayCount: number;
   allDays: SalesDayRecord[];
+};
+
+// 比較データ型
+type ComparisonData = {
+  current: SalesMonthlyData;
+  previous: SalesMonthlyData | null;
+  previousYear: SalesMonthlyData | null;
+  diffPrevMonth: number | null;
+  diffPrevYear: number | null;
+  percentPrevMonth: number | null;
+  percentPrevYear: number | null;
 };
 
 const calculatePeriodSummary = (months: SalesMonthlyData[]): PeriodSummary => {
@@ -143,6 +192,59 @@ const calculatePeriodSummary = (months: SalesMonthlyData[]): PeriodSummary => {
   };
 };
 
+// 前月・前年のデータを取得するヘルパー
+const findPreviousMonth = (
+  salesData: SalesMonthlyData[],
+  current: SalesMonthlyData,
+): SalesMonthlyData | null => {
+  let prevYear = current.year;
+  let prevMonth = current.month - 1;
+  if (prevMonth < 1) {
+    prevMonth = 12;
+    prevYear -= 1;
+  }
+  return salesData.find((m) => m.year === prevYear && m.month === prevMonth) ?? null;
+};
+
+const findPreviousYear = (
+  salesData: SalesMonthlyData[],
+  current: SalesMonthlyData,
+): SalesMonthlyData | null => {
+  return salesData.find((m) => m.year === current.year - 1 && m.month === current.month) ?? null;
+};
+
+// 比較データを計算
+const calculateComparison = (
+  salesData: SalesMonthlyData[],
+  current: SalesMonthlyData,
+): ComparisonData => {
+  const previous = findPreviousMonth(salesData, current);
+  const previousYear = findPreviousYear(salesData, current);
+
+  const diffPrevMonth = previous ? current.totalRevenue - previous.totalRevenue : null;
+  const diffPrevYear = previousYear ? current.totalRevenue - previousYear.totalRevenue : null;
+
+  const percentPrevMonth =
+    previous && previous.totalRevenue > 0
+      ? ((current.totalRevenue - previous.totalRevenue) / previous.totalRevenue) * 100
+      : null;
+
+  const percentPrevYear =
+    previousYear && previousYear.totalRevenue > 0
+      ? ((current.totalRevenue - previousYear.totalRevenue) / previousYear.totalRevenue) * 100
+      : null;
+
+  return {
+    current,
+    previous,
+    previousYear,
+    diffPrevMonth,
+    diffPrevYear,
+    percentPrevMonth,
+    percentPrevYear,
+  };
+};
+
 export default function SalesPage() {
   const [salesData, setSalesData] = useState<SalesMonthlyData[]>([]);
   const [startMonth, setStartMonth] = useState<string>("");
@@ -182,6 +284,18 @@ export default function SalesPage() {
     [salesData],
   );
 
+  // 最新月のデータ
+  const latestMonth = useMemo(
+    () => (salesData.length > 0 ? salesData[salesData.length - 1]! : null),
+    [salesData],
+  );
+
+  // 最新月の比較データ
+  const latestComparison = useMemo(() => {
+    if (!latestMonth) return null;
+    return calculateComparison(salesData, latestMonth);
+  }, [salesData, latestMonth]);
+
   // 期間内の月データをフィルタリング
   const filteredMonths = useMemo(() => {
     if (!startMonth || !endMonth) {
@@ -191,6 +305,15 @@ export default function SalesPage() {
       (month) => month.id >= startMonth && month.id <= endMonth,
     );
   }, [salesData, startMonth, endMonth]);
+
+  // 単月表示かどうか
+  const isSingleMonth = filteredMonths.length === 1;
+
+  // 単月表示時の比較データ
+  const singleMonthComparison = useMemo(() => {
+    if (!isSingleMonth || filteredMonths.length === 0) return null;
+    return calculateComparison(salesData, filteredMonths[0]!);
+  }, [salesData, filteredMonths, isSingleMonth]);
 
   // 期間集計データ
   const periodSummary = useMemo(
@@ -243,6 +366,12 @@ export default function SalesPage() {
       setEndMonth(salesData[salesData.length - 1]!.id);
     }
   }, [salesData]);
+
+  // 単月選択
+  const handleSelectSingleMonth = useCallback((monthId: string) => {
+    setStartMonth(monthId);
+    setEndMonth(monthId);
+  }, []);
 
   // 月別サマリーデータ（グラフ用）
   const monthlySummary = useMemo(
@@ -418,6 +547,57 @@ export default function SalesPage() {
 
   const hasData = salesData.length > 0 && filteredMonths.length > 0;
 
+  // 比較カードのレンダリング
+  const renderComparisonCard = (
+    title: string,
+    referenceLabel: string | null,
+    diff: number | null,
+    percent: number | null,
+    colorScheme: "emerald" | "blue",
+  ) => {
+    const isPositive = diff !== null && diff > 0;
+    const isNegative = diff !== null && diff < 0;
+    const Icon = isPositive ? TrendingUp : isNegative ? TrendingDown : Minus;
+
+    const colors = colorScheme === "emerald"
+      ? {
+          border: isPositive ? "border-emerald-300" : isNegative ? "border-rose-300" : "border-slate-200",
+          bg: isPositive ? "from-emerald-50 to-teal-50" : isNegative ? "from-rose-50 to-pink-50" : "from-slate-50 to-gray-50",
+          icon: isPositive ? "bg-emerald-100 text-emerald-600" : isNegative ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-500",
+          value: isPositive ? "text-emerald-700" : isNegative ? "text-rose-600" : "text-slate-600",
+          percent: isPositive ? "text-emerald-600" : isNegative ? "text-rose-500" : "text-slate-500",
+        }
+      : {
+          border: isPositive ? "border-blue-300" : isNegative ? "border-rose-300" : "border-slate-200",
+          bg: isPositive ? "from-blue-50 to-cyan-50" : isNegative ? "from-rose-50 to-pink-50" : "from-slate-50 to-gray-50",
+          icon: isPositive ? "bg-blue-100 text-blue-600" : isNegative ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-500",
+          value: isPositive ? "text-blue-700" : isNegative ? "text-rose-600" : "text-slate-600",
+          percent: isPositive ? "text-blue-600" : isNegative ? "text-rose-500" : "text-slate-500",
+        };
+
+    return (
+      <div className={`rounded-2xl border-2 ${colors.border} bg-gradient-to-br ${colors.bg} p-5 shadow-lg transition-all hover:shadow-xl`}>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-bold text-slate-700">{title}</p>
+          <div className={`rounded-full p-2 ${colors.icon}`}>
+            <Icon className="h-4 w-4" />
+          </div>
+        </div>
+        <p className={`text-2xl font-black ${colors.value}`}>
+          {formatSignedCurrency(diff)}
+        </p>
+        <div className="mt-2 flex items-center justify-between">
+          <p className={`text-sm font-bold ${colors.percent}`}>
+            {formatSignedPercentage(percent)}
+          </p>
+          <p className="text-xs text-slate-500">
+            {referenceLabel ?? "比較対象なし"}
+          </p>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-emerald-50/40 via-teal-50/30 to-cyan-50/40 pb-24">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-10">
@@ -435,10 +615,10 @@ export default function SalesPage() {
 
         {/* Hero Section */}
         <section className="overflow-hidden rounded-3xl border border-emerald-100/60 bg-white/95 shadow-2xl shadow-emerald-500/5">
-          <div className="relative isolate px-8 py-16 sm:px-12 lg:px-20">
+          <div className="relative isolate px-8 py-12 sm:px-12 lg:px-16">
             <div className="absolute -left-20 top-20 h-64 w-64 rounded-full bg-emerald-200/30 blur-3xl" />
             <div className="absolute -right-20 bottom-16 h-72 w-72 rounded-full bg-teal-200/25 blur-3xl" />
-            <div className="relative z-10 flex flex-col gap-7">
+            <div className="relative z-10 flex flex-col gap-5">
               <div className="flex items-center gap-3">
                 <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 p-3 shadow-lg shadow-emerald-500/30">
                   <TrendingUp className="h-7 w-7 text-white" />
@@ -448,19 +628,19 @@ export default function SalesPage() {
                   売上ダッシュボード
                 </span>
               </div>
-              <h1 className="text-5xl font-black tracking-tight text-slate-900 sm:text-6xl">
+              <h1 className="text-4xl font-black tracking-tight text-slate-900 sm:text-5xl">
                 売上分析ダッシュボード
               </h1>
-              <p className="max-w-2xl text-lg leading-relaxed text-slate-600">
+              <p className="max-w-2xl text-base leading-relaxed text-slate-600">
                 期間を選択して、月次売上と曜日トレンドを可視化。データに基づいた意思決定をサポートします。
               </p>
               <div className="flex flex-wrap items-center gap-4">
                 <button
                   type="button"
                   onClick={hydrateFromStorage}
-                  className="inline-flex items-center gap-2.5 rounded-full border-2 border-emerald-200 bg-white px-6 py-3 text-base font-semibold text-emerald-700 transition-all hover:bg-emerald-50 hover:border-emerald-300"
+                  className="inline-flex items-center gap-2.5 rounded-full border-2 border-emerald-200 bg-white px-5 py-2.5 text-sm font-semibold text-emerald-700 transition-all hover:bg-emerald-50 hover:border-emerald-300"
                 >
-                  <RefreshCcw className="h-5 w-5" />
+                  <RefreshCcw className="h-4 w-4" />
                   最新のデータを読み込み
                 </button>
               </div>
@@ -470,72 +650,221 @@ export default function SalesPage() {
 
         {hasData ? (
           <>
-            {/* Period Summary KPI Cards */}
-            <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="group relative overflow-hidden rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
-                <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-emerald-300/40 blur-2xl" />
-                <div className="relative">
-                  <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-500 p-2.5 shadow-md">
-                    <DollarSign className="h-5 w-5 text-white" />
+            {/* 最新月の情報（常時表示） */}
+            {latestComparison && (
+              <section className="rounded-3xl border-2 border-amber-200 bg-gradient-to-br from-amber-50/80 via-yellow-50/50 to-orange-50/30 p-6 shadow-xl">
+                <div className="flex flex-col gap-5">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 p-2.5 shadow-md">
+                        <Sparkles className="h-5 w-5 text-white" />
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-black text-slate-900">
+                          最新月: {latestComparison.current.label}
+                        </h2>
+                        <p className="text-sm text-slate-600">常に最新の売上状況を確認</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectSingleMonth(latestComparison.current.id)}
+                      className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-amber-500/30 transition-all hover:bg-amber-600 hover:shadow-xl"
+                    >
+                      <Calendar className="h-4 w-4" />
+                      この月を詳しく見る
+                    </button>
                   </div>
-                  <p className="text-sm font-semibold text-emerald-700">期間合計</p>
-                  <p className="mt-2 text-3xl font-black text-emerald-600">
-                    {formatCurrency(periodSummary.totalRevenue)}
-                  </p>
-                  <p className="mt-2 text-xs text-emerald-600/80">
-                    {periodSummary.monthCount}ヶ月分
-                  </p>
-                </div>
-              </div>
 
-              <div className="group relative overflow-hidden rounded-2xl border border-blue-200/60 bg-gradient-to-br from-blue-50 to-blue-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
-                <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-blue-300/40 blur-2xl" />
-                <div className="relative">
-                  <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-blue-400 to-blue-500 p-2.5 shadow-md">
-                    <TrendingUp className="h-5 w-5 text-white" />
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-amber-200 bg-white/90 p-5 shadow-md">
+                      <p className="text-sm font-medium text-slate-500">月間売上</p>
+                      <p className="mt-2 text-3xl font-black text-amber-600">
+                        {formatCurrency(latestComparison.current.totalRevenue)}
+                      </p>
+                    </div>
+                    {renderComparisonCard(
+                      "前月比",
+                      latestComparison.previous?.label ?? null,
+                      latestComparison.diffPrevMonth,
+                      latestComparison.percentPrevMonth,
+                      "emerald",
+                    )}
+                    {renderComparisonCard(
+                      "前年同月比",
+                      latestComparison.previousYear?.label ?? null,
+                      latestComparison.diffPrevYear,
+                      latestComparison.percentPrevYear,
+                      "blue",
+                    )}
                   </div>
-                  <p className="text-sm font-semibold text-blue-700">月平均売上</p>
-                  <p className="mt-2 text-3xl font-black text-blue-600">
-                    {formatCurrency(periodSummary.averageMonthlyRevenue)}
-                  </p>
-                  <p className="mt-2 text-xs text-blue-600/80">
-                    月あたり
-                  </p>
                 </div>
-              </div>
+              </section>
+            )}
 
-              <div className="group relative overflow-hidden rounded-2xl border border-amber-200/60 bg-gradient-to-br from-amber-50 to-amber-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
-                <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-amber-300/40 blur-2xl" />
-                <div className="relative">
-                  <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 p-2.5 shadow-md">
-                    <CalendarClock className="h-5 w-5 text-white" />
-                  </div>
-                  <p className="text-sm font-semibold text-amber-700">日平均売上</p>
-                  <p className="mt-2 text-3xl font-black text-amber-600">
-                    {formatCurrency(periodSummary.averageDailyRevenue)}
-                  </p>
-                  <p className="mt-2 text-xs text-amber-600/80">
-                    {periodSummary.dayCount}日分
-                  </p>
+            {/* 単月クイック選択 */}
+            <section className="rounded-3xl border border-emerald-100/60 bg-white p-6 shadow-xl shadow-emerald-500/5">
+              <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                <div className="flex items-center gap-2.5">
+                  <Calendar className="h-5 w-5 text-emerald-600" />
+                  <h3 className="text-lg font-bold text-slate-900">単月を選択</h3>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors"
+                >
+                  全期間に戻す
+                </button>
               </div>
-
-              <div className="group relative overflow-hidden rounded-2xl border border-purple-200/60 bg-gradient-to-br from-purple-50 to-purple-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
-                <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-purple-300/40 blur-2xl" />
-                <div className="relative">
-                  <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-purple-400 to-purple-500 p-2.5 shadow-md">
-                    <Award className="h-5 w-5 text-white" />
-                  </div>
-                  <p className="text-sm font-semibold text-purple-700">来院人数</p>
-                  <p className="mt-2 text-3xl font-black text-purple-600">
-                    {formatPeople(periodSummary.totalPeopleCount)}
-                  </p>
-                  <p className="mt-2 text-xs text-purple-600/80">
-                    期間合計
-                  </p>
-                </div>
+              <div className="flex flex-wrap gap-2">
+                {salesData.map((month) => {
+                  const isSelected = isSingleMonth && filteredMonths[0]?.id === month.id;
+                  const isLatest = month.id === latestMonth?.id;
+                  return (
+                    <button
+                      key={month.id}
+                      type="button"
+                      onClick={() => handleSelectSingleMonth(month.id)}
+                      className={`rounded-full px-4 py-2 text-sm font-bold transition-all ${
+                        isSelected
+                          ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/40 scale-105"
+                          : isLatest
+                            ? "border-2 border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                            : "border-2 border-emerald-200 text-slate-600 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700"
+                      }`}
+                    >
+                      {month.label}
+                      {isLatest && !isSelected && (
+                        <span className="ml-1.5 text-xs">(最新)</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </section>
+
+            {/* 単月表示時の前月比・前年比 */}
+            {isSingleMonth && singleMonthComparison && (
+              <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="group relative overflow-hidden rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-6 shadow-lg">
+                  <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-emerald-300/40 blur-2xl" />
+                  <div className="relative">
+                    <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-500 p-2.5 shadow-md">
+                      <DollarSign className="h-5 w-5 text-white" />
+                    </div>
+                    <p className="text-sm font-semibold text-emerald-700">月間売上</p>
+                    <p className="mt-2 text-3xl font-black text-emerald-600">
+                      {formatCurrency(singleMonthComparison.current.totalRevenue)}
+                    </p>
+                    <p className="mt-2 text-xs text-emerald-600/80">
+                      {singleMonthComparison.current.label}
+                    </p>
+                  </div>
+                </div>
+
+                {renderComparisonCard(
+                  "前月比",
+                  singleMonthComparison.previous?.label ?? null,
+                  singleMonthComparison.diffPrevMonth,
+                  singleMonthComparison.percentPrevMonth,
+                  "emerald",
+                )}
+
+                {renderComparisonCard(
+                  "前年同月比",
+                  singleMonthComparison.previousYear?.label ?? null,
+                  singleMonthComparison.diffPrevYear,
+                  singleMonthComparison.percentPrevYear,
+                  "blue",
+                )}
+
+                <div className="group relative overflow-hidden rounded-2xl border border-purple-200/60 bg-gradient-to-br from-purple-50 to-purple-100/50 p-6 shadow-lg">
+                  <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-purple-300/40 blur-2xl" />
+                  <div className="relative">
+                    <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-purple-400 to-purple-500 p-2.5 shadow-md">
+                      <Award className="h-5 w-5 text-white" />
+                    </div>
+                    <p className="text-sm font-semibold text-purple-700">来院人数</p>
+                    <p className="mt-2 text-3xl font-black text-purple-600">
+                      {formatPeople(singleMonthComparison.current.totalPeopleCount)}
+                    </p>
+                    <p className="mt-2 text-xs text-purple-600/80">
+                      日平均: {formatCurrency(singleMonthComparison.current.averageDailyRevenue)}
+                    </p>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* 期間表示時のKPIカード（複数月の場合のみ） */}
+            {!isSingleMonth && (
+              <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="group relative overflow-hidden rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
+                  <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-emerald-300/40 blur-2xl" />
+                  <div className="relative">
+                    <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-500 p-2.5 shadow-md">
+                      <DollarSign className="h-5 w-5 text-white" />
+                    </div>
+                    <p className="text-sm font-semibold text-emerald-700">期間合計</p>
+                    <p className="mt-2 text-3xl font-black text-emerald-600">
+                      {formatCurrency(periodSummary.totalRevenue)}
+                    </p>
+                    <p className="mt-2 text-xs text-emerald-600/80">
+                      {periodSummary.monthCount}ヶ月分
+                    </p>
+                  </div>
+                </div>
+
+                <div className="group relative overflow-hidden rounded-2xl border border-blue-200/60 bg-gradient-to-br from-blue-50 to-blue-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
+                  <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-blue-300/40 blur-2xl" />
+                  <div className="relative">
+                    <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-blue-400 to-blue-500 p-2.5 shadow-md">
+                      <TrendingUp className="h-5 w-5 text-white" />
+                    </div>
+                    <p className="text-sm font-semibold text-blue-700">月平均売上</p>
+                    <p className="mt-2 text-3xl font-black text-blue-600">
+                      {formatCurrency(periodSummary.averageMonthlyRevenue)}
+                    </p>
+                    <p className="mt-2 text-xs text-blue-600/80">
+                      月あたり
+                    </p>
+                  </div>
+                </div>
+
+                <div className="group relative overflow-hidden rounded-2xl border border-amber-200/60 bg-gradient-to-br from-amber-50 to-amber-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
+                  <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-amber-300/40 blur-2xl" />
+                  <div className="relative">
+                    <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 p-2.5 shadow-md">
+                      <CalendarClock className="h-5 w-5 text-white" />
+                    </div>
+                    <p className="text-sm font-semibold text-amber-700">日平均売上</p>
+                    <p className="mt-2 text-3xl font-black text-amber-600">
+                      {formatCurrency(periodSummary.averageDailyRevenue)}
+                    </p>
+                    <p className="mt-2 text-xs text-amber-600/80">
+                      {periodSummary.dayCount}日分
+                    </p>
+                  </div>
+                </div>
+
+                <div className="group relative overflow-hidden rounded-2xl border border-purple-200/60 bg-gradient-to-br from-purple-50 to-purple-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
+                  <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-purple-300/40 blur-2xl" />
+                  <div className="relative">
+                    <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-purple-400 to-purple-500 p-2.5 shadow-md">
+                      <Award className="h-5 w-5 text-white" />
+                    </div>
+                    <p className="text-sm font-semibold text-purple-700">来院人数</p>
+                    <p className="mt-2 text-3xl font-black text-purple-600">
+                      {formatPeople(periodSummary.totalPeopleCount)}
+                    </p>
+                    <p className="mt-2 text-xs text-purple-600/80">
+                      期間合計
+                    </p>
+                  </div>
+                </div>
+              </section>
+            )}
 
             {/* Monthly Overview */}
             <section className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
@@ -569,8 +898,8 @@ export default function SalesPage() {
                   >
                     <MonthlySalesChart
                       data={monthlySummary}
-                      selectedId={undefined}
-                      onSelect={() => {}}
+                      selectedId={isSingleMonth ? filteredMonths[0]?.id : undefined}
+                      onSelect={handleSelectSingleMonth}
                     />
                   </Suspense>
                 </div>
@@ -583,33 +912,33 @@ export default function SalesPage() {
                       <Award className="h-5 w-5 text-white" />
                     </div>
                     <h3 className="text-xl font-bold text-slate-900">
-                      期間サマリー
+                      {isSingleMonth ? "月間サマリー" : "期間サマリー"}
                     </h3>
                   </div>
                   <div className="space-y-4">
                     <div className="rounded-2xl bg-white/80 p-5 border border-emerald-100/50 shadow-sm">
-                      <p className="text-sm font-medium text-slate-500">分析期間</p>
+                      <p className="text-sm font-medium text-slate-500">{isSingleMonth ? "対象月" : "分析期間"}</p>
                       <p className="mt-2 text-xl font-black text-emerald-700">
                         {periodLabel}
                       </p>
                     </div>
                     <div className="rounded-2xl bg-white/80 p-5 border border-emerald-100/50 shadow-sm">
-                      <p className="text-sm font-medium text-slate-500">期間合計売上</p>
+                      <p className="text-sm font-medium text-slate-500">{isSingleMonth ? "月間売上" : "期間合計売上"}</p>
                       <p className="mt-2 text-3xl font-black text-slate-900">
                         {formatCurrency(periodSummary.totalRevenue)}
                       </p>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="rounded-2xl bg-white/80 p-4 border border-emerald-100/50 shadow-sm">
-                        <p className="text-xs font-medium text-slate-500">月数</p>
+                        <p className="text-xs font-medium text-slate-500">{isSingleMonth ? "営業日数" : "月数"}</p>
                         <p className="mt-2 text-lg font-bold text-slate-900">
-                          {periodSummary.monthCount}ヶ月
+                          {isSingleMonth ? `${periodSummary.dayCount}日` : `${periodSummary.monthCount}ヶ月`}
                         </p>
                       </div>
                       <div className="rounded-2xl bg-white/80 p-4 border border-emerald-100/50 shadow-sm">
-                        <p className="text-xs font-medium text-slate-500">営業日数</p>
+                        <p className="text-xs font-medium text-slate-500">日平均</p>
                         <p className="mt-2 text-lg font-bold text-slate-900">
-                          {periodSummary.dayCount}日
+                          {formatCurrency(periodSummary.averageDailyRevenue)}
                         </p>
                       </div>
                     </div>
@@ -620,7 +949,7 @@ export default function SalesPage() {
                   <div className="mb-4 flex items-center gap-2.5">
                     <Sparkles className="h-5 w-5 text-emerald-600" />
                     <h3 className="text-lg font-bold text-slate-900">
-                      データ管理のヒント
+                      操作のヒント
                     </h3>
                   </div>
                   <ul className="space-y-3 text-sm text-slate-600">
@@ -629,7 +958,7 @@ export default function SalesPage() {
                         <div className="h-2 w-2 rounded-full bg-emerald-600" />
                       </div>
                       <span>
-                        開始月・終了月を選択すると、その期間のデータを集計して表示します
+                        上の月ボタンをクリックで単月表示に切り替え
                       </span>
                     </li>
                     <li className="flex items-start gap-3 rounded-xl bg-emerald-50/50 p-3">
@@ -637,7 +966,7 @@ export default function SalesPage() {
                         <div className="h-2 w-2 rounded-full bg-emerald-600" />
                       </div>
                       <span>
-                        「期間をリセット」で全期間表示に戻ります
+                        グラフの棒をクリックでも月を選択できます
                       </span>
                     </li>
                   </ul>
@@ -649,7 +978,7 @@ export default function SalesPage() {
             <section className="flex flex-col gap-7 rounded-3xl border border-emerald-100/60 bg-white p-8 shadow-xl shadow-emerald-500/5">
               <div>
                 <h2 className="text-3xl font-black text-slate-900">
-                  期間内の詳細分析
+                  {isSingleMonth ? "月間詳細分析" : "期間内の詳細分析"}
                 </h2>
                 <p className="mt-1 text-base text-slate-600">
                   {periodLabel} の曜日平均・売上構成・ハイライトを確認
@@ -682,10 +1011,10 @@ export default function SalesPage() {
                   <div className="mb-5 flex items-center justify-between">
                     <div>
                       <h3 className="text-xl font-bold text-slate-900">
-                        月別売上推移
+                        {isSingleMonth ? "全体の月別推移" : "月別売上推移"}
                       </h3>
                       <p className="mt-1 text-sm text-slate-500">
-                        {periodSummary.monthCount}ヶ月分のトレンド
+                        {isSingleMonth ? "全期間のトレンド" : `${periodSummary.monthCount}ヶ月分のトレンド`}
                       </p>
                     </div>
                   </div>
@@ -695,9 +1024,9 @@ export default function SalesPage() {
                     }
                   >
                     <MonthlySalesChart
-                      data={monthlySummary}
-                      selectedId={undefined}
-                      onSelect={() => {}}
+                      data={isSingleMonth ? salesData.map((m) => ({ id: m.id, label: m.label, totalRevenue: m.totalRevenue })) : monthlySummary}
+                      selectedId={isSingleMonth ? filteredMonths[0]?.id : undefined}
+                      onSelect={handleSelectSingleMonth}
                     />
                   </Suspense>
                 </div>
@@ -766,7 +1095,7 @@ export default function SalesPage() {
                       <Award className="h-5 w-5 text-teal-700" />
                     </div>
                     <h3 className="text-xl font-bold text-slate-900">
-                      売上ハイライト（期間内TOP5）
+                      売上ハイライト（{isSingleMonth ? "月内" : "期間内"}TOP5）
                     </h3>
                   </div>
                   {topDays.length > 0 ? (
@@ -872,7 +1201,7 @@ export default function SalesPage() {
                       <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
                     </div>
                     <span className="text-lg font-bold text-slate-900">
-                      月別詳細データ
+                      {isSingleMonth ? "日別詳細データ" : "月別詳細データ"}
                     </span>
                   </div>
                   {detailsOpen ? (
@@ -883,91 +1212,131 @@ export default function SalesPage() {
                 </button>
                 {detailsOpen && (
                   <div className="max-h-[600px] overflow-y-auto">
-                    <table className="min-w-full divide-y divide-emerald-100 text-sm">
-                      <thead className="sticky top-0 bg-gradient-to-r from-emerald-50 to-teal-50/50 text-slate-700 backdrop-blur-sm">
-                        <tr>
-                          <th className="px-5 py-4 text-left font-bold">
-                            月
-                          </th>
-                          <th className="px-5 py-4 text-right font-bold">
-                            医療収益
-                          </th>
-                          <th className="px-5 py-4 text-right font-bold">
-                            自費
-                          </th>
-                          <th className="px-5 py-4 text-right font-bold">
-                            その他
-                          </th>
-                          <th className="px-5 py-4 text-right font-bold">
-                            合計
-                          </th>
-                          <th className="px-5 py-4 text-right font-bold">
-                            人数
-                          </th>
-                          <th className="px-5 py-4 text-right font-bold">
-                            日平均
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-emerald-50/50 bg-white text-slate-700">
-                        {filteredMonths.map((month) => (
-                          <tr
-                            key={month.id}
-                            className="transition-colors hover:bg-emerald-50/30"
-                          >
-                            <td className="px-5 py-4 font-bold text-slate-700">
-                              {month.label}
+                    {isSingleMonth && filteredMonths[0] ? (
+                      <table className="min-w-full divide-y divide-emerald-100 text-sm">
+                        <thead className="sticky top-0 bg-gradient-to-r from-emerald-50 to-teal-50/50 text-slate-700 backdrop-blur-sm">
+                          <tr>
+                            <th className="px-5 py-4 text-left font-bold">日</th>
+                            <th className="px-5 py-4 text-left font-bold">曜日</th>
+                            <th className="px-5 py-4 text-right font-bold">医療収益</th>
+                            <th className="px-5 py-4 text-right font-bold">自費</th>
+                            <th className="px-5 py-4 text-right font-bold">その他</th>
+                            <th className="px-5 py-4 text-right font-bold">合計</th>
+                            <th className="px-5 py-4 text-right font-bold">人数</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-emerald-50/50 bg-white text-slate-700">
+                          {filteredMonths[0].days.map((day) => {
+                            const weekday = getWeekdayName(day.date);
+                            const dayType = getDayType(day.date);
+                            return (
+                              <tr
+                                key={day.date}
+                                className={`transition-colors hover:bg-emerald-50/30 ${
+                                  dayType === "祝日"
+                                    ? "border-l-4 border-l-emerald-500 bg-emerald-50/40"
+                                    : dayType === "日曜"
+                                      ? "bg-red-50/30"
+                                      : dayType === "土曜"
+                                        ? "bg-blue-50/30"
+                                        : ""
+                                }`}
+                              >
+                                <td className="px-5 py-4 font-bold text-slate-700">{day.day}日</td>
+                                <td className="px-5 py-4 font-medium text-slate-600">{weekday}</td>
+                                <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                                  {formatCurrency(day.medicalRevenue)}
+                                </td>
+                                <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                                  {formatCurrency(day.selfPayRevenue)}
+                                </td>
+                                <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                                  {formatCurrency(day.otherRevenue)}
+                                </td>
+                                <td className="px-5 py-4 text-right text-lg font-black tabular-nums text-emerald-700">
+                                  {formatCurrency(day.totalRevenue)}
+                                </td>
+                                <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                                  {day.peopleCount !== null ? day.peopleCount.toLocaleString("ja-JP") : "—"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <table className="min-w-full divide-y divide-emerald-100 text-sm">
+                        <thead className="sticky top-0 bg-gradient-to-r from-emerald-50 to-teal-50/50 text-slate-700 backdrop-blur-sm">
+                          <tr>
+                            <th className="px-5 py-4 text-left font-bold">月</th>
+                            <th className="px-5 py-4 text-right font-bold">医療収益</th>
+                            <th className="px-5 py-4 text-right font-bold">自費</th>
+                            <th className="px-5 py-4 text-right font-bold">その他</th>
+                            <th className="px-5 py-4 text-right font-bold">合計</th>
+                            <th className="px-5 py-4 text-right font-bold">人数</th>
+                            <th className="px-5 py-4 text-right font-bold">日平均</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-emerald-50/50 bg-white text-slate-700">
+                          {filteredMonths.map((month) => (
+                            <tr
+                              key={month.id}
+                              className="transition-colors hover:bg-emerald-50/30 cursor-pointer"
+                              onClick={() => handleSelectSingleMonth(month.id)}
+                            >
+                              <td className="px-5 py-4 font-bold text-slate-700 flex items-center gap-2">
+                                {month.label}
+                                <ArrowRight className="h-4 w-4 text-slate-400" />
+                              </td>
+                              <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                                {formatCurrency(month.totalMedicalRevenue)}
+                              </td>
+                              <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                                {formatCurrency(month.totalSelfPayRevenue)}
+                              </td>
+                              <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                                {formatCurrency(month.totalOtherRevenue)}
+                              </td>
+                              <td className="px-5 py-4 text-right text-lg font-black tabular-nums text-emerald-700">
+                                {formatCurrency(month.totalRevenue)}
+                              </td>
+                              <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                                {month.totalPeopleCount !== null
+                                  ? month.totalPeopleCount.toLocaleString("ja-JP")
+                                  : "—"}
+                              </td>
+                              <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                                {formatCurrency(month.averageDailyRevenue)}
+                              </td>
+                            </tr>
+                          ))}
+                          {/* 合計行 */}
+                          <tr className="bg-gradient-to-r from-emerald-100 to-teal-100 font-bold">
+                            <td className="px-5 py-4 font-black text-emerald-800">合計</td>
+                            <td className="px-5 py-4 text-right tabular-nums text-emerald-800">
+                              {formatCurrency(periodSummary.totalMedicalRevenue)}
                             </td>
-                            <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
-                              {formatCurrency(month.totalMedicalRevenue)}
+                            <td className="px-5 py-4 text-right tabular-nums text-emerald-800">
+                              {formatCurrency(periodSummary.totalSelfPayRevenue)}
                             </td>
-                            <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
-                              {formatCurrency(month.totalSelfPayRevenue)}
+                            <td className="px-5 py-4 text-right tabular-nums text-emerald-800">
+                              {formatCurrency(periodSummary.totalOtherRevenue)}
                             </td>
-                            <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
-                              {formatCurrency(month.totalOtherRevenue)}
+                            <td className="px-5 py-4 text-right text-lg font-black tabular-nums text-emerald-900">
+                              {formatCurrency(periodSummary.totalRevenue)}
                             </td>
-                            <td className="px-5 py-4 text-right text-lg font-black tabular-nums text-emerald-700">
-                              {formatCurrency(month.totalRevenue)}
-                            </td>
-                            <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
-                              {month.totalPeopleCount !== null
-                                ? month.totalPeopleCount.toLocaleString("ja-JP")
+                            <td className="px-5 py-4 text-right tabular-nums text-emerald-800">
+                              {periodSummary.totalPeopleCount !== null
+                                ? periodSummary.totalPeopleCount.toLocaleString("ja-JP")
                                 : "—"}
                             </td>
-                            <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
-                              {formatCurrency(month.averageDailyRevenue)}
+                            <td className="px-5 py-4 text-right tabular-nums text-emerald-800">
+                              {formatCurrency(periodSummary.averageDailyRevenue)}
                             </td>
                           </tr>
-                        ))}
-                        {/* 合計行 */}
-                        <tr className="bg-gradient-to-r from-emerald-100 to-teal-100 font-bold">
-                          <td className="px-5 py-4 font-black text-emerald-800">
-                            合計
-                          </td>
-                          <td className="px-5 py-4 text-right tabular-nums text-emerald-800">
-                            {formatCurrency(periodSummary.totalMedicalRevenue)}
-                          </td>
-                          <td className="px-5 py-4 text-right tabular-nums text-emerald-800">
-                            {formatCurrency(periodSummary.totalSelfPayRevenue)}
-                          </td>
-                          <td className="px-5 py-4 text-right tabular-nums text-emerald-800">
-                            {formatCurrency(periodSummary.totalOtherRevenue)}
-                          </td>
-                          <td className="px-5 py-4 text-right text-lg font-black tabular-nums text-emerald-900">
-                            {formatCurrency(periodSummary.totalRevenue)}
-                          </td>
-                          <td className="px-5 py-4 text-right tabular-nums text-emerald-800">
-                            {periodSummary.totalPeopleCount !== null
-                              ? periodSummary.totalPeopleCount.toLocaleString("ja-JP")
-                              : "—"}
-                          </td>
-                          <td className="px-5 py-4 text-right tabular-nums text-emerald-800">
-                            {formatCurrency(periodSummary.averageDailyRevenue)}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                        </tbody>
+                      </table>
+                    )}
                   </div>
                 )}
               </div>
