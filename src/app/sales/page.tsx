@@ -31,6 +31,7 @@ import {
   type ExpenseRecord,
 } from "@/lib/expenseData";
 import { SalesMonthPortal } from "@/components/sales/SalesMonthPortal";
+import { setAnalysisPeriodLabel } from "@/lib/analysisPeriod";
 
 const MonthlySalesChart = lazy(() =>
   import("@/components/sales/MonthlySalesChart").then((module) => ({
@@ -255,6 +256,22 @@ export default function SalesPage() {
     }
     return salesData[salesData.length - 1]!;
   }, [salesData, selectedMonthId]);
+
+  // ナビゲーションバーの期間表示を更新
+  useEffect(() => {
+    if (selectedMonth) {
+      setAnalysisPeriodLabel(selectedMonth.label);
+    } else {
+      setAnalysisPeriodLabel(null);
+    }
+  }, [selectedMonth]);
+
+  // ページ離脱時に期間ラベルをクリア
+  useEffect(() => {
+    return () => {
+      setAnalysisPeriodLabel(null);
+    };
+  }, []);
 
   const previousMonthData = useMemo(() => {
     if (!selectedMonth) {

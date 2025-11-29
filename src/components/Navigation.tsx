@@ -69,7 +69,13 @@ export default function Navigation() {
       ].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)),
     [pathname],
   );
-  const showPeriodBadge = isFilterablePage && analysisPeriodLabel;
+
+  const isSalesPage = useMemo(
+    () => pathname === "/sales" || pathname.startsWith("/sales/"),
+    [pathname],
+  );
+
+  const showPeriodBadge = (isFilterablePage || isSalesPage) && analysisPeriodLabel;
 
   return (
     <>
