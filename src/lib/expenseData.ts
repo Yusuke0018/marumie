@@ -318,10 +318,15 @@ function normalizeVendor(description: string, creditAccount: string): string {
 }
 
 // 経費サマリーを生成
-export function generateExpenseSummary(records: ExpenseRecord[]): MonthlyExpenseSummary {
+export function generateExpenseSummary(allRecords: ExpenseRecord[], targetYearMonth?: string): MonthlyExpenseSummary {
+  // 対象月でフィルタリング
+  const records = targetYearMonth
+    ? allRecords.filter((r) => r.date.startsWith(targetYearMonth))
+    : allRecords;
+
   if (records.length === 0) {
     return {
-      yearMonth: '',
+      yearMonth: targetYearMonth || '',
       totalAmount: 0,
       accountSummaries: [],
       vendorSummaries: [],
@@ -333,7 +338,7 @@ export function generateExpenseSummary(records: ExpenseRecord[]): MonthlyExpense
 
   // 年月を取得
   const dates = records.map((r) => r.date).filter(Boolean);
-  const yearMonth = dates.length > 0 ? dates[0].substring(0, 7) : '';
+  const yearMonth = targetYearMonth || (dates.length > 0 ? dates[0].substring(0, 7) : '');
 
   // 総額
   const totalAmount = records.reduce((sum, r) => sum + r.amount, 0);
@@ -464,4 +469,170 @@ export function loadExpenseData(): ExpenseRecord[] {
 export function clearExpenseData(): void {
   localStorage.removeItem(EXPENSE_STORAGE_KEY);
   localStorage.removeItem(EXPENSE_TIMESTAMP_KEY);
+}
+
+// 勘定科目別の前月比データ
+export interface AccountComparison {
+  category: AccountCategory;
+  currentAmount: number;
+  previousAmount: number;
+  change: number;
+  changeRatio: number;
+}
+
+// 仕入高カテゴリ別の前月比データ
+export interface PurchaseCategoryComparison {
+  category: PurchaseCategory;
+  currentAmount: number;
+  previousAmount: number;
+  change: number;
+  changeRatio: number;
+}
+
+// 支払手数料分類別の前月比データ
+export interface FeeCategoryComparison {
+  category: FeeCategory;
+  currentAmount: number;
+  previousAmount: number;
+  change: number;
+  changeRatio: number;
+}
+
+// 月別経費比較サマリー
+export interface ExpenseComparisonSummary {
+  currentMonth: string;
+  previousMonth: string;
+  currentTotal: number;
+  previousTotal: number;
+  totalChange: number;
+  totalChangeRatio: number;
+  accountComparisons: AccountComparison[];
+  purchaseCategoryComparisons: PurchaseCategoryComparison[];
+  feeCategoryComparisons: FeeCategoryComparison[];
+}
+
+// 月別経費トレンドデータ
+export interface ExpenseMonthlyTrend {
+  yearMonth: string;
+  totalAmount: number;
+  accountBreakdown: Record<AccountCategory, number>;
+}
+
+// 利用可能な月を取得
+export function getAvailableExpenseMonths(records: ExpenseRecord[]): string[] {
+  const months = new Set<string>();
+  for (const r of records) {
+    if (r.date) {
+      const ym = r.date.substring(0, 7);
+      months.add(ym);
+    }
+  }
+  return Array.from(months).sort();
+}
+
+// 前月を取得
+export function getPreviousMonth(yearMonth: string): string {
+  const [year, month] = yearMonth.split('-').map(Number);
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
+  return `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+}
+
+// 2つの月を比較してサマリーを生成
+export function generateExpenseComparison(
+  records: ExpenseRecord[],
+  currentMonth: string,
+  previousMonth: string
+): ExpenseComparisonSummary {
+  const currentSummary = generateExpenseSummary(records, currentMonth);
+  const previousSummary = generateExpenseSummary(records, previousMonth);
+
+  const currentTotal = currentSummary.totalAmount;
+  const previousTotal = previousSummary.totalAmount;
+  const totalChange = currentTotal - previousTotal;
+  const totalChangeRatio = previousTotal > 0 ? totalChange / previousTotal : 0;
+
+  // 勘定科目別比較
+  const allCategories = new Set<AccountCategory>();
+  currentSummary.accountSummaries.forEach((a) => allCategories.add(a.category));
+  previousSummary.accountSummaries.forEach((a) => allCategories.add(a.category));
+
+  const accountComparisons: AccountComparison[] = Array.from(allCategories).map((category) => {
+    const current = currentSummary.accountSummaries.find((a) => a.category === category);
+    const previous = previousSummary.accountSummaries.find((a) => a.category === category);
+    const currentAmount = current?.amount || 0;
+    const previousAmount = previous?.amount || 0;
+    const change = currentAmount - previousAmount;
+    const changeRatio = previousAmount > 0 ? change / previousAmount : (currentAmount > 0 ? 1 : 0);
+    return { category, currentAmount, previousAmount, change, changeRatio };
+  }).sort((a, b) => b.currentAmount - a.currentAmount);
+
+  // 仕入高カテゴリ別比較
+  const allPurchaseCategories = new Set<PurchaseCategory>();
+  currentSummary.purchaseCategorySummaries.forEach((p) => allPurchaseCategories.add(p.category));
+  previousSummary.purchaseCategorySummaries.forEach((p) => allPurchaseCategories.add(p.category));
+
+  const purchaseCategoryComparisons: PurchaseCategoryComparison[] = Array.from(allPurchaseCategories).map((category) => {
+    const current = currentSummary.purchaseCategorySummaries.find((p) => p.category === category);
+    const previous = previousSummary.purchaseCategorySummaries.find((p) => p.category === category);
+    const currentAmount = current?.amount || 0;
+    const previousAmount = previous?.amount || 0;
+    const change = currentAmount - previousAmount;
+    const changeRatio = previousAmount > 0 ? change / previousAmount : (currentAmount > 0 ? 1 : 0);
+    return { category, currentAmount, previousAmount, change, changeRatio };
+  }).sort((a, b) => b.currentAmount - a.currentAmount);
+
+  // 支払手数料分類別比較
+  const allFeeCategories = new Set<FeeCategory>();
+  currentSummary.feeCategorySummaries.forEach((f) => allFeeCategories.add(f.category));
+  previousSummary.feeCategorySummaries.forEach((f) => allFeeCategories.add(f.category));
+
+  const feeCategoryComparisons: FeeCategoryComparison[] = Array.from(allFeeCategories).map((category) => {
+    const current = currentSummary.feeCategorySummaries.find((f) => f.category === category);
+    const previous = previousSummary.feeCategorySummaries.find((f) => f.category === category);
+    const currentAmount = current?.amount || 0;
+    const previousAmount = previous?.amount || 0;
+    const change = currentAmount - previousAmount;
+    const changeRatio = previousAmount > 0 ? change / previousAmount : (currentAmount > 0 ? 1 : 0);
+    return { category, currentAmount, previousAmount, change, changeRatio };
+  }).sort((a, b) => b.currentAmount - a.currentAmount);
+
+  return {
+    currentMonth,
+    previousMonth,
+    currentTotal,
+    previousTotal,
+    totalChange,
+    totalChangeRatio,
+    accountComparisons,
+    purchaseCategoryComparisons,
+    feeCategoryComparisons,
+  };
+}
+
+// 月別トレンドデータを生成
+export function generateExpenseMonthlyTrends(records: ExpenseRecord[]): ExpenseMonthlyTrend[] {
+  const months = getAvailableExpenseMonths(records);
+
+  return months.map((yearMonth) => {
+    const monthRecords = records.filter((r) => r.date.startsWith(yearMonth));
+    const totalAmount = monthRecords.reduce((sum, r) => sum + r.amount, 0);
+
+    const accountBreakdown: Record<AccountCategory, number> = {
+      '仕入高': 0,
+      '広告宣伝費': 0,
+      '地代家賃': 0,
+      '支払手数料': 0,
+      '通信費': 0,
+      '水道光熱費': 0,
+      '備品・消耗品費': 0,
+      'その他': 0,
+    };
+
+    monthRecords.forEach((r) => {
+      accountBreakdown[r.accountCategory] = (accountBreakdown[r.accountCategory] || 0) + r.amount;
+    });
+
+    return { yearMonth, totalAmount, accountBreakdown };
+  });
 }

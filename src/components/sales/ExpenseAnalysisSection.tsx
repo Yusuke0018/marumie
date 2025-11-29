@@ -12,17 +12,26 @@ import {
   ChevronDown,
   ChevronUp,
   TrendingUp,
+  TrendingDown,
   PieChart,
+  Calendar,
+  ArrowRight,
+  Minus,
 } from "lucide-react";
 import {
-  type MonthlyExpenseSummary,
+  type ExpenseRecord,
   type AccountCategory,
   type PurchaseCategory,
   type FeeCategory,
+  type ExpenseComparisonSummary,
+  generateExpenseSummary,
+  generateExpenseComparison,
+  getAvailableExpenseMonths,
+  getPreviousMonth,
 } from "@/lib/expenseData";
 
 interface ExpenseAnalysisSectionProps {
-  summary: MonthlyExpenseSummary | null;
+  records: ExpenseRecord[];
 }
 
 const formatCurrency = (value: number): string =>
@@ -38,6 +47,19 @@ const formatPercentage = (value: number): string =>
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   })}%`;
+
+const formatChangePercentage = (value: number): string => {
+  const sign = value >= 0 ? "+" : "";
+  return `${sign}${(value * 100).toLocaleString("ja-JP", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })}%`;
+};
+
+const formatYearMonth = (ym: string): string => {
+  if (!ym) return "";
+  return `${ym.replace("-", "年")}月`;
+};
 
 // 勘定科目のアイコンと色
 const accountCategoryStyles: Record<
@@ -120,8 +142,61 @@ const feeCategoryColors: Record<FeeCategory, string> = {
   その他: "bg-slate-100 text-slate-700",
 };
 
-export function ExpenseAnalysisSection({ summary }: ExpenseAnalysisSectionProps) {
+// 変化インジケーター
+function ChangeIndicator({ change, changeRatio }: { change: number; changeRatio: number }) {
+  if (change === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500">
+        <Minus className="h-3 w-3" />
+        変動なし
+      </span>
+    );
+  }
+
+  const isIncrease = change > 0;
+  // 経費は減った方が良いので、減少は緑、増加は赤
+  const colorClass = isIncrease ? "text-red-600" : "text-emerald-600";
+  const bgClass = isIncrease ? "bg-red-50" : "bg-emerald-50";
+  const Icon = isIncrease ? TrendingUp : TrendingDown;
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full ${bgClass} px-2.5 py-1 text-xs font-bold ${colorClass}`}>
+      <Icon className="h-3.5 w-3.5" />
+      {formatChangePercentage(changeRatio)}
+    </span>
+  );
+}
+
+export function ExpenseAnalysisSection({ records }: ExpenseAnalysisSectionProps) {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
+
+  // 利用可能な月を取得
+  const availableMonths = useMemo(() => getAvailableExpenseMonths(records), [records]);
+
+  // 最新月をデフォルトに
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    return availableMonths.length > 0 ? availableMonths[availableMonths.length - 1] : "";
+  });
+
+  // 選択月のサマリー
+  const summary = useMemo(() => {
+    if (!selectedMonth || records.length === 0) return null;
+    return generateExpenseSummary(records, selectedMonth);
+  }, [records, selectedMonth]);
+
+  // 前月
+  const previousMonth = useMemo(() => getPreviousMonth(selectedMonth), [selectedMonth]);
+
+  // 前月比較データ
+  const comparison = useMemo<ExpenseComparisonSummary | null>(() => {
+    if (!selectedMonth || records.length === 0) return null;
+    return generateExpenseComparison(records, selectedMonth, previousMonth);
+  }, [records, selectedMonth, previousMonth]);
+
+  // 前月データがあるか
+  const hasPreviousData = useMemo(() => {
+    return availableMonths.includes(previousMonth);
+  }, [availableMonths, previousMonth]);
 
   const purchaseTotal = useMemo(() => {
     if (!summary) return 0;
@@ -133,7 +208,7 @@ export function ExpenseAnalysisSection({ summary }: ExpenseAnalysisSectionProps)
     return summary.feeCategorySummaries.reduce((sum, s) => sum + s.amount, 0);
   }, [summary]);
 
-  if (!summary || summary.records.length === 0) {
+  if (records.length === 0) {
     return (
       <section className="rounded-3xl border-2 border-dashed border-orange-200 bg-orange-50/30 p-16 text-center text-slate-500 shadow-inner">
         <div className="mx-auto max-w-md">
@@ -151,9 +226,11 @@ export function ExpenseAnalysisSection({ summary }: ExpenseAnalysisSectionProps)
     );
   }
 
+  if (!summary) return null;
+
   return (
     <section className="flex flex-col gap-7 rounded-3xl border border-orange-100/60 bg-white p-8 shadow-xl shadow-orange-500/5">
-      {/* Header */}
+      {/* Header with Month Selector */}
       <div className="flex flex-wrap items-center justify-between gap-5">
         <div className="flex items-center gap-4">
           <div className="rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 p-3 shadow-lg shadow-orange-500/30">
@@ -162,49 +239,105 @@ export function ExpenseAnalysisSection({ summary }: ExpenseAnalysisSectionProps)
           <div>
             <h2 className="text-3xl font-black text-slate-900">経費分析</h2>
             <p className="mt-1 text-base text-slate-600">
-              {summary.yearMonth ? `${summary.yearMonth.replace("-", "年")}月` : ""}の経費内訳
+              月別経費の推移と前月比較
             </p>
           </div>
         </div>
-        <div className="rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50 px-6 py-4 border border-orange-200/60 shadow-lg">
+
+        {/* 月選択 */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2">
+            <Calendar className="h-4 w-4 text-slate-500" />
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="bg-transparent text-sm font-semibold text-slate-700 focus:outline-none cursor-pointer"
+            >
+              {availableMonths.map((month) => (
+                <option key={month} value={month}>
+                  {formatYearMonth(month)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* 合計と前月比 */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="col-span-full lg:col-span-1 rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50 px-6 py-5 border border-orange-200/60 shadow-lg">
           <p className="text-sm font-semibold text-orange-700">経費合計</p>
           <p className="mt-1 text-3xl font-black text-orange-600">
             {formatCurrency(summary.totalAmount)}
           </p>
+          {hasPreviousData && comparison && (
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-xs text-slate-500">前月比:</span>
+              <ChangeIndicator change={comparison.totalChange} changeRatio={comparison.totalChangeRatio} />
+              <span className="text-xs text-slate-500">
+                ({formatCurrency(Math.abs(comparison.totalChange))})
+              </span>
+            </div>
+          )}
         </div>
-      </div>
 
-      {/* 勘定科目別サマリー */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {summary.accountSummaries.slice(0, 8).map((account) => {
-          const style = accountCategoryStyles[account.category] || accountCategoryStyles["その他"];
-          const Icon = style.icon;
-          return (
-            <div
-              key={account.category}
-              className={`group relative overflow-hidden rounded-2xl border ${style.border} bg-gradient-to-br ${style.bgGradient} p-5 shadow-lg hover:shadow-xl transition-all hover:scale-105`}
-            >
-              <div className="absolute right-0 top-0 h-20 w-20 translate-x-6 -translate-y-6 rounded-full bg-white/30 blur-2xl" />
-              <div className="relative">
-                <div className={`mb-3 inline-flex rounded-xl bg-white/80 p-2 shadow-sm ${style.color}`}>
-                  <Icon className="h-5 w-5" />
-                </div>
-                <p className={`text-sm font-semibold ${style.color}`}>{account.category}</p>
-                <p className="mt-2 text-2xl font-black text-slate-800">
-                  {formatCurrency(account.amount)}
-                </p>
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="text-xs font-medium text-slate-500">
-                    {account.count}件
-                  </span>
-                  <span className={`rounded-full bg-white/80 px-2 py-0.5 text-xs font-bold ${style.color}`}>
-                    {formatPercentage(account.ratio)}
-                  </span>
-                </div>
+        {hasPreviousData && comparison && (
+          <div className="col-span-full lg:col-span-2 rounded-2xl border border-slate-200 bg-slate-50/50 px-6 py-5">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-3">
+              <span>{formatYearMonth(previousMonth)}</span>
+              <ArrowRight className="h-4 w-4 text-slate-400" />
+              <span>{formatYearMonth(selectedMonth)}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-slate-500">前月</p>
+                <p className="text-xl font-bold text-slate-600">{formatCurrency(comparison.previousTotal)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">当月</p>
+                <p className="text-xl font-bold text-slate-800">{formatCurrency(comparison.currentTotal)}</p>
               </div>
             </div>
-          );
-        })}
+          </div>
+        )}
+      </div>
+
+      {/* 勘定科目別サマリー（前月比付き） */}
+      <div>
+        <h3 className="mb-4 text-lg font-bold text-slate-800">勘定科目別</h3>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {comparison?.accountComparisons.slice(0, 8).map((account) => {
+            const style = accountCategoryStyles[account.category] || accountCategoryStyles["その他"];
+            const Icon = style.icon;
+            return (
+              <div
+                key={account.category}
+                className={`group relative overflow-hidden rounded-2xl border ${style.border} bg-gradient-to-br ${style.bgGradient} p-5 shadow-lg hover:shadow-xl transition-all`}
+              >
+                <div className="absolute right-0 top-0 h-20 w-20 translate-x-6 -translate-y-6 rounded-full bg-white/30 blur-2xl" />
+                <div className="relative">
+                  <div className={`mb-3 inline-flex rounded-xl bg-white/80 p-2 shadow-sm ${style.color}`}>
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <p className={`text-sm font-semibold ${style.color}`}>{account.category}</p>
+                  <p className="mt-2 text-2xl font-black text-slate-800">
+                    {formatCurrency(account.currentAmount)}
+                  </p>
+                  {hasPreviousData && account.previousAmount > 0 && (
+                    <div className="mt-2">
+                      <ChangeIndicator change={account.change} changeRatio={account.changeRatio} />
+                    </div>
+                  )}
+                  {hasPreviousData && account.previousAmount > 0 && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      前月: {formatCurrency(account.previousAmount)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* 構成比グラフ（横棒） */}
@@ -245,7 +378,7 @@ export function ExpenseAnalysisSection({ summary }: ExpenseAnalysisSectionProps)
         </div>
       </div>
 
-      {/* 仕入高の詳細 */}
+      {/* 仕入高の詳細（前月比付き） */}
       {summary.purchaseCategorySummaries.length > 0 && (
         <div className="rounded-2xl border border-rose-100/60 bg-white shadow-lg overflow-hidden">
           <button
@@ -270,32 +403,32 @@ export function ExpenseAnalysisSection({ summary }: ExpenseAnalysisSectionProps)
               <ChevronDown className="h-5 w-5 text-slate-500" />
             )}
           </button>
-          {expandedSection === "purchase" && (
+          {expandedSection === "purchase" && comparison && (
             <div className="p-6 space-y-4">
-              {/* カテゴリ別 */}
+              {/* カテゴリ別（前月比付き） */}
               <div>
                 <h4 className="mb-3 text-sm font-bold text-slate-700">品目カテゴリ別</h4>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {summary.purchaseCategorySummaries.map((cat) => (
+                  {comparison.purchaseCategoryComparisons.map((cat) => (
                     <div
                       key={cat.category}
                       className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm hover:shadow-md transition-all"
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <span className={`rounded-full px-3 py-1 text-xs font-bold ${purchaseCategoryColors[cat.category]}`}>
+                        <span className={`rounded-full px-3 py-1 text-xs font-bold ${purchaseCategoryColors[cat.category] || purchaseCategoryColors["その他"]}`}>
                           {cat.category}
-                        </span>
-                        <span className="text-xs font-semibold text-slate-500">
-                          {formatPercentage(cat.ratio)}
                         </span>
                       </div>
                       <p className="text-lg font-black text-slate-800">
-                        {formatCurrency(cat.amount)}
+                        {formatCurrency(cat.currentAmount)}
                       </p>
-                      {cat.items.length > 0 && (
-                        <p className="mt-2 text-xs text-slate-500 truncate">
-                          {cat.items.slice(0, 3).join("、")}
-                        </p>
+                      {hasPreviousData && cat.previousAmount > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <ChangeIndicator change={cat.change} changeRatio={cat.changeRatio} />
+                          <p className="text-xs text-slate-500">
+                            前月: {formatCurrency(cat.previousAmount)}
+                          </p>
+                        </div>
                       )}
                     </div>
                   ))}
@@ -336,7 +469,7 @@ export function ExpenseAnalysisSection({ summary }: ExpenseAnalysisSectionProps)
         </div>
       )}
 
-      {/* 支払手数料の詳細 */}
+      {/* 支払手数料の詳細（前月比付き） */}
       {summary.feeCategorySummaries.length > 0 && (
         <div className="rounded-2xl border border-amber-100/60 bg-white shadow-lg overflow-hidden">
           <button
@@ -361,26 +494,30 @@ export function ExpenseAnalysisSection({ summary }: ExpenseAnalysisSectionProps)
               <ChevronDown className="h-5 w-5 text-slate-500" />
             )}
           </button>
-          {expandedSection === "fee" && (
+          {expandedSection === "fee" && comparison && (
             <div className="p-6">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {summary.feeCategorySummaries.map((cat) => (
+                {comparison.feeCategoryComparisons.map((cat) => (
                   <div
                     key={cat.category}
                     className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm hover:shadow-md transition-all"
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <span className={`rounded-full px-3 py-1 text-xs font-bold ${feeCategoryColors[cat.category]}`}>
+                      <span className={`rounded-full px-3 py-1 text-xs font-bold ${feeCategoryColors[cat.category] || feeCategoryColors["その他"]}`}>
                         {cat.category}
-                      </span>
-                      <span className="text-xs font-semibold text-slate-500">
-                        {formatPercentage(cat.ratio)}
                       </span>
                     </div>
                     <p className="text-lg font-black text-slate-800">
-                      {formatCurrency(cat.amount)}
+                      {formatCurrency(cat.currentAmount)}
                     </p>
-                    <p className="mt-1 text-xs text-slate-500">{cat.count}件</p>
+                    {hasPreviousData && cat.previousAmount > 0 && (
+                      <div className="mt-2 space-y-1">
+                        <ChangeIndicator change={cat.change} changeRatio={cat.changeRatio} />
+                        <p className="text-xs text-slate-500">
+                          前月: {formatCurrency(cat.previousAmount)}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -388,7 +525,6 @@ export function ExpenseAnalysisSection({ summary }: ExpenseAnalysisSectionProps)
           )}
         </div>
       )}
-
     </section>
   );
 }

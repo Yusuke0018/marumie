@@ -28,8 +28,7 @@ import {
 import { getDayType, getWeekdayName } from "@/lib/dateUtils";
 import {
   loadExpenseData,
-  generateExpenseSummary,
-  type MonthlyExpenseSummary,
+  type ExpenseRecord,
 } from "@/lib/expenseData";
 
 const MonthlySalesChart = lazy(() =>
@@ -203,7 +202,7 @@ export default function SalesPage() {
   const [selectedMonthId, setSelectedMonthId] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
-  const [expenseSummary, setExpenseSummary] = useState<MonthlyExpenseSummary | null>(null);
+  const [expenseRecords, setExpenseRecords] = useState<ExpenseRecord[]>([]);
 
   const hydrateFromStorage = useCallback(() => {
     const loaded = loadSalesDataFromStorage();
@@ -221,12 +220,8 @@ export default function SalesPage() {
       setLastUpdated(null);
     }
     // 経費データの読み込み
-    const expenseRecords = loadExpenseData();
-    if (expenseRecords.length > 0) {
-      setExpenseSummary(generateExpenseSummary(expenseRecords));
-    } else {
-      setExpenseSummary(null);
-    }
+    const loadedExpense = loadExpenseData();
+    setExpenseRecords(loadedExpense);
   }, []);
 
   useEffect(() => {
@@ -1286,7 +1281,7 @@ export default function SalesPage() {
                 <div className="h-96 w-full animate-pulse rounded-3xl bg-gradient-to-br from-orange-50 to-amber-50" />
               }
             >
-              <ExpenseAnalysisSection summary={expenseSummary} />
+              <ExpenseAnalysisSection records={expenseRecords} />
             </Suspense>
           </>
         ) : (
@@ -1311,7 +1306,7 @@ export default function SalesPage() {
                 <div className="h-96 w-full animate-pulse rounded-3xl bg-gradient-to-br from-orange-50 to-amber-50" />
               }
             >
-              <ExpenseAnalysisSection summary={expenseSummary} />
+              <ExpenseAnalysisSection records={expenseRecords} />
             </Suspense>
           </>
         )}
