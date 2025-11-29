@@ -30,6 +30,7 @@ import {
   loadExpenseData,
   type ExpenseRecord,
 } from "@/lib/expenseData";
+import { SalesMonthPortal } from "@/components/sales/SalesMonthPortal";
 
 const MonthlySalesChart = lazy(() =>
   import("@/components/sales/MonthlySalesChart").then((module) => ({
@@ -669,6 +670,13 @@ export default function SalesPage() {
 
         {hasData ? (
           <>
+            <SalesMonthPortal
+              months={monthlySummary}
+              selectedMonthId={selectedMonthId}
+              onChangeMonth={setSelectedMonthId}
+              displayLabel={selectedMonth?.label}
+            />
+
             {/* Monthly Overview */}
             <section className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
               <div className="overflow-hidden rounded-3xl border border-emerald-100/60 bg-white shadow-xl shadow-emerald-500/5">
@@ -1286,6 +1294,13 @@ export default function SalesPage() {
           </>
         ) : (
           <>
+            <SalesMonthPortal
+              months={[]}
+              selectedMonthId={null}
+              onChangeMonth={() => {}}
+              displayLabel="データなし"
+            />
+
             <section className="rounded-3xl border-2 border-dashed border-emerald-200 bg-emerald-50/30 p-16 text-center text-slate-500 shadow-inner">
               <div className="mx-auto max-w-md">
                 <div className="mx-auto mb-6 inline-flex rounded-full bg-emerald-100 p-4">
