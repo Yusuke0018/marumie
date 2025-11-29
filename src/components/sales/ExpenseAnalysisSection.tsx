@@ -12,7 +12,6 @@ import {
   ChevronDown,
   ChevronUp,
   TrendingUp,
-  FileSpreadsheet,
   PieChart,
 } from "lucide-react";
 import {
@@ -390,73 +389,6 @@ export function ExpenseAnalysisSection({ summary }: ExpenseAnalysisSectionProps)
         </div>
       )}
 
-      {/* 詳細データテーブル */}
-      <div className="rounded-2xl border border-slate-100/60 bg-white shadow-lg overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setExpandedSection(expandedSection === "detail" ? null : "detail")}
-          className="flex w-full items-center justify-between gap-4 border-b border-slate-100 bg-gradient-to-r from-slate-50/50 to-gray-50/30 px-6 py-4 text-left transition-all hover:from-slate-50 hover:to-gray-50"
-        >
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-white p-2 shadow-sm">
-              <FileSpreadsheet className="h-5 w-5 text-slate-600" />
-            </div>
-            <div>
-              <span className="text-lg font-bold text-slate-900">取引明細</span>
-              <span className="ml-3 text-sm font-medium text-slate-500">
-                {summary.records.length}件
-              </span>
-            </div>
-          </div>
-          {expandedSection === "detail" ? (
-            <ChevronUp className="h-5 w-5 text-slate-500" />
-          ) : (
-            <ChevronDown className="h-5 w-5 text-slate-500" />
-          )}
-        </button>
-        {expandedSection === "detail" && (
-          <div className="max-h-[500px] overflow-y-auto">
-            <table className="min-w-full divide-y divide-slate-100 text-sm">
-              <thead className="sticky top-0 bg-slate-50/90 backdrop-blur-sm">
-                <tr>
-                  <th className="px-4 py-3 text-left font-bold text-slate-700">日付</th>
-                  <th className="px-4 py-3 text-left font-bold text-slate-700">勘定科目</th>
-                  <th className="px-4 py-3 text-right font-bold text-slate-700">金額</th>
-                  <th className="px-4 py-3 text-left font-bold text-slate-700">摘要</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50 bg-white">
-                {summary.records.slice(0, 100).map((record) => {
-                  const style = accountCategoryStyles[record.accountCategory] || accountCategoryStyles["その他"];
-                  return (
-                    <tr key={record.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 font-medium text-slate-600 whitespace-nowrap">
-                        {record.date}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${style.color} bg-white/80`}>
-                          {record.accountCategory}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold text-slate-800 tabular-nums">
-                        {formatCurrency(record.amount)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 max-w-md truncate">
-                        {record.description}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {summary.records.length > 100 && (
-              <div className="bg-slate-50/50 px-4 py-3 text-center text-sm text-slate-500">
-                表示は100件までです。全{summary.records.length}件
-              </div>
-            )}
-          </div>
-        )}
-      </div>
     </section>
   );
 }
