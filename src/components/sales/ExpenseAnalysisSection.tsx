@@ -192,16 +192,25 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
     return availableMonths.length > 0 ? availableMonths[availableMonths.length - 1] : "";
   });
 
-  // 連動時は選択月を同期（単月選択時のみ使用）
+  // 連動時は選択月を同期
   const effectiveSelectedMonth = useMemo(() => {
     // 連動モードで単月選択の場合
     if (isLinkedMode && isLinkedSingleMonth && linkedStartMonth) {
-      // 経費データにその月があれば使う、なければ空文字
+      // 経費データにその月があれば使う、なければ空文字（データなし表示用）
       return availableMonths.includes(linkedStartMonth) ? linkedStartMonth : "";
     }
-    // 連動モードで期間選択の場合は、期間内の最新月を使う
-    if (isLinkedMode && linkedMonths.length > 0) {
-      return linkedMonths[linkedMonths.length - 1];
+    // 連動モードで期間選択の場合
+    if (isLinkedMode) {
+      // 期間内に経費データがあればその最新月を使う
+      if (linkedMonths.length > 0) {
+        return linkedMonths[linkedMonths.length - 1];
+      }
+      // 期間内に経費データがなくても、経費データ自体があれば最新月を使う
+      // （これにより経費分析セクション自体は表示される）
+      if (availableMonths.length > 0) {
+        return availableMonths[availableMonths.length - 1];
+      }
+      return "";
     }
     // 非連動モードは独自選択を使う
     return selectedMonth;
@@ -276,20 +285,30 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
     if (isLinkedSingleMonth && linkedStartMonth) {
       return formatYearMonth(linkedStartMonth);
     }
-    if (linkedMonths.length === 0) return "データなし";
-    if (linkedMonths.length === 1) return formatYearMonth(linkedMonths[0]);
-    return `${formatYearMonth(linkedMonths[0])} 〜 ${formatYearMonth(linkedMonths[linkedMonths.length - 1])}`;
-  }, [isLinkedMode, isLinkedSingleMonth, linkedStartMonth, linkedMonths]);
+    // 期間モードで期間内にデータがある場合
+    if (linkedMonths.length > 0) {
+      if (linkedMonths.length === 1) return formatYearMonth(linkedMonths[0]);
+      return `${formatYearMonth(linkedMonths[0])} 〜 ${formatYearMonth(linkedMonths[linkedMonths.length - 1])}`;
+    }
+    // 期間内にデータがない場合、経費データの最新月を表示
+    if (effectiveSelectedMonth) {
+      return `${formatYearMonth(effectiveSelectedMonth)}（経費データの最新月）`;
+    }
+    return "データなし";
+  }, [isLinkedMode, isLinkedSingleMonth, linkedStartMonth, linkedMonths, effectiveSelectedMonth]);
 
   // 連動モードで選択月に経費データがあるか
   const hasExpenseDataForLinkedMonth = useMemo(() => {
     if (!isLinkedMode) return true;
+    // 経費データ自体がなければfalse
+    if (availableMonths.length === 0) return false;
+    // 単月選択の場合、その月に経費データがあるかチェック
     if (isLinkedSingleMonth && linkedStartMonth) {
       return availableMonths.includes(linkedStartMonth);
     }
-    // 期間モードでは期間内に1つでもデータがあればOK
-    return linkedMonths.length > 0;
-  }, [isLinkedMode, isLinkedSingleMonth, linkedStartMonth, linkedMonths, availableMonths]);
+    // 期間モードでは経費データがあればOK（期間に関係なく表示）
+    return true;
+  }, [isLinkedMode, isLinkedSingleMonth, linkedStartMonth, availableMonths]);
 
   if (records.length === 0) {
     return (
