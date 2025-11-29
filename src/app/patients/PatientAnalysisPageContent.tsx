@@ -99,6 +99,13 @@ import {
   clearSalesDataStorage,
   SALES_TIMESTAMP_KEY,
 } from "@/lib/salesData";
+import {
+  type ExpenseRecord,
+  parseExpenseCsv,
+  loadExpenseData,
+  saveExpenseData,
+  clearExpenseData,
+} from "@/lib/expenseData";
 import { isHoliday } from "@/lib/dateUtils";
 import { AnalysisFilterPortal } from "@/components/AnalysisFilterPortal";
 import { useAnalysisPeriodRange } from "@/hooks/useAnalysisPeriodRange";
@@ -1342,6 +1349,35 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
   const [isUploadingSales, setIsUploadingSales] = useState(false);
   const [salesUploadError, setSalesUploadError] = useState<string | null>(null);
 
+  // 経費データ管理用state
+  const [expenseStatus, setExpenseStatus] = useState<{
+    lastUpdated: string | null;
+    totalRecords: number;
+    totalAmount: number;
+  }>({
+    lastUpdated: null,
+    totalRecords: 0,
+    totalAmount: 0,
+  });
+  const [isUploadingExpense, setIsUploadingExpense] = useState(false);
+  const [expenseUploadError, setExpenseUploadError] = useState<string | null>(null);
+
+  const updateExpenseSnapshot = useCallback(
+    (data: ExpenseRecord[], explicitTimestamp?: string | null) => {
+      const timestamp =
+        explicitTimestamp ??
+        (typeof window !== "undefined"
+          ? window.localStorage.getItem("expense_timestamp")
+          : null);
+      setExpenseStatus({
+        lastUpdated: timestamp,
+        totalRecords: data.length,
+        totalAmount: data.reduce((sum, r) => sum + r.amount, 0),
+      });
+    },
+    [],
+  );
+
   const updateSalesSnapshot = useCallback(
     (data: SalesMonthlyData[], explicitTimestamp?: string | null) => {
       const timestamp =
@@ -1567,10 +1603,13 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
 
       const existingSales = loadSalesDataFromStorage();
       updateSalesSnapshot(existingSales);
+
+      const existingExpense = loadExpenseData();
+      updateExpenseSnapshot(existingExpense);
     } catch (error) {
       console.error(error);
     }
-  }, [updateSalesSnapshot]);
+  }, [updateSalesSnapshot, updateExpenseSnapshot]);
 
   const classifiedRecords = useMemo<KarteRecordWithCategory[]>(() => {
     if (records.length === 0) {
@@ -3885,6 +3924,63 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
     }
   };
 
+  const handleExpenseUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const files = input.files ? Array.from(input.files) : [];
+    if (files.length === 0) {
+      return;
+    }
+
+    setIsUploadingExpense(true);
+    setExpenseUploadError(null);
+
+    try {
+      const allRecords: ExpenseRecord[] = [];
+
+      for (const file of files) {
+        const text = await file.text();
+        const parsed = parseExpenseCsv(text);
+        allRecords.push(...parsed);
+      }
+
+      if (allRecords.length === 0) {
+        setExpenseUploadError("経費データが見つかりませんでした。freee / MoneyForward形式のCSVを選択してください。");
+        return;
+      }
+
+      // 既存データとマージ（日付+勘定科目+摘要+金額が同じものは重複とみなす）
+      const existing = loadExpenseData();
+      const merged = [...existing];
+      for (const newRecord of allRecords) {
+        const existingIndex = merged.findIndex(
+          (r) =>
+            r.date === newRecord.date &&
+            r.accountCategory === newRecord.accountCategory &&
+            r.description === newRecord.description &&
+            r.amount === newRecord.amount
+        );
+        if (existingIndex === -1) {
+          merged.push(newRecord);
+        }
+      }
+
+      // 日付順にソート
+      merged.sort((a, b) => a.date.localeCompare(b.date));
+
+      const timestamp = new Date().toISOString();
+      saveExpenseData(merged, timestamp);
+      updateExpenseSnapshot(merged, timestamp);
+    } catch (error) {
+      console.error("経費CSVアップロードエラー:", error);
+      setExpenseUploadError(
+        error instanceof Error ? error.message : "経費CSVの読み込みに失敗しました。"
+      );
+    } finally {
+      setIsUploadingExpense(false);
+      input.value = "";
+    }
+  };
+
   const handleBulkFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files ? Array.from(event.target.files) : [];
     if (files.length === 0) {
@@ -4566,6 +4662,61 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
               </p>
             )}
           </div>
+          <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-700">経費CSV</p>
+                <p className="text-xs text-slate-500">freee / MoneyForward形式の仕訳帳データ（経費分析に使用）</p>
+              </div>
+              <div className="text-right text-[11px] text-slate-500">
+                <p>最終更新: {formatTimestampLabel(expenseStatus.lastUpdated)}</p>
+                <p>
+                  登録件数: {expenseStatus.totalRecords.toLocaleString("ja-JP")}件 / 総額{" "}
+                  {formatCurrency(expenseStatus.totalAmount)}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label
+                className={`flex cursor-pointer items-center justify-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                  isUploadingExpense
+                    ? "pointer-events-none border-slate-100 bg-slate-50 text-slate-400"
+                    : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Upload className="h-4 w-4" />
+                {isUploadingExpense ? "アップロード中..." : "経費CSVを選択"}
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={handleExpenseUpload}
+                  multiple
+                  disabled={isUploadingExpense}
+                  className="hidden"
+                />
+              </label>
+              {expenseStatus.totalRecords > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm("経費データをすべて削除しますか？")) {
+                      clearExpenseData();
+                      updateExpenseSnapshot([]);
+                    }
+                  }}
+                  className="flex items-center gap-1 rounded-full border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  リセット
+                </button>
+              )}
+            </div>
+            {expenseUploadError && (
+              <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+                {expenseUploadError}
+              </p>
+            )}
+          </div>
           {shareUrl && (
             <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3">
               <p className="flex items-center gap-2 text-xs text-green-700">
@@ -4644,6 +4795,16 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
             : "未登録",
         updated: formatTimestampLabel(salesStatus.lastUpdated),
         gradient: "from-emerald-500 via-teal-500 to-cyan-500",
+      },
+      {
+        key: "expense" as const,
+        label: "経費データ",
+        value:
+          expenseStatus.totalRecords > 0
+            ? `${expenseStatus.totalRecords.toLocaleString("ja-JP")}件 / ${expenseStatus.totalAmount.toLocaleString("ja-JP")}円`
+            : "未登録",
+        updated: formatTimestampLabel(expenseStatus.lastUpdated),
+        gradient: "from-orange-500 via-amber-500 to-yellow-500",
       },
     ].filter((card) => (lifestyleOnly ? card.key !== "listing" : true));
 

@@ -26,6 +26,11 @@ import {
   type SalesMonthlyData,
 } from "@/lib/salesData";
 import { getDayType, getWeekdayName } from "@/lib/dateUtils";
+import {
+  loadExpenseData,
+  generateExpenseSummary,
+  type MonthlyExpenseSummary,
+} from "@/lib/expenseData";
 
 const MonthlySalesChart = lazy(() =>
   import("@/components/sales/MonthlySalesChart").then((module) => ({
@@ -40,6 +45,11 @@ const WeekdaySalesAverageChart = lazy(() =>
 const DailySalesChart = lazy(() =>
   import("@/components/sales/DailySalesChart").then((module) => ({
     default: module.DailySalesChart,
+  })),
+);
+const ExpenseAnalysisSection = lazy(() =>
+  import("@/components/sales/ExpenseAnalysisSection").then((module) => ({
+    default: module.ExpenseAnalysisSection,
   })),
 );
 
@@ -193,6 +203,7 @@ export default function SalesPage() {
   const [selectedMonthId, setSelectedMonthId] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [expenseSummary, setExpenseSummary] = useState<MonthlyExpenseSummary | null>(null);
 
   const hydrateFromStorage = useCallback(() => {
     const loaded = loadSalesDataFromStorage();
@@ -208,6 +219,13 @@ export default function SalesPage() {
       setLastUpdated(window.localStorage.getItem(SALES_TIMESTAMP_KEY));
     } else {
       setLastUpdated(null);
+    }
+    // 経費データの読み込み
+    const expenseRecords = loadExpenseData();
+    if (expenseRecords.length > 0) {
+      setExpenseSummary(generateExpenseSummary(expenseRecords));
+    } else {
+      setExpenseSummary(null);
     }
   }, []);
 
@@ -1261,21 +1279,41 @@ export default function SalesPage() {
                 </div>
               )}
             </section>
+
+            {/* 経費分析セクション */}
+            <Suspense
+              fallback={
+                <div className="h-96 w-full animate-pulse rounded-3xl bg-gradient-to-br from-orange-50 to-amber-50" />
+              }
+            >
+              <ExpenseAnalysisSection summary={expenseSummary} />
+            </Suspense>
           </>
         ) : (
-          <section className="rounded-3xl border-2 border-dashed border-emerald-200 bg-emerald-50/30 p-16 text-center text-slate-500 shadow-inner">
-            <div className="mx-auto max-w-md">
-              <div className="mx-auto mb-6 inline-flex rounded-full bg-emerald-100 p-4">
-                <FileSpreadsheet className="h-12 w-12 text-emerald-600" />
+          <>
+            <section className="rounded-3xl border-2 border-dashed border-emerald-200 bg-emerald-50/30 p-16 text-center text-slate-500 shadow-inner">
+              <div className="mx-auto max-w-md">
+                <div className="mx-auto mb-6 inline-flex rounded-full bg-emerald-100 p-4">
+                  <FileSpreadsheet className="h-12 w-12 text-emerald-600" />
+                </div>
+                <p className="text-lg font-semibold">
+                  売上CSVをデータ管理ページからアップロードすると、ここに分析結果が表示されます。
+                </p>
+                <p className="mt-8 inline-flex items-center gap-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-emerald-500/30">
+                  データ管理ページから売上CSVを登録するとグラフが表示されます。
+                </p>
               </div>
-              <p className="text-lg font-semibold">
-                売上CSVをデータ管理ページからアップロードすると、ここに分析結果が表示されます。
-              </p>
-              <p className="mt-8 inline-flex items-center gap-2.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-emerald-500/30">
-                データ管理ページから売上CSVを登録するとグラフが表示されます。
-              </p>
-            </div>
-          </section>
+            </section>
+
+            {/* 経費分析セクション（売上データがなくても表示） */}
+            <Suspense
+              fallback={
+                <div className="h-96 w-full animate-pulse rounded-3xl bg-gradient-to-br from-orange-50 to-amber-50" />
+              }
+            >
+              <ExpenseAnalysisSection summary={expenseSummary} />
+            </Suspense>
+          </>
         )}
       </div>
     </main>
