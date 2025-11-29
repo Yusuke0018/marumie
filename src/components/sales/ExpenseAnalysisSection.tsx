@@ -15,7 +15,6 @@ import {
   TrendingDown,
   PieChart,
   Calendar,
-  ArrowRight,
   Minus,
 } from "lucide-react";
 import {
@@ -32,6 +31,9 @@ import {
 
 interface ExpenseAnalysisSectionProps {
   records: ExpenseRecord[];
+  // 売上分析と連動するための期間指定（オプション）
+  linkedStartMonth?: string; // YYYY-MM形式
+  linkedEndMonth?: string; // YYYY-MM形式
 }
 
 const formatCurrency = (value: number): string =>
@@ -167,36 +169,89 @@ function ChangeIndicator({ change, changeRatio }: { change: number; changeRatio:
   );
 }
 
-export function ExpenseAnalysisSection({ records }: ExpenseAnalysisSectionProps) {
+export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMonth }: ExpenseAnalysisSectionProps) {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
   // 利用可能な月を取得
   const availableMonths = useMemo(() => getAvailableExpenseMonths(records), [records]);
 
-  // 最新月をデフォルトに
+  // 連動モードかどうか
+  const isLinkedMode = linkedStartMonth !== undefined && linkedEndMonth !== undefined;
+
+  // 連動モード時の表示期間
+  const linkedMonths = useMemo(() => {
+    if (!isLinkedMode || !linkedStartMonth || !linkedEndMonth) return [];
+    return availableMonths.filter((m) => m >= linkedStartMonth && m <= linkedEndMonth);
+  }, [isLinkedMode, linkedStartMonth, linkedEndMonth, availableMonths]);
+
+  // 連動モード時の単月表示かどうか
+  const isLinkedSingleMonth = isLinkedMode && linkedStartMonth === linkedEndMonth;
+
+  // 最新月をデフォルトに（非連動時のみ使用）
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
     return availableMonths.length > 0 ? availableMonths[availableMonths.length - 1] : "";
   });
 
+  // 連動時は選択月を同期
+  const effectiveSelectedMonth = useMemo(() => {
+    if (isLinkedSingleMonth && linkedStartMonth && availableMonths.includes(linkedStartMonth)) {
+      return linkedStartMonth;
+    }
+    return selectedMonth;
+  }, [isLinkedSingleMonth, linkedStartMonth, selectedMonth, availableMonths]);
+
   // 選択月のサマリー
   const summary = useMemo(() => {
-    if (!selectedMonth || records.length === 0) return null;
-    return generateExpenseSummary(records, selectedMonth);
-  }, [records, selectedMonth]);
+    if (!effectiveSelectedMonth || records.length === 0) return null;
+    return generateExpenseSummary(records, effectiveSelectedMonth);
+  }, [records, effectiveSelectedMonth]);
 
   // 前月
-  const previousMonth = useMemo(() => getPreviousMonth(selectedMonth), [selectedMonth]);
+  const previousMonth = useMemo(() => getPreviousMonth(effectiveSelectedMonth), [effectiveSelectedMonth]);
+
+  // 前年同月
+  const previousYearMonth = useMemo(() => {
+    if (!effectiveSelectedMonth) return "";
+    const [year, month] = effectiveSelectedMonth.split("-").map(Number);
+    return `${year - 1}-${String(month).padStart(2, "0")}`;
+  }, [effectiveSelectedMonth]);
 
   // 前月比較データ
   const comparison = useMemo<ExpenseComparisonSummary | null>(() => {
-    if (!selectedMonth || records.length === 0) return null;
-    return generateExpenseComparison(records, selectedMonth, previousMonth);
-  }, [records, selectedMonth, previousMonth]);
+    if (!effectiveSelectedMonth || records.length === 0) return null;
+    return generateExpenseComparison(records, effectiveSelectedMonth, previousMonth);
+  }, [records, effectiveSelectedMonth, previousMonth]);
+
+  // 前年比較データ
+  const yearComparison = useMemo<ExpenseComparisonSummary | null>(() => {
+    if (!effectiveSelectedMonth || records.length === 0) return null;
+    return generateExpenseComparison(records, effectiveSelectedMonth, previousYearMonth);
+  }, [records, effectiveSelectedMonth, previousYearMonth]);
 
   // 前月データがあるか
   const hasPreviousData = useMemo(() => {
     return availableMonths.includes(previousMonth);
   }, [availableMonths, previousMonth]);
+
+  // 前年データがあるか
+  const hasPreviousYearData = useMemo(() => {
+    return availableMonths.includes(previousYearMonth);
+  }, [availableMonths, previousYearMonth]);
+
+  // 期間集計データ（連動モード・期間表示時）
+  const periodSummary = useMemo(() => {
+    if (!isLinkedMode || linkedMonths.length <= 1) return null;
+    let total = 0;
+    for (const m of linkedMonths) {
+      const monthRecords = records.filter((r) => r.date.startsWith(m));
+      total += monthRecords.reduce((sum, r) => sum + r.amount, 0);
+    }
+    return {
+      totalAmount: total,
+      monthCount: linkedMonths.length,
+      averageMonthlyAmount: linkedMonths.length > 0 ? total / linkedMonths.length : 0,
+    };
+  }, [isLinkedMode, linkedMonths, records]);
 
   const purchaseTotal = useMemo(() => {
     if (!summary) return 0;
@@ -207,6 +262,17 @@ export function ExpenseAnalysisSection({ records }: ExpenseAnalysisSectionProps)
     if (!summary) return 0;
     return summary.feeCategorySummaries.reduce((sum, s) => sum + s.amount, 0);
   }, [summary]);
+
+  // 期間ラベル（連動モード用）- 早期リターンの前に定義
+  const linkedPeriodLabel = useMemo(() => {
+    if (!isLinkedMode) return "";
+    if (isLinkedSingleMonth && linkedStartMonth) {
+      return formatYearMonth(linkedStartMonth);
+    }
+    if (linkedMonths.length === 0) return "データなし";
+    if (linkedMonths.length === 1) return formatYearMonth(linkedMonths[0]);
+    return `${formatYearMonth(linkedMonths[0])} 〜 ${formatYearMonth(linkedMonths[linkedMonths.length - 1])}`;
+  }, [isLinkedMode, isLinkedSingleMonth, linkedStartMonth, linkedMonths]);
 
   if (records.length === 0) {
     return (
@@ -239,68 +305,117 @@ export function ExpenseAnalysisSection({ records }: ExpenseAnalysisSectionProps)
           <div>
             <h2 className="text-3xl font-black text-slate-900">経費分析<span className="ml-2 text-lg font-semibold text-slate-500">（人件費を除く）</span></h2>
             <p className="mt-1 text-base text-slate-600">
-              月別経費の推移と前月比較
+              {isLinkedMode ? (
+                <>売上分析と連動中: <span className="font-semibold text-orange-600">{linkedPeriodLabel}</span></>
+              ) : (
+                "月別経費の推移と前月比較"
+              )}
             </p>
           </div>
         </div>
 
-        {/* 月選択 */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2">
-            <Calendar className="h-4 w-4 text-slate-500" />
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="bg-transparent text-sm font-semibold text-slate-700 focus:outline-none cursor-pointer"
-            >
-              {availableMonths.map((month) => (
-                <option key={month} value={month}>
-                  {formatYearMonth(month)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* 合計と前月比 */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="col-span-full lg:col-span-1 rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50 px-6 py-5 border border-orange-200/60 shadow-lg">
-          <p className="text-sm font-semibold text-orange-700">経費合計</p>
-          <p className="mt-1 text-3xl font-black text-orange-600">
-            {formatCurrency(summary.totalAmount)}
-          </p>
-          {hasPreviousData && comparison && (
-            <div className="mt-3 flex items-center gap-2">
-              <span className="text-xs text-slate-500">前月比:</span>
-              <ChangeIndicator change={comparison.totalChange} changeRatio={comparison.totalChangeRatio} />
-              <span className="text-xs text-slate-500">
-                ({formatCurrency(Math.abs(comparison.totalChange))})
-              </span>
-            </div>
-          )}
-        </div>
-
-        {hasPreviousData && comparison && (
-          <div className="col-span-full lg:col-span-2 rounded-2xl border border-slate-200 bg-slate-50/50 px-6 py-5">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-3">
-              <span>{formatYearMonth(previousMonth)}</span>
-              <ArrowRight className="h-4 w-4 text-slate-400" />
-              <span>{formatYearMonth(selectedMonth)}</span>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-slate-500">前月</p>
-                <p className="text-xl font-bold text-slate-600">{formatCurrency(comparison.previousTotal)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">当月</p>
-                <p className="text-xl font-bold text-slate-800">{formatCurrency(comparison.currentTotal)}</p>
-              </div>
+        {/* 月選択（非連動モードのみ） */}
+        {!isLinkedMode && (
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2">
+              <Calendar className="h-4 w-4 text-slate-500" />
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="bg-transparent text-sm font-semibold text-slate-700 focus:outline-none cursor-pointer"
+              >
+                {availableMonths.map((month) => (
+                  <option key={month} value={month}>
+                    {formatYearMonth(month)}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         )}
       </div>
+
+      {/* 期間表示（連動モード・複数月）*/}
+      {isLinkedMode && periodSummary && linkedMonths.length > 1 && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50 px-6 py-5 border border-orange-200/60 shadow-lg">
+            <p className="text-sm font-semibold text-orange-700">期間合計経費</p>
+            <p className="mt-1 text-3xl font-black text-orange-600">
+              {formatCurrency(periodSummary.totalAmount)}
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              {periodSummary.monthCount}ヶ月間
+            </p>
+          </div>
+          <div className="rounded-2xl bg-gradient-to-br from-amber-50 to-yellow-50 px-6 py-5 border border-amber-200/60 shadow-lg">
+            <p className="text-sm font-semibold text-amber-700">月平均経費</p>
+            <p className="mt-1 text-3xl font-black text-amber-600">
+              {formatCurrency(periodSummary.averageMonthlyAmount)}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 単月表示（連動モード・単月 or 非連動モード）*/}
+      {(isLinkedSingleMonth || !isLinkedMode) && summary && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {/* 経費合計 */}
+          <div className="rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50 px-6 py-5 border border-orange-200/60 shadow-lg">
+            <p className="text-sm font-semibold text-orange-700">
+              {isLinkedSingleMonth ? `${linkedPeriodLabel}の経費` : "経費合計"}
+            </p>
+            <p className="mt-1 text-3xl font-black text-orange-600">
+              {formatCurrency(summary.totalAmount)}
+            </p>
+          </div>
+
+          {/* 前月比カード */}
+          {hasPreviousData && comparison && (
+            <div className={`rounded-2xl px-6 py-5 border shadow-lg ${
+              comparison.totalChange <= 0
+                ? "bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-200/60"
+                : "bg-gradient-to-br from-red-50 to-rose-50 border-red-200/60"
+            }`}>
+              <p className={`text-sm font-semibold ${comparison.totalChange <= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                前月比
+              </p>
+              <div className="mt-1 flex items-center gap-2">
+                <ChangeIndicator change={comparison.totalChange} changeRatio={comparison.totalChangeRatio} />
+              </div>
+              <p className="mt-2 text-lg font-bold text-slate-700">
+                {formatCurrency(Math.abs(comparison.totalChange))}
+                <span className="text-xs text-slate-500 ml-1">{comparison.totalChange <= 0 ? "減" : "増"}</span>
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                前月: {formatCurrency(comparison.previousTotal)}
+              </p>
+            </div>
+          )}
+
+          {/* 前年比カード */}
+          {hasPreviousYearData && yearComparison && (
+            <div className={`rounded-2xl px-6 py-5 border shadow-lg ${
+              yearComparison.totalChange <= 0
+                ? "bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-200/60"
+                : "bg-gradient-to-br from-red-50 to-rose-50 border-red-200/60"
+            }`}>
+              <p className={`text-sm font-semibold ${yearComparison.totalChange <= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                前年比
+              </p>
+              <div className="mt-1 flex items-center gap-2">
+                <ChangeIndicator change={yearComparison.totalChange} changeRatio={yearComparison.totalChangeRatio} />
+              </div>
+              <p className="mt-2 text-lg font-bold text-slate-700">
+                {formatCurrency(Math.abs(yearComparison.totalChange))}
+                <span className="text-xs text-slate-500 ml-1">{yearComparison.totalChange <= 0 ? "減" : "増"}</span>
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                前年: {formatCurrency(yearComparison.previousTotal)}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 勘定科目別サマリー（前月比付き） */}
       <div>

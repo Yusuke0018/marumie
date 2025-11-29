@@ -1342,13 +1342,17 @@ export default function SalesPage() {
               </div>
             </section>
 
-            {/* 経費分析セクション */}
+            {/* 経費分析セクション（売上分析と連動） */}
             <Suspense
               fallback={
                 <div className="h-96 w-full animate-pulse rounded-3xl bg-gradient-to-br from-orange-50 to-amber-50" />
               }
             >
-              <ExpenseAnalysisSection records={expenseRecords} />
+              <ExpenseAnalysisSection
+                records={expenseRecords}
+                linkedStartMonth={startMonth}
+                linkedEndMonth={endMonth}
+              />
             </Suspense>
           </>
         ) : (
@@ -1367,7 +1371,7 @@ export default function SalesPage() {
               </div>
             </section>
 
-            {/* 経費分析セクション（売上データがなくても表示） */}
+            {/* 経費分析セクション（売上データがなくても表示、連動なし） */}
             <Suspense
               fallback={
                 <div className="h-96 w-full animate-pulse rounded-3xl bg-gradient-to-br from-orange-50 to-amber-50" />
