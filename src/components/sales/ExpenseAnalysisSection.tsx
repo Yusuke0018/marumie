@@ -237,7 +237,7 @@ export function ExpenseAnalysisSection({ records }: ExpenseAnalysisSectionProps)
             <Receipt className="h-7 w-7 text-white" />
           </div>
           <div>
-            <h2 className="text-3xl font-black text-slate-900">経費分析</h2>
+            <h2 className="text-3xl font-black text-slate-900">経費分析<span className="ml-2 text-lg font-semibold text-slate-500">（人件費を除く）</span></h2>
             <p className="mt-1 text-base text-slate-600">
               月別経費の推移と前月比較
             </p>
