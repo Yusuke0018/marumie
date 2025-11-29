@@ -192,13 +192,20 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
     return availableMonths.length > 0 ? availableMonths[availableMonths.length - 1] : "";
   });
 
-  // 連動時は選択月を同期
+  // 連動時は選択月を同期（単月選択時のみ使用）
   const effectiveSelectedMonth = useMemo(() => {
-    if (isLinkedSingleMonth && linkedStartMonth && availableMonths.includes(linkedStartMonth)) {
-      return linkedStartMonth;
+    // 連動モードで単月選択の場合
+    if (isLinkedMode && isLinkedSingleMonth && linkedStartMonth) {
+      // 経費データにその月があれば使う、なければ空文字
+      return availableMonths.includes(linkedStartMonth) ? linkedStartMonth : "";
     }
+    // 連動モードで期間選択の場合は、期間内の最新月を使う
+    if (isLinkedMode && linkedMonths.length > 0) {
+      return linkedMonths[linkedMonths.length - 1];
+    }
+    // 非連動モードは独自選択を使う
     return selectedMonth;
-  }, [isLinkedSingleMonth, linkedStartMonth, selectedMonth, availableMonths]);
+  }, [isLinkedMode, isLinkedSingleMonth, linkedStartMonth, linkedMonths, selectedMonth, availableMonths]);
 
   // 選択月のサマリー
   const summary = useMemo(() => {
