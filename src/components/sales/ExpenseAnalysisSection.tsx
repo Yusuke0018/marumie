@@ -281,6 +281,16 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
     return `${formatYearMonth(linkedMonths[0])} 〜 ${formatYearMonth(linkedMonths[linkedMonths.length - 1])}`;
   }, [isLinkedMode, isLinkedSingleMonth, linkedStartMonth, linkedMonths]);
 
+  // 連動モードで選択月に経費データがあるか
+  const hasExpenseDataForLinkedMonth = useMemo(() => {
+    if (!isLinkedMode) return true;
+    if (isLinkedSingleMonth && linkedStartMonth) {
+      return availableMonths.includes(linkedStartMonth);
+    }
+    // 期間モードでは期間内に1つでもデータがあればOK
+    return linkedMonths.length > 0;
+  }, [isLinkedMode, isLinkedSingleMonth, linkedStartMonth, linkedMonths, availableMonths]);
+
   if (records.length === 0) {
     return (
       <section className="rounded-3xl border-2 border-dashed border-orange-200 bg-orange-50/30 p-16 text-center text-slate-500 shadow-inner">
@@ -342,8 +352,24 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
         )}
       </div>
 
+      {/* 連動モードで選択月に経費データがない場合 */}
+      {isLinkedMode && !hasExpenseDataForLinkedMonth && (
+        <div className="rounded-2xl border-2 border-dashed border-orange-200 bg-orange-50/30 p-8 text-center">
+          <p className="text-lg font-semibold text-slate-600">
+            {isLinkedSingleMonth && linkedStartMonth ? (
+              <>{formatYearMonth(linkedStartMonth)}の経費データがありません</>
+            ) : (
+              <>選択期間内の経費データがありません</>
+            )}
+          </p>
+          <p className="mt-2 text-sm text-slate-500">
+            データ管理ページから経費CSVをアップロードしてください
+          </p>
+        </div>
+      )}
+
       {/* 期間表示（連動モード・複数月）*/}
-      {isLinkedMode && periodSummary && linkedMonths.length > 1 && (
+      {isLinkedMode && hasExpenseDataForLinkedMonth && periodSummary && linkedMonths.length > 1 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50 px-6 py-5 border border-orange-200/60 shadow-lg">
             <p className="text-sm font-semibold text-orange-700">期間合計経費</p>
@@ -363,8 +389,8 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
         </div>
       )}
 
-      {/* 単月表示（連動モード・単月 or 非連動モード）*/}
-      {(isLinkedSingleMonth || !isLinkedMode) && summary && (
+      {/* 単月表示（連動モード・単月 or 非連動モード）- 経費データがある場合のみ */}
+      {((isLinkedSingleMonth && hasExpenseDataForLinkedMonth) || !isLinkedMode) && summary && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {/* 経費合計 */}
           <div className="rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50 px-6 py-5 border border-orange-200/60 shadow-lg">
@@ -424,46 +450,49 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
         </div>
       )}
 
-      {/* 勘定科目別サマリー（前月比付き） */}
-      <div>
-        <h3 className="mb-4 text-lg font-bold text-slate-800">勘定科目別</h3>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {comparison?.accountComparisons.slice(0, 8).map((account) => {
-            const style = accountCategoryStyles[account.category] || accountCategoryStyles["その他"];
-            const Icon = style.icon;
-            return (
-              <div
-                key={account.category}
-                className={`group relative overflow-hidden rounded-2xl border ${style.border} bg-gradient-to-br ${style.bgGradient} p-5 shadow-lg hover:shadow-xl transition-all`}
-              >
-                <div className="absolute right-0 top-0 h-20 w-20 translate-x-6 -translate-y-6 rounded-full bg-white/30 blur-2xl" />
-                <div className="relative">
-                  <div className={`mb-3 inline-flex rounded-xl bg-white/80 p-2 shadow-sm ${style.color}`}>
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <p className={`text-sm font-semibold ${style.color}`}>{account.category}</p>
-                  <p className="mt-2 text-2xl font-black text-slate-800">
-                    {formatCurrency(account.currentAmount)}
-                  </p>
-                  {hasPreviousData && account.previousAmount > 0 && (
-                    <div className="mt-2">
-                      <ChangeIndicator change={account.change} changeRatio={account.changeRatio} />
+      {/* 勘定科目別サマリー（前月比付き）- 経費データがある場合のみ */}
+      {(!isLinkedMode || hasExpenseDataForLinkedMonth) && comparison && comparison.accountComparisons.length > 0 && (
+        <div>
+          <h3 className="mb-4 text-lg font-bold text-slate-800">勘定科目別</h3>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {comparison.accountComparisons.slice(0, 8).map((account) => {
+              const style = accountCategoryStyles[account.category] || accountCategoryStyles["その他"];
+              const Icon = style.icon;
+              return (
+                <div
+                  key={account.category}
+                  className={`group relative overflow-hidden rounded-2xl border ${style.border} bg-gradient-to-br ${style.bgGradient} p-5 shadow-lg hover:shadow-xl transition-all`}
+                >
+                  <div className="absolute right-0 top-0 h-20 w-20 translate-x-6 -translate-y-6 rounded-full bg-white/30 blur-2xl" />
+                  <div className="relative">
+                    <div className={`mb-3 inline-flex rounded-xl bg-white/80 p-2 shadow-sm ${style.color}`}>
+                      <Icon className="h-5 w-5" />
                     </div>
-                  )}
-                  {hasPreviousData && account.previousAmount > 0 && (
-                    <p className="mt-1 text-xs text-slate-500">
-                      前月: {formatCurrency(account.previousAmount)}
+                    <p className={`text-sm font-semibold ${style.color}`}>{account.category}</p>
+                    <p className="mt-2 text-2xl font-black text-slate-800">
+                      {formatCurrency(account.currentAmount)}
                     </p>
-                  )}
+                    {hasPreviousData && account.previousAmount > 0 && (
+                      <div className="mt-2">
+                        <ChangeIndicator change={account.change} changeRatio={account.changeRatio} />
+                      </div>
+                    )}
+                    {hasPreviousData && account.previousAmount > 0 && (
+                      <p className="mt-1 text-xs text-slate-500">
+                        前月: {formatCurrency(account.previousAmount)}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* 構成比グラフ（横棒） */}
-      <div className="rounded-2xl border border-orange-100/60 bg-gradient-to-br from-orange-50/30 to-amber-50/20 p-6 shadow-lg">
+      {/* 構成比グラフ（横棒）- 経費データがある場合のみ */}
+      {(!isLinkedMode || hasExpenseDataForLinkedMonth) && summary.accountSummaries.length > 0 && (
+        <div className="rounded-2xl border border-orange-100/60 bg-gradient-to-br from-orange-50/30 to-amber-50/20 p-6 shadow-lg">
         <div className="mb-4 flex items-center gap-2.5">
           <div className="rounded-xl bg-white p-2 shadow-sm">
             <PieChart className="h-5 w-5 text-orange-600" />
@@ -499,9 +528,10 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
           })}
         </div>
       </div>
+      )}
 
-      {/* 仕入高の詳細（前月比付き） */}
-      {summary.purchaseCategorySummaries.length > 0 && (
+      {/* 仕入高の詳細（前月比付き）- 経費データがある場合のみ */}
+      {(!isLinkedMode || hasExpenseDataForLinkedMonth) && summary.purchaseCategorySummaries.length > 0 && (
         <div className="rounded-2xl border border-rose-100/60 bg-white shadow-lg overflow-hidden">
           <button
             type="button"
@@ -591,8 +621,8 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
         </div>
       )}
 
-      {/* 支払手数料の詳細（前月比付き） */}
-      {summary.feeCategorySummaries.length > 0 && (
+      {/* 支払手数料の詳細（前月比付き）- 経費データがある場合のみ */}
+      {(!isLinkedMode || hasExpenseDataForLinkedMonth) && summary.feeCategorySummaries.length > 0 && (
         <div className="rounded-2xl border border-amber-100/60 bg-white shadow-lg overflow-hidden">
           <button
             type="button"
