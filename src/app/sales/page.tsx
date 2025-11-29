@@ -13,7 +13,6 @@ import {
   ChevronDown,
   ChevronUp,
   FileSpreadsheet,
-  Minus,
   RefreshCcw,
   Sparkles,
   TrendingUp,
@@ -24,13 +23,14 @@ import {
   SALES_TIMESTAMP_KEY,
   loadSalesDataFromStorage,
   type SalesMonthlyData,
+  type SalesDayRecord,
 } from "@/lib/salesData";
 import { getDayType, getWeekdayName } from "@/lib/dateUtils";
 import {
   loadExpenseData,
   type ExpenseRecord,
 } from "@/lib/expenseData";
-import { SalesMonthPortal } from "@/components/sales/SalesMonthPortal";
+import { AnalysisFilterPortal } from "@/components/AnalysisFilterPortal";
 import { setAnalysisPeriodLabel } from "@/lib/analysisPeriod";
 
 const MonthlySalesChart = lazy(() =>
@@ -41,11 +41,6 @@ const MonthlySalesChart = lazy(() =>
 const WeekdaySalesAverageChart = lazy(() =>
   import("@/components/sales/WeekdaySalesAverageChart").then((module) => ({
     default: module.WeekdaySalesAverageChart,
-  })),
-);
-const DailySalesChart = lazy(() =>
-  import("@/components/sales/DailySalesChart").then((module) => ({
-    default: module.DailySalesChart,
   })),
 );
 const ExpenseAnalysisSection = lazy(() =>
@@ -71,124 +66,6 @@ const formatPercentage = (value: number): string =>
     maximumFractionDigits: 1,
   })}%`;
 
-const signedCurrencyFormatter = new Intl.NumberFormat("ja-JP", {
-  style: "currency",
-  currency: "JPY",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-  signDisplay: "exceptZero",
-});
-
-const signedPercentageFormatter = new Intl.NumberFormat("ja-JP", {
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-  signDisplay: "exceptZero",
-});
-
-const formatSignedCurrency = (value: number | null): string => {
-  if (value === null) {
-    return "—";
-  }
-  if (value === 0) {
-    return "±0円";
-  }
-  return signedCurrencyFormatter.format(value);
-};
-
-const formatSignedPercentage = (value: number | null): string => {
-  if (value === null || Number.isNaN(value)) {
-    return "—";
-  }
-  if (value === 0) {
-    return "±0.0%";
-  }
-  return `${signedPercentageFormatter.format(value)}%`;
-};
-
-type TrendTone = "up" | "down" | "flat" | "neutral";
-
-const getTrendTone = (diff: number | null): TrendTone => {
-  if (diff === null) {
-    return "neutral";
-  }
-  if (diff > 0) {
-    return "up";
-  }
-  if (diff < 0) {
-    return "down";
-  }
-  return "flat";
-};
-
-const trendToneStyles: Record<
-  TrendTone,
-  { container: string; accent: string; value: string; subtext: string }
-> = {
-  up: {
-    container:
-      "border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-teal-50/70",
-    accent: "bg-emerald-500/10 text-emerald-600",
-    value: "text-emerald-700",
-    subtext: "text-emerald-600",
-  },
-  down: {
-    container:
-      "border border-rose-200/70 bg-gradient-to-br from-rose-50 to-rose-100/70",
-    accent: "bg-rose-500/10 text-rose-600",
-    value: "text-rose-600",
-    subtext: "text-rose-500",
-  },
-  flat: {
-    container:
-      "border border-slate-200/70 bg-gradient-to-br from-slate-50 to-slate-100/60",
-    accent: "bg-slate-500/10 text-slate-500",
-    value: "text-slate-700",
-    subtext: "text-slate-500",
-  },
-  neutral: {
-    container:
-      "border border-dashed border-slate-200/70 bg-white/70 backdrop-blur",
-    accent: "bg-slate-500/10 text-slate-400",
-    value: "text-slate-500",
-    subtext: "text-slate-400",
-  },
-};
-
-type SalesComparisonCard = {
-  key: "prevMonth" | "prevYear";
-  label: string;
-  referenceLabel: string;
-  diff: number | null;
-  percent: number | null;
-};
-
-type DiffResult = {
-  diff: number | null;
-  percent: number | null;
-};
-
-const calculateDiff = (
-  current: number | null,
-  previous: number | null,
-): DiffResult => {
-  if (current === null || previous === null) {
-    return { diff: null, percent: null };
-  }
-  const diff = current - previous;
-  const percent = previous === 0 ? null : (diff / previous) * 100;
-  return { diff, percent };
-};
-
-const buildMoMText = (diff: number | null, percent: number | null): string => {
-  if (diff === null) {
-    return "前月データなし";
-  }
-  if (percent === null) {
-    return `前月比 ${formatSignedCurrency(diff)}`;
-  }
-  return `前月比 ${formatSignedCurrency(diff)} (${formatSignedPercentage(percent)})`;
-};
-
 const WEEKDAY_ORDER = [
   "月曜",
   "火曜",
@@ -199,9 +76,77 @@ const WEEKDAY_ORDER = [
   "日曜",
 ];
 
+// 期間範囲の集計データ型
+type PeriodSummary = {
+  totalRevenue: number;
+  totalMedicalRevenue: number;
+  totalSelfPayRevenue: number;
+  totalOtherRevenue: number;
+  totalPeopleCount: number | null;
+  averageDailyRevenue: number;
+  averageMonthlyRevenue: number;
+  monthCount: number;
+  dayCount: number;
+  allDays: SalesDayRecord[];
+};
+
+const calculatePeriodSummary = (months: SalesMonthlyData[]): PeriodSummary => {
+  if (months.length === 0) {
+    return {
+      totalRevenue: 0,
+      totalMedicalRevenue: 0,
+      totalSelfPayRevenue: 0,
+      totalOtherRevenue: 0,
+      totalPeopleCount: null,
+      averageDailyRevenue: 0,
+      averageMonthlyRevenue: 0,
+      monthCount: 0,
+      dayCount: 0,
+      allDays: [],
+    };
+  }
+
+  let totalRevenue = 0;
+  let totalMedicalRevenue = 0;
+  let totalSelfPayRevenue = 0;
+  let totalOtherRevenue = 0;
+  let totalPeopleCount = 0;
+  let hasPeople = false;
+  const allDays: SalesDayRecord[] = [];
+
+  for (const month of months) {
+    totalRevenue += month.totalRevenue;
+    totalMedicalRevenue += month.totalMedicalRevenue;
+    totalSelfPayRevenue += month.totalSelfPayRevenue;
+    totalOtherRevenue += month.totalOtherRevenue;
+    if (month.totalPeopleCount !== null) {
+      totalPeopleCount += month.totalPeopleCount;
+      hasPeople = true;
+    }
+    allDays.push(...month.days);
+  }
+
+  const dayCount = allDays.length;
+  const monthCount = months.length;
+
+  return {
+    totalRevenue,
+    totalMedicalRevenue,
+    totalSelfPayRevenue,
+    totalOtherRevenue,
+    totalPeopleCount: hasPeople ? totalPeopleCount : null,
+    averageDailyRevenue: dayCount > 0 ? totalRevenue / dayCount : 0,
+    averageMonthlyRevenue: monthCount > 0 ? totalRevenue / monthCount : 0,
+    monthCount,
+    dayCount,
+    allDays,
+  };
+};
+
 export default function SalesPage() {
   const [salesData, setSalesData] = useState<SalesMonthlyData[]>([]);
-  const [selectedMonthId, setSelectedMonthId] = useState<string | null>(null);
+  const [startMonth, setStartMonth] = useState<string>("");
+  const [endMonth, setEndMonth] = useState<string>("");
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [expenseRecords, setExpenseRecords] = useState<ExpenseRecord[]>([]);
@@ -210,12 +155,13 @@ export default function SalesPage() {
     const loaded = loadSalesDataFromStorage();
     const sorted = [...loaded].sort((a, b) => a.id.localeCompare(b.id));
     setSalesData(sorted);
-    setSelectedMonthId((currentId) => {
-      if (currentId && sorted.some((month) => month.id === currentId)) {
-        return currentId;
-      }
-      return sorted.length > 0 ? sorted[sorted.length - 1].id : null;
-    });
+
+    // 初期値として全期間を選択
+    if (sorted.length > 0) {
+      setStartMonth((current) => current || sorted[0]!.id);
+      setEndMonth((current) => current || sorted[sorted.length - 1]!.id);
+    }
+
     if (typeof window !== "undefined") {
       setLastUpdated(window.localStorage.getItem(SALES_TIMESTAMP_KEY));
     } else {
@@ -230,41 +176,49 @@ export default function SalesPage() {
     hydrateFromStorage();
   }, [hydrateFromStorage]);
 
-  useEffect(() => {
-    setDetailsOpen(false);
-  }, [selectedMonthId]);
-
-  const monthlySummary = useMemo(
-    () =>
-      salesData.map((month) => ({
-        id: month.id,
-        label: month.label,
-        totalRevenue: month.totalRevenue,
-      })),
+  // 月リスト（セレクトボックス用）
+  const monthOptions = useMemo(
+    () => salesData.map((month) => month.id),
     [salesData],
   );
 
-  const selectedMonth = useMemo(() => {
-    if (salesData.length === 0) {
-      return null;
+  // 期間内の月データをフィルタリング
+  const filteredMonths = useMemo(() => {
+    if (!startMonth || !endMonth) {
+      return salesData;
     }
-    if (selectedMonthId) {
-      const matched = salesData.find((month) => month.id === selectedMonthId);
-      if (matched) {
-        return matched;
-      }
+    return salesData.filter(
+      (month) => month.id >= startMonth && month.id <= endMonth,
+    );
+  }, [salesData, startMonth, endMonth]);
+
+  // 期間集計データ
+  const periodSummary = useMemo(
+    () => calculatePeriodSummary(filteredMonths),
+    [filteredMonths],
+  );
+
+  // 期間ラベル
+  const periodLabel = useMemo(() => {
+    if (filteredMonths.length === 0) {
+      return "データなし";
     }
-    return salesData[salesData.length - 1]!;
-  }, [salesData, selectedMonthId]);
+    if (filteredMonths.length === 1) {
+      return filteredMonths[0]!.label;
+    }
+    const first = filteredMonths[0]!;
+    const last = filteredMonths[filteredMonths.length - 1]!;
+    return `${first.label} 〜 ${last.label}`;
+  }, [filteredMonths]);
 
   // ナビゲーションバーの期間表示を更新
   useEffect(() => {
-    if (selectedMonth) {
-      setAnalysisPeriodLabel(selectedMonth.label);
+    if (filteredMonths.length > 0) {
+      setAnalysisPeriodLabel(periodLabel);
     } else {
       setAnalysisPeriodLabel(null);
     }
-  }, [selectedMonth]);
+  }, [filteredMonths, periodLabel]);
 
   // ページ離脱時に期間ラベルをクリア
   useEffect(() => {
@@ -273,87 +227,42 @@ export default function SalesPage() {
     };
   }, []);
 
-  const previousMonthData = useMemo(() => {
-    if (!selectedMonth) {
-      return null;
-    }
-    let prevYear = selectedMonth.year;
-    let prevMonth = selectedMonth.month - 1;
-    if (prevMonth < 1) {
-      prevMonth = 12;
-      prevYear -= 1;
-    }
-    return (
-      salesData.find(
-        (item) => item.year === prevYear && item.month === prevMonth,
-      ) ?? null
-    );
-  }, [salesData, selectedMonth]);
-
-  const previousYearData = useMemo(() => {
-    if (!selectedMonth) {
-      return null;
-    }
-    return (
-      salesData.find(
-        (item) =>
-          item.year === selectedMonth.year - 1 &&
-          item.month === selectedMonth.month,
-      ) ?? null
-    );
-  }, [salesData, selectedMonth]);
-
-  const comparisonCards = useMemo(() => {
-    if (!selectedMonth) {
-      return [];
-    }
-
-    const buildCard = (
-      key: SalesComparisonCard["key"],
-      label: string,
-      reference: SalesMonthlyData | null,
-    ): SalesComparisonCard => {
-      if (!reference) {
-        return {
-          key,
-          label,
-          referenceLabel: "比較対象なし",
-          diff: null,
-          percent: null,
-        };
-      }
-      const diff = selectedMonth.totalRevenue - reference.totalRevenue;
-      const percent =
-        reference.totalRevenue === 0
-          ? null
-          : (diff / reference.totalRevenue) * 100;
-      return {
-        key,
-        label,
-        referenceLabel: reference.label,
-        diff,
-        percent,
-      };
-    };
-
-    return [
-      buildCard("prevMonth", "前月比", previousMonthData),
-      buildCard("prevYear", "前年比", previousYearData),
-    ];
-  }, [previousMonthData, previousYearData, selectedMonth]);
-
-  const latestMonth = useMemo(
-    () => (salesData.length > 0 ? salesData[salesData.length - 1] : null),
+  // 月をラベル表示に変換
+  const renderMonthLabel = useCallback(
+    (monthId: string) => {
+      const month = salesData.find((m) => m.id === monthId);
+      return month?.label ?? monthId;
+    },
     [salesData],
   );
 
+  // リセット処理
+  const handleReset = useCallback(() => {
+    if (salesData.length > 0) {
+      setStartMonth(salesData[0]!.id);
+      setEndMonth(salesData[salesData.length - 1]!.id);
+    }
+  }, [salesData]);
+
+  // 月別サマリーデータ（グラフ用）
+  const monthlySummary = useMemo(
+    () =>
+      filteredMonths.map((month) => ({
+        id: month.id,
+        label: month.label,
+        totalRevenue: month.totalRevenue,
+      })),
+    [filteredMonths],
+  );
+
+  // 曜日別平均売上データ
   const weekdayAverageData = useMemo(() => {
-    if (!selectedMonth) {
+    if (periodSummary.allDays.length === 0) {
       return [];
     }
     const accumulator = new Map<string, { label: string; total: number; count: number }>();
 
-    for (const day of selectedMonth.days) {
+    for (const day of periodSummary.allDays) {
       const dayType = getDayType(day.date);
       const weekdayName = getWeekdayName(day.date);
       const isHolidayType =
@@ -385,86 +294,17 @@ export default function SalesPage() {
           value: bucket.count > 0 ? bucket.total / bucket.count : 0,
         };
       });
-  }, [selectedMonth]);
+  }, [periodSummary.allDays]);
 
-  const dailyChartData = useMemo(() => {
-    if (!selectedMonth) {
-      return [];
-    }
-    return selectedMonth.days.map((day) => ({
-      day: day.day,
-      date: day.date,
-      totalRevenue: day.totalRevenue,
-      note: day.note ?? undefined,
-    }));
-  }, [selectedMonth]);
-
-  const profitableDays = useMemo(() => {
-    if (!selectedMonth) {
-      return [];
-    }
-    return selectedMonth.days.filter((day) => day.totalRevenue > 0);
-  }, [selectedMonth]);
-
-  const bestDay = useMemo(() => {
-    if (profitableDays.length === 0) {
-      return null;
-    }
-    return profitableDays.reduce((acc, day) =>
-      day.totalRevenue > acc.totalRevenue ? day : acc,
-    );
-  }, [profitableDays]);
-
-  const worstDay = useMemo(() => {
-    if (profitableDays.length === 0) {
-      return null;
-    }
-    return profitableDays.reduce((acc, day) =>
-      day.totalRevenue < acc.totalRevenue ? day : acc,
-    );
-  }, [profitableDays]);
-
-  const previousMonthBestDay = useMemo(() => {
-    if (!previousMonthData) {
-      return null;
-    }
-    const days = previousMonthData.days.filter(
-      (day) => day.totalRevenue > 0,
-    );
-    if (days.length === 0) {
-      return null;
-    }
-    return days.reduce((acc, day) =>
-      day.totalRevenue > acc.totalRevenue ? day : acc,
-    );
-  }, [previousMonthData]);
-
-  const previousMonthWorstDay = useMemo(() => {
-    if (!previousMonthData) {
-      return null;
-    }
-    const days = previousMonthData.days.filter(
-      (day) => day.totalRevenue > 0,
-    );
-    if (days.length === 0) {
-      return null;
-    }
-    return days.reduce((acc, day) =>
-      day.totalRevenue < acc.totalRevenue ? day : acc,
-    );
-  }, [previousMonthData]);
-
+  // 売上構成
   const composition = useMemo(() => {
-    if (!selectedMonth) {
-      return null;
-    }
     const {
       totalRevenue,
       totalMedicalRevenue,
       totalSelfPayRevenue,
       totalOtherRevenue,
       totalPeopleCount,
-    } = selectedMonth;
+    } = periodSummary;
 
     const segments = [
       { label: "医療収益", value: totalMedicalRevenue },
@@ -483,22 +323,21 @@ export default function SalesPage() {
       segments,
       averagePerPerson:
         totalPeopleCount && totalPeopleCount > 0
-          ? selectedMonth.totalRevenue / totalPeopleCount
+          ? totalRevenue / totalPeopleCount
           : null,
       totalPeopleCount,
     };
-  }, [selectedMonth]);
+  }, [periodSummary]);
 
+  // 売上上位日
   const topDays = useMemo(() => {
-    if (!selectedMonth) {
-      return [];
-    }
-    return [...selectedMonth.days]
+    return [...periodSummary.allDays]
       .filter((day) => day.totalRevenue > 0)
       .sort((a, b) => b.totalRevenue - a.totalRevenue)
       .slice(0, 5);
-  }, [selectedMonth]);
+  }, [periodSummary.allDays]);
 
+  // 最高/最低曜日
   const weekdayHighlight = useMemo(() => {
     if (weekdayAverageData.length === 0) {
       return null;
@@ -511,77 +350,9 @@ export default function SalesPage() {
     [weekdayAverageData],
   );
 
-  const monthlyDiff = useMemo(
-    () =>
-      calculateDiff(
-        selectedMonth ? selectedMonth.totalRevenue : null,
-        previousMonthData ? previousMonthData.totalRevenue : null,
-      ),
-    [previousMonthData, selectedMonth],
-  );
-
-  const averageDailyDiff = useMemo(
-    () =>
-      calculateDiff(
-        selectedMonth ? selectedMonth.averageDailyRevenue : null,
-        previousMonthData ? previousMonthData.averageDailyRevenue : null,
-      ),
-    [previousMonthData, selectedMonth],
-  );
-
-  const bestDayDiff = useMemo(
-    () =>
-      calculateDiff(
-        bestDay ? bestDay.totalRevenue : null,
-        previousMonthBestDay ? previousMonthBestDay.totalRevenue : null,
-      ),
-    [bestDay, previousMonthBestDay],
-  );
-
-  const worstDayDiff = useMemo(
-    () =>
-      calculateDiff(
-        worstDay ? worstDay.totalRevenue : null,
-        previousMonthWorstDay ? previousMonthWorstDay.totalRevenue : null,
-      ),
-    [previousMonthWorstDay, worstDay],
-  );
-
-  const monthlyTone = trendToneStyles[getTrendTone(monthlyDiff.diff)];
-  const averageDailyTone = trendToneStyles[getTrendTone(averageDailyDiff.diff)];
-  const bestDayTone = trendToneStyles[getTrendTone(bestDayDiff.diff)];
-  const worstDayTone = trendToneStyles[getTrendTone(worstDayDiff.diff)];
-  const monthlyTrend = getTrendTone(monthlyDiff.diff);
-  const averageDailyTrend = getTrendTone(averageDailyDiff.diff);
-  const bestDayTrend = getTrendTone(bestDayDiff.diff);
-  const worstDayTrend = getTrendTone(worstDayDiff.diff);
-  const MonthlyTrendIcon =
-    monthlyTrend === "up"
-      ? ChevronUp
-      : monthlyTrend === "down"
-        ? ChevronDown
-        : Minus;
-  const AverageTrendIcon =
-    averageDailyTrend === "up"
-      ? ChevronUp
-      : averageDailyTrend === "down"
-        ? ChevronDown
-        : Minus;
-  const BestDayTrendIcon =
-    bestDayTrend === "up"
-      ? ChevronUp
-      : bestDayTrend === "down"
-        ? ChevronDown
-        : Minus;
-  const WorstDayTrendIcon =
-    worstDayTrend === "up"
-      ? ChevronUp
-      : worstDayTrend === "down"
-        ? ChevronDown
-        : Minus;
-
+  // インサイト
   const insights = useMemo(() => {
-    if (!selectedMonth) {
+    if (periodSummary.monthCount === 0) {
       return [];
     }
     const output: { title: string; description: string }[] = [];
@@ -616,12 +387,12 @@ export default function SalesPage() {
       });
     }
 
-    if (topDays.length > 0 && selectedMonth.totalRevenue > 0) {
+    if (topDays.length > 0 && periodSummary.totalRevenue > 0) {
       const topShare =
-        (topDays[0]!.totalRevenue / selectedMonth.totalRevenue) * 100;
+        (topDays[0]!.totalRevenue / periodSummary.totalRevenue) * 100;
       output.push({
         title: "ピーク日の寄与度",
-        description: `${topDays[0]!.day}日の売上は月全体の${formatPercentage(
+        description: `${topDays[0]!.date}の売上は期間全体の${formatPercentage(
           topShare,
         )}に相当します。`,
       });
@@ -640,16 +411,28 @@ export default function SalesPage() {
   }, [
     composition,
     holidayAverage,
-    selectedMonth,
+    periodSummary,
     topDays,
     weekdayHighlight,
   ]);
 
-  const hasData = salesData.length > 0 && selectedMonth;
+  const hasData = salesData.length > 0 && filteredMonths.length > 0;
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-emerald-50/40 via-teal-50/30 to-cyan-50/40 pb-24">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-10">
+        {/* Filter Portal */}
+        <AnalysisFilterPortal
+          months={monthOptions}
+          startMonth={startMonth}
+          endMonth={endMonth}
+          onChangeStart={setStartMonth}
+          onChangeEnd={setEndMonth}
+          onReset={handleReset}
+          label={periodLabel}
+          renderMonthLabel={renderMonthLabel}
+        />
+
         {/* Hero Section */}
         <section className="overflow-hidden rounded-3xl border border-emerald-100/60 bg-white/95 shadow-2xl shadow-emerald-500/5">
           <div className="relative isolate px-8 py-16 sm:px-12 lg:px-20">
@@ -669,7 +452,7 @@ export default function SalesPage() {
                 売上分析ダッシュボード
               </h1>
               <p className="max-w-2xl text-lg leading-relaxed text-slate-600">
-                月次売上と曜日トレンドを可視化。データに基づいた意思決定をサポートします。
+                期間を選択して、月次売上と曜日トレンドを可視化。データに基づいた意思決定をサポートします。
               </p>
               <div className="flex flex-wrap items-center gap-4">
                 <button
@@ -687,12 +470,72 @@ export default function SalesPage() {
 
         {hasData ? (
           <>
-            <SalesMonthPortal
-              months={monthlySummary}
-              selectedMonthId={selectedMonthId}
-              onChangeMonth={setSelectedMonthId}
-              displayLabel={selectedMonth?.label}
-            />
+            {/* Period Summary KPI Cards */}
+            <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="group relative overflow-hidden rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
+                <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-emerald-300/40 blur-2xl" />
+                <div className="relative">
+                  <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-500 p-2.5 shadow-md">
+                    <DollarSign className="h-5 w-5 text-white" />
+                  </div>
+                  <p className="text-sm font-semibold text-emerald-700">期間合計</p>
+                  <p className="mt-2 text-3xl font-black text-emerald-600">
+                    {formatCurrency(periodSummary.totalRevenue)}
+                  </p>
+                  <p className="mt-2 text-xs text-emerald-600/80">
+                    {periodSummary.monthCount}ヶ月分
+                  </p>
+                </div>
+              </div>
+
+              <div className="group relative overflow-hidden rounded-2xl border border-blue-200/60 bg-gradient-to-br from-blue-50 to-blue-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
+                <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-blue-300/40 blur-2xl" />
+                <div className="relative">
+                  <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-blue-400 to-blue-500 p-2.5 shadow-md">
+                    <TrendingUp className="h-5 w-5 text-white" />
+                  </div>
+                  <p className="text-sm font-semibold text-blue-700">月平均売上</p>
+                  <p className="mt-2 text-3xl font-black text-blue-600">
+                    {formatCurrency(periodSummary.averageMonthlyRevenue)}
+                  </p>
+                  <p className="mt-2 text-xs text-blue-600/80">
+                    月あたり
+                  </p>
+                </div>
+              </div>
+
+              <div className="group relative overflow-hidden rounded-2xl border border-amber-200/60 bg-gradient-to-br from-amber-50 to-amber-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
+                <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-amber-300/40 blur-2xl" />
+                <div className="relative">
+                  <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 p-2.5 shadow-md">
+                    <CalendarClock className="h-5 w-5 text-white" />
+                  </div>
+                  <p className="text-sm font-semibold text-amber-700">日平均売上</p>
+                  <p className="mt-2 text-3xl font-black text-amber-600">
+                    {formatCurrency(periodSummary.averageDailyRevenue)}
+                  </p>
+                  <p className="mt-2 text-xs text-amber-600/80">
+                    {periodSummary.dayCount}日分
+                  </p>
+                </div>
+              </div>
+
+              <div className="group relative overflow-hidden rounded-2xl border border-purple-200/60 bg-gradient-to-br from-purple-50 to-purple-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
+                <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-purple-300/40 blur-2xl" />
+                <div className="relative">
+                  <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-purple-400 to-purple-500 p-2.5 shadow-md">
+                    <Award className="h-5 w-5 text-white" />
+                  </div>
+                  <p className="text-sm font-semibold text-purple-700">来院人数</p>
+                  <p className="mt-2 text-3xl font-black text-purple-600">
+                    {formatPeople(periodSummary.totalPeopleCount)}
+                  </p>
+                  <p className="mt-2 text-xs text-purple-600/80">
+                    期間合計
+                  </p>
+                </div>
+              </div>
+            </section>
 
             {/* Monthly Overview */}
             <section className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
@@ -703,7 +546,7 @@ export default function SalesPage() {
                       月別の売上推移
                     </h2>
                     <p className="mt-1 text-sm text-slate-600">
-                      アップロード済みの月次データから売上を集計
+                      選択期間: {periodLabel}
                     </p>
                   </div>
                   {lastUpdated && (
@@ -726,58 +569,52 @@ export default function SalesPage() {
                   >
                     <MonthlySalesChart
                       data={monthlySummary}
-                      selectedId={selectedMonth?.id}
-                      onSelect={setSelectedMonthId}
+                      selectedId={undefined}
+                      onSelect={() => {}}
                     />
                   </Suspense>
                 </div>
               </div>
 
               <div className="flex flex-col gap-6">
-                {latestMonth ? (
-                  <div className="rounded-3xl border border-emerald-100/60 bg-gradient-to-br from-white to-emerald-50/30 p-7 shadow-xl shadow-emerald-500/5">
-                    <div className="mb-5 flex items-center gap-3">
-                      <div className="rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 p-2.5 shadow-md">
-                        <Award className="h-5 w-5 text-white" />
-                      </div>
-                      <h3 className="text-xl font-bold text-slate-900">
-                        直近の集計状況
-                      </h3>
+                <div className="rounded-3xl border border-emerald-100/60 bg-gradient-to-br from-white to-emerald-50/30 p-7 shadow-xl shadow-emerald-500/5">
+                  <div className="mb-5 flex items-center gap-3">
+                    <div className="rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 p-2.5 shadow-md">
+                      <Award className="h-5 w-5 text-white" />
                     </div>
-                    <div className="space-y-4">
-                      <div className="rounded-2xl bg-white/80 p-5 border border-emerald-100/50 shadow-sm">
-                        <p className="text-sm font-medium text-slate-500">対象月</p>
-                        <p className="mt-2 text-2xl font-black text-emerald-700">
-                          {latestMonth.label}
+                    <h3 className="text-xl font-bold text-slate-900">
+                      期間サマリー
+                    </h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="rounded-2xl bg-white/80 p-5 border border-emerald-100/50 shadow-sm">
+                      <p className="text-sm font-medium text-slate-500">分析期間</p>
+                      <p className="mt-2 text-xl font-black text-emerald-700">
+                        {periodLabel}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl bg-white/80 p-5 border border-emerald-100/50 shadow-sm">
+                      <p className="text-sm font-medium text-slate-500">期間合計売上</p>
+                      <p className="mt-2 text-3xl font-black text-slate-900">
+                        {formatCurrency(periodSummary.totalRevenue)}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="rounded-2xl bg-white/80 p-4 border border-emerald-100/50 shadow-sm">
+                        <p className="text-xs font-medium text-slate-500">月数</p>
+                        <p className="mt-2 text-lg font-bold text-slate-900">
+                          {periodSummary.monthCount}ヶ月
                         </p>
                       </div>
-                      <div className="rounded-2xl bg-white/80 p-5 border border-emerald-100/50 shadow-sm">
-                        <p className="text-sm font-medium text-slate-500">月次合計</p>
-                        <p className="mt-2 text-3xl font-black text-slate-900">
-                          {formatCurrency(latestMonth.totalRevenue)}
+                      <div className="rounded-2xl bg-white/80 p-4 border border-emerald-100/50 shadow-sm">
+                        <p className="text-xs font-medium text-slate-500">営業日数</p>
+                        <p className="mt-2 text-lg font-bold text-slate-900">
+                          {periodSummary.dayCount}日
                         </p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="rounded-2xl bg-white/80 p-4 border border-emerald-100/50 shadow-sm">
-                          <p className="text-xs font-medium text-slate-500">平均日次</p>
-                          <p className="mt-2 text-lg font-bold text-slate-900">
-                            {formatCurrency(latestMonth.averageDailyRevenue)}
-                          </p>
-                        </div>
-                        <div className="rounded-2xl bg-white/80 p-4 border border-emerald-100/50 shadow-sm">
-                          <p className="text-xs font-medium text-slate-500">来院人数</p>
-                          <p className="mt-2 text-lg font-bold text-slate-900">
-                            {formatPeople(latestMonth.totalPeopleCount)}
-                          </p>
-                        </div>
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="rounded-3xl border-2 border-dashed border-emerald-200 bg-emerald-50/30 p-8 text-center text-sm text-slate-500 shadow-inner">
-                    売上データを取り込むとここにサマリが表示されます。
-                  </div>
-                )}
+                </div>
 
                 <div className="rounded-3xl border border-emerald-100/60 bg-white p-7 shadow-xl shadow-emerald-500/5">
                   <div className="mb-4 flex items-center gap-2.5">
@@ -792,7 +629,7 @@ export default function SalesPage() {
                         <div className="h-2 w-2 rounded-full bg-emerald-600" />
                       </div>
                       <span>
-                        売上CSVは「2025年売上表-2025_09.csv」のように年月を含めると自動判別されます
+                        開始月・終了月を選択すると、その期間のデータを集計して表示します
                       </span>
                     </li>
                     <li className="flex items-start gap-3 rounded-xl bg-emerald-50/50 p-3">
@@ -800,504 +637,340 @@ export default function SalesPage() {
                         <div className="h-2 w-2 rounded-full bg-emerald-600" />
                       </div>
                       <span>
-                        ファイル名に「売上」を含めるとデータ管理で一括処理できます
+                        「期間をリセット」で全期間表示に戻ります
                       </span>
                     </li>
                   </ul>
-                  <p className="mt-5 rounded-xl border-2 border-emerald-200 bg-emerald-50/50 px-4 py-2.5 text-center text-sm font-semibold text-emerald-700">
-                    CSV の管理はデータ管理ページでまとめて実施できます。
-                  </p>
                 </div>
               </div>
             </section>
 
             {/* Detailed Analysis */}
             <section className="flex flex-col gap-7 rounded-3xl border border-emerald-100/60 bg-white p-8 shadow-xl shadow-emerald-500/5">
-              <div className="flex flex-wrap items-center justify-between gap-5">
-                <div>
-                  <h2 className="text-3xl font-black text-slate-900">
-                    月別の詳細分析
-                  </h2>
-                  <p className="mt-1 text-base text-slate-600">
-                    表示したい月を切り替えて、曜日平均・日別推移・詳細テーブルを確認
-                  </p>
+              <div>
+                <h2 className="text-3xl font-black text-slate-900">
+                  期間内の詳細分析
+                </h2>
+                <p className="mt-1 text-base text-slate-600">
+                  {periodLabel} の曜日平均・売上構成・ハイライトを確認
+                </p>
+              </div>
+
+              {/* Charts */}
+              <div className="grid gap-7 lg:grid-cols-2">
+                <div className="rounded-3xl border border-emerald-100/60 bg-white p-6 shadow-lg">
+                  <div className="mb-5 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-900">
+                        曜日別平均売上
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {periodSummary.dayCount}日分のデータ
+                      </p>
+                    </div>
+                  </div>
+                  <Suspense
+                    fallback={
+                      <div className="h-80 w-full animate-pulse rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50" />
+                    }
+                  >
+                    <WeekdaySalesAverageChart data={weekdayAverageData} />
+                  </Suspense>
                 </div>
-                <div className="flex flex-wrap gap-2.5">
-                  {salesData.map((month) => (
-                    <button
-                      key={month.id}
-                      type="button"
-                      onClick={() => setSelectedMonthId(month.id)}
-                      className={`rounded-full px-5 py-2.5 text-sm font-bold transition-all ${
-                        month.id === selectedMonth?.id
-                          ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/40 scale-105"
-                          : "border-2 border-emerald-200 text-slate-600 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700"
-                      }`}
-                    >
-                      {month.label}
-                    </button>
-                  ))}
+
+                <div className="rounded-3xl border border-emerald-100/60 bg-white p-6 shadow-lg">
+                  <div className="mb-5 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-900">
+                        月別売上推移
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {periodSummary.monthCount}ヶ月分のトレンド
+                      </p>
+                    </div>
+                  </div>
+                  <Suspense
+                    fallback={
+                      <div className="h-80 w-full animate-pulse rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50" />
+                    }
+                  >
+                    <MonthlySalesChart
+                      data={monthlySummary}
+                      selectedId={undefined}
+                      onSelect={() => {}}
+                    />
+                  </Suspense>
                 </div>
               </div>
 
-              {selectedMonth ? (
-                <div className="flex flex-col gap-7">
-                  {/* KPI Cards */}
-                  <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="group relative overflow-hidden rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
-                      <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-emerald-300/40 blur-2xl" />
-                      <div className="relative">
-                        <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-500 p-2.5 shadow-md">
-                          <DollarSign className="h-5 w-5 text-white" />
-                        </div>
-                        <p className="text-sm font-semibold text-emerald-700">月次合計</p>
-                        <p className="mt-2 text-3xl font-black text-emerald-600">
-                          {formatCurrency(selectedMonth.totalRevenue)}
-                        </p>
-                        <div
-                          className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${monthlyTone.accent}`}
-                        >
-                          <MonthlyTrendIcon className="h-3.5 w-3.5" />
-                          <span>{buildMoMText(monthlyDiff.diff, monthlyDiff.percent)}</span>
-                        </div>
-                      </div>
+              {/* Composition & Highlights */}
+              <div className="grid gap-7 lg:grid-cols-2">
+                <div className="rounded-3xl border border-emerald-100/60 bg-gradient-to-br from-white to-emerald-50/20 p-7 shadow-lg">
+                  <div className="mb-5 flex items-center gap-2.5">
+                    <div className="rounded-xl bg-emerald-100 p-2">
+                      <DollarSign className="h-5 w-5 text-emerald-700" />
                     </div>
-
-                    <div className="group relative overflow-hidden rounded-2xl border border-blue-200/60 bg-gradient-to-br from-blue-50 to-blue-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
-                      <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-blue-300/40 blur-2xl" />
-                      <div className="relative">
-                        <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-blue-400 to-blue-500 p-2.5 shadow-md">
-                          <TrendingUp className="h-5 w-5 text-white" />
-                        </div>
-                        <p className="text-sm font-semibold text-blue-700">平均日次売上</p>
-                        <p className="mt-2 text-3xl font-black text-blue-600">
-                          {formatCurrency(selectedMonth.averageDailyRevenue)}
-                        </p>
-                        <div
-                          className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${averageDailyTone.accent}`}
-                        >
-                          <AverageTrendIcon className="h-3.5 w-3.5" />
-                          <span>{buildMoMText(averageDailyDiff.diff, averageDailyDiff.percent)}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="group relative overflow-hidden rounded-2xl border border-amber-200/60 bg-gradient-to-br from-amber-50 to-amber-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
-                      <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-amber-300/40 blur-2xl" />
-                      <div className="relative">
-                        <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 p-2.5 shadow-md">
-                          <Award className="h-5 w-5 text-white" />
-                        </div>
-                        <p className="text-sm font-semibold text-amber-700">
-                          最高日 ({bestDay ? `${bestDay.day}日` : "—"})
-                        </p>
-                        <p className="mt-2 text-3xl font-black text-amber-600">
-                          {bestDay ? formatCurrency(bestDay.totalRevenue) : "—"}
-                        </p>
-                        <div
-                          className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${bestDayTone.accent}`}
-                        >
-                          <BestDayTrendIcon className="h-3.5 w-3.5" />
-                          <span>{buildMoMText(bestDayDiff.diff, bestDayDiff.percent)}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="group relative overflow-hidden rounded-2xl border border-purple-200/60 bg-gradient-to-br from-purple-50 to-purple-100/50 p-6 shadow-lg hover:shadow-2xl transition-all hover:scale-105">
-                      <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-purple-300/40 blur-2xl" />
-                      <div className="relative">
-                        <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-purple-400 to-purple-500 p-2.5 shadow-md">
-                          <CalendarClock className="h-5 w-5 text-white" />
-                        </div>
-                        <p className="text-sm font-semibold text-purple-700">
-                          最低日 ({worstDay ? `${worstDay.day}日` : "—"})
-                        </p>
-                        <p className="mt-2 text-3xl font-black text-purple-600">
-                          {worstDay ? formatCurrency(worstDay.totalRevenue) : "—"}
-                        </p>
-                        <div
-                          className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${worstDayTone.accent}`}
-                        >
-                          <WorstDayTrendIcon className="h-3.5 w-3.5" />
-                          <span>{buildMoMText(worstDayDiff.diff, worstDayDiff.percent)}</span>
-                        </div>
-                      </div>
-                    </div>
+                    <h3 className="text-xl font-bold text-slate-900">
+                      売上構成
+                    </h3>
                   </div>
-
-                  <div className="grid gap-5 sm:grid-cols-2">
-                    {comparisonCards.map((card) => {
-                      const tone = getTrendTone(card.diff);
-                      const styles = trendToneStyles[tone];
-                      const Icon =
-                        tone === "up"
-                          ? ChevronUp
-                          : tone === "down"
-                            ? ChevronDown
-                            : Minus;
-                      return (
-                        <div
-                          key={card.key}
-                          className={`rounded-3xl p-5 shadow-lg transition-all hover:shadow-xl ${styles.container}`}
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="text-sm font-semibold text-slate-700">
-                              {card.label}
-                            </p>
-                            <span
-                              className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${styles.accent}`}
-                            >
-                              <Icon className="h-4 w-4" />
+                  {composition && composition.segments.length > 0 ? (
+                    <ul className="space-y-3">
+                      {composition.segments.map((segment, index) => {
+                        const colors = [
+                          { bg: "from-rose-50 to-pink-50", border: "border-rose-200", text: "text-rose-700", value: "text-rose-600" },
+                          { bg: "from-blue-50 to-cyan-50", border: "border-blue-200", text: "text-blue-700", value: "text-blue-600" },
+                          { bg: "from-violet-50 to-purple-50", border: "border-violet-200", text: "text-violet-700", value: "text-violet-600" },
+                        ];
+                        const color = colors[index % colors.length];
+                        return (
+                          <li
+                            key={segment.label}
+                            className={`flex items-center justify-between rounded-2xl border ${color.border} bg-gradient-to-r ${color.bg} p-5 shadow-md hover:shadow-lg transition-all`}
+                          >
+                            <span className={`font-bold ${color.text}`}>
+                              {segment.label}
                             </span>
-                          </div>
-                          <p className={`mt-3 text-2xl font-black ${styles.value}`}>
-                            {formatSignedCurrency(card.diff)}
-                          </p>
-                          <p className={`mt-2 text-xs font-semibold ${styles.subtext}`}>
-                            {card.diff === null
-                              ? "比較対象の月がありません"
-                              : `比較対象: ${card.referenceLabel}`}
-                          </p>
-                          <p className={`mt-1 text-xs font-semibold ${styles.subtext}`}>
-                            {formatSignedPercentage(card.percent)}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Charts */}
-                  <div className="grid gap-7 lg:grid-cols-2">
-                    <div className="rounded-3xl border border-emerald-100/60 bg-white p-6 shadow-lg">
-                      <div className="mb-5 flex items-center justify-between">
-                        <div>
-                          <h3 className="text-xl font-bold text-slate-900">
-                            曜日別平均売上
-                          </h3>
-                          <p className="mt-1 text-sm text-slate-500">
-                            {selectedMonth.days.length}日分のデータ
-                          </p>
-                        </div>
-                      </div>
-                      <Suspense
-                        fallback={
-                          <div className="h-80 w-full animate-pulse rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50" />
-                        }
-                      >
-                        <WeekdaySalesAverageChart data={weekdayAverageData} />
-                      </Suspense>
-                    </div>
-
-                    <div className="rounded-3xl border border-emerald-100/60 bg-white p-6 shadow-lg">
-                      <div className="mb-5 flex items-center justify-between">
-                        <div>
-                          <h3 className="text-xl font-bold text-slate-900">
-                            日別売上推移
-                          </h3>
-                          <p className="mt-1 text-sm text-slate-500">
-                            {bestDay ? `ピーク日: ${bestDay.day}日` : "ピーク未設定"}
-                          </p>
-                        </div>
-                      </div>
-                      <Suspense
-                        fallback={
-                          <div className="h-80 w-full animate-pulse rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50" />
-                        }
-                      >
-                        <DailySalesChart
-                          data={dailyChartData}
-                          highlightDay={bestDay?.day}
-                        />
-                      </Suspense>
-                    </div>
-                  </div>
-
-                  {/* Composition & Highlights */}
-                  <div className="grid gap-7 lg:grid-cols-2">
-                    <div className="rounded-3xl border border-emerald-100/60 bg-gradient-to-br from-white to-emerald-50/20 p-7 shadow-lg">
-                      <div className="mb-5 flex items-center gap-2.5">
-                        <div className="rounded-xl bg-emerald-100 p-2">
-                          <DollarSign className="h-5 w-5 text-emerald-700" />
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-900">
-                          売上構成
-                        </h3>
-                      </div>
-                      {composition && composition.segments.length > 0 ? (
-                        <ul className="space-y-3">
-                          {composition.segments.map((segment, index) => {
-                            const colors = [
-                              { bg: "from-rose-50 to-pink-50", border: "border-rose-200", text: "text-rose-700", value: "text-rose-600" },
-                              { bg: "from-blue-50 to-cyan-50", border: "border-blue-200", text: "text-blue-700", value: "text-blue-600" },
-                              { bg: "from-violet-50 to-purple-50", border: "border-violet-200", text: "text-violet-700", value: "text-violet-600" },
-                            ];
-                            const color = colors[index % colors.length];
-                            return (
-                              <li
-                                key={segment.label}
-                                className={`flex items-center justify-between rounded-2xl border ${color.border} bg-gradient-to-r ${color.bg} p-5 shadow-md hover:shadow-lg transition-all`}
-                              >
-                                <span className={`font-bold ${color.text}`}>
-                                  {segment.label}
-                                </span>
-                                <div className="text-right">
-                                  <div className={`text-xl font-black ${color.value}`}>
-                                    {formatCurrency(segment.value)}
-                                  </div>
-                                  <div className={`text-sm font-semibold ${color.text}`}>
-                                    {formatPercentage(segment.percentage)}
-                                  </div>
-                                </div>
-                              </li>
-                            );
-                          })}
-                          <li className="flex items-center justify-between rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-100 to-teal-100 p-5 shadow-lg">
-                            <span className="font-black text-emerald-800">
-                              平均単価
-                            </span>
-                            <span className="text-xl font-black text-emerald-700">
-                              {composition.averagePerPerson !== null
-                                ? formatCurrency(composition.averagePerPerson)
-                                : "—"}
-                            </span>
+                            <div className="text-right">
+                              <div className={`text-xl font-black ${color.value}`}>
+                                {formatCurrency(segment.value)}
+                              </div>
+                              <div className={`text-sm font-semibold ${color.text}`}>
+                                {formatPercentage(segment.percentage)}
+                              </div>
+                            </div>
                           </li>
-                        </ul>
-                      ) : (
-                        <p className="text-sm text-slate-500">
-                          有効な売上構成がまだありません。
-                        </p>
-                      )}
-                    </div>
+                        );
+                      })}
+                      <li className="flex items-center justify-between rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-100 to-teal-100 p-5 shadow-lg">
+                        <span className="font-black text-emerald-800">
+                          平均単価
+                        </span>
+                        <span className="text-xl font-black text-emerald-700">
+                          {composition.averagePerPerson !== null
+                            ? formatCurrency(composition.averagePerPerson)
+                            : "—"}
+                        </span>
+                      </li>
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      有効な売上構成がまだありません。
+                    </p>
+                  )}
+                </div>
 
-                    <div className="rounded-3xl border border-emerald-100/60 bg-gradient-to-br from-white to-teal-50/20 p-7 shadow-lg">
-                      <div className="mb-5 flex items-center gap-2.5">
-                        <div className="rounded-xl bg-teal-100 p-2">
-                          <Award className="h-5 w-5 text-teal-700" />
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-900">
-                          売上ハイライト
-                        </h3>
-                      </div>
-                      {topDays.length > 0 ? (
-                        <ul className="space-y-3">
-                          {topDays.map((day, index) => {
-                            const weekday = getWeekdayName(day.date);
-                            const type = getDayType(day.date);
-                            const rankColors = [
-                              { bg: "from-amber-50 to-yellow-50", border: "border-amber-200", badge: "from-amber-400 to-amber-500", text: "text-amber-700", value: "text-amber-600" },
-                              { bg: "from-slate-50 to-gray-50", border: "border-slate-200", badge: "from-slate-400 to-slate-500", text: "text-slate-700", value: "text-slate-600" },
-                              { bg: "from-orange-50 to-amber-50", border: "border-orange-200", badge: "from-orange-400 to-orange-500", text: "text-orange-700", value: "text-orange-600" },
-                              { bg: "from-sky-50 to-blue-50", border: "border-sky-200", badge: "from-sky-400 to-sky-500", text: "text-sky-700", value: "text-sky-600" },
-                              { bg: "from-indigo-50 to-violet-50", border: "border-indigo-200", badge: "from-indigo-400 to-indigo-500", text: "text-indigo-700", value: "text-indigo-600" },
-                            ];
-                            const color = rankColors[index];
-                            return (
-                              <li
-                                key={day.day}
-                                className={`flex items-center justify-between rounded-2xl border ${color.border} bg-gradient-to-r ${color.bg} p-4 shadow-md hover:shadow-xl transition-all ${
-                                  index === 0 ? "scale-105 border-2" : ""
-                                }`}
-                              >
-                                <div className="flex items-center gap-3">
-                                  <div className={`flex h-10 w-10 items-center justify-center rounded-xl font-black bg-gradient-to-br ${color.badge} text-white shadow-md`}>
-                                    {index + 1}
-                                  </div>
-                                  <div>
-                                    <div className={`font-bold ${color.text}`}>
-                                      {day.day}日 ({weekday})
-                                    </div>
-                                    <div className="text-xs font-medium text-slate-500">
-                                      {type}
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className={`text-right ${index === 0 ? "text-xl" : "text-lg"} font-black ${color.value}`}>
-                                  {formatCurrency(day.totalRevenue)}
-                                </div>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      ) : (
-                        <p className="text-sm text-slate-500">
-                          売上データが登録されると上位日が表示されます。
-                        </p>
-                      )}
+                <div className="rounded-3xl border border-emerald-100/60 bg-gradient-to-br from-white to-teal-50/20 p-7 shadow-lg">
+                  <div className="mb-5 flex items-center gap-2.5">
+                    <div className="rounded-xl bg-teal-100 p-2">
+                      <Award className="h-5 w-5 text-teal-700" />
                     </div>
+                    <h3 className="text-xl font-bold text-slate-900">
+                      売上ハイライト（期間内TOP5）
+                    </h3>
                   </div>
-
-                  {/* Insights */}
-                  {insights.length > 0 && (
-                    <div className="rounded-3xl border border-emerald-100/60 bg-gradient-to-br from-emerald-50/50 via-teal-50/30 to-cyan-50/30 p-7 shadow-lg">
-                      <div className="mb-5 flex items-center gap-2.5">
-                        <div className="rounded-xl bg-white p-2 shadow-sm">
-                          <Sparkles className="h-5 w-5 text-emerald-600" />
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-900">
-                          追加インサイト
-                        </h3>
-                      </div>
-                      <ul className="grid gap-4 sm:grid-cols-2">
-                        {insights.map((insight, index) => {
-                          const insightColors = [
-                            { bg: "from-emerald-50 to-teal-50", border: "border-emerald-200", icon: "bg-emerald-100", iconColor: "text-emerald-600", text: "text-emerald-800" },
-                            { bg: "from-blue-50 to-cyan-50", border: "border-blue-200", icon: "bg-blue-100", iconColor: "text-blue-600", text: "text-blue-800" },
-                            { bg: "from-purple-50 to-violet-50", border: "border-purple-200", icon: "bg-purple-100", iconColor: "text-purple-600", text: "text-purple-800" },
-                            { bg: "from-amber-50 to-orange-50", border: "border-amber-200", icon: "bg-amber-100", iconColor: "text-amber-600", text: "text-amber-800" },
-                          ];
-                          const color = insightColors[index % insightColors.length];
-                          return (
-                            <li
-                              key={insight.title}
-                              className={`flex items-start gap-3 rounded-2xl border ${color.border} bg-gradient-to-br ${color.bg} p-5 shadow-md hover:shadow-lg transition-all`}
-                            >
-                              <div className={`mt-1 rounded-full ${color.icon} p-2 shadow-sm`}>
-                                <Sparkles className={`h-4 w-4 ${color.iconColor}`} />
+                  {topDays.length > 0 ? (
+                    <ul className="space-y-3">
+                      {topDays.map((day, index) => {
+                        const weekday = getWeekdayName(day.date);
+                        const type = getDayType(day.date);
+                        const rankColors = [
+                          { bg: "from-amber-50 to-yellow-50", border: "border-amber-200", badge: "from-amber-400 to-amber-500", text: "text-amber-700", value: "text-amber-600" },
+                          { bg: "from-slate-50 to-gray-50", border: "border-slate-200", badge: "from-slate-400 to-slate-500", text: "text-slate-700", value: "text-slate-600" },
+                          { bg: "from-orange-50 to-amber-50", border: "border-orange-200", badge: "from-orange-400 to-orange-500", text: "text-orange-700", value: "text-orange-600" },
+                          { bg: "from-sky-50 to-blue-50", border: "border-sky-200", badge: "from-sky-400 to-sky-500", text: "text-sky-700", value: "text-sky-600" },
+                          { bg: "from-indigo-50 to-violet-50", border: "border-indigo-200", badge: "from-indigo-400 to-indigo-500", text: "text-indigo-700", value: "text-indigo-600" },
+                        ];
+                        const color = rankColors[index];
+                        return (
+                          <li
+                            key={day.date}
+                            className={`flex items-center justify-between rounded-2xl border ${color.border} bg-gradient-to-r ${color.bg} p-4 shadow-md hover:shadow-xl transition-all ${
+                              index === 0 ? "scale-105 border-2" : ""
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`flex h-10 w-10 items-center justify-center rounded-xl font-black bg-gradient-to-br ${color.badge} text-white shadow-md`}>
+                                {index + 1}
                               </div>
                               <div>
-                                <p className={`font-bold ${color.text}`}>
-                                  {insight.title}
-                                </p>
-                                <p className="mt-1 text-sm text-slate-600">
-                                  {insight.description}
-                                </p>
+                                <div className={`font-bold ${color.text}`}>
+                                  {day.date} ({weekday})
+                                </div>
+                                <div className="text-xs font-medium text-slate-500">
+                                  {type}
+                                </div>
                               </div>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
+                            </div>
+                            <div className={`text-right ${index === 0 ? "text-xl" : "text-lg"} font-black ${color.value}`}>
+                              {formatCurrency(day.totalRevenue)}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      売上データが登録されると上位日が表示されます。
+                    </p>
                   )}
-
-                  {/* Details Table */}
-                  <div className="rounded-3xl border border-emerald-100/60 bg-white shadow-lg">
-                    <button
-                      type="button"
-                      onClick={() => setDetailsOpen((value) => !value)}
-                      className="flex w-full items-center justify-between gap-4 rounded-t-3xl border-b border-emerald-100 bg-gradient-to-r from-emerald-50/50 to-teal-50/30 px-7 py-5 text-left transition-all hover:from-emerald-50 hover:to-teal-50"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="rounded-xl bg-white p-2 shadow-sm">
-                          <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
-                        </div>
-                        <span className="text-lg font-bold text-slate-900">
-                          日別の詳細データ
-                        </span>
-                      </div>
-                      {detailsOpen ? (
-                        <ChevronUp className="h-6 w-6 text-slate-500" />
-                      ) : (
-                        <ChevronDown className="h-6 w-6 text-slate-500" />
-                      )}
-                    </button>
-                    {detailsOpen && (
-                      <div className="max-h-[600px] overflow-y-auto">
-                        <table className="min-w-full divide-y divide-emerald-100 text-sm">
-                          <thead className="sticky top-0 bg-gradient-to-r from-emerald-50 to-teal-50/50 text-slate-700 backdrop-blur-sm">
-                            <tr>
-                              <th className="px-5 py-4 text-left font-bold">
-                                日
-                              </th>
-                              <th className="px-5 py-4 text-left font-bold">
-                                曜日
-                              </th>
-                              <th className="px-5 py-4 text-left font-bold">
-                                日タイプ
-                              </th>
-                              <th className="px-5 py-4 text-right font-bold">
-                                医療収益
-                              </th>
-                              <th className="px-5 py-4 text-right font-bold">
-                                自費
-                              </th>
-                              <th className="px-5 py-4 text-right font-bold">
-                                その他
-                              </th>
-                              <th className="px-5 py-4 text-right font-bold">
-                                合計
-                              </th>
-                              <th className="px-5 py-4 text-right font-bold">
-                                人数
-                              </th>
-                              <th className="px-5 py-4 text-left font-bold">
-                                メモ
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-emerald-50/50 bg-white text-slate-700">
-                            {selectedMonth.days.map((day) => {
-                              const weekday = getWeekdayName(day.date);
-                              const dayType = getDayType(day.date);
-                              return (
-                                <tr
-                                  key={day.day}
-                                  className={`transition-colors hover:bg-emerald-50/30 ${
-                                    dayType === "祝日"
-                                      ? "border-l-4 border-l-emerald-500 bg-emerald-50/40"
-                                      : dayType === "日曜"
-                                        ? "bg-red-50/30"
-                                        : dayType === "土曜"
-                                          ? "bg-blue-50/30"
-                                          : ""
-                                  }`}
-                                >
-                                  <td className="px-5 py-4 font-bold text-slate-700">
-                                    {day.day}日
-                                  </td>
-                                  <td className="px-5 py-4 font-medium text-slate-600">
-                                    {weekday}
-                                  </td>
-                                  <td className="px-5 py-4">
-                                    <span
-                                      className={`inline-block rounded-full px-3 py-1 text-xs font-bold ${
-                                        dayType === "祝日"
-                                          ? "bg-emerald-100 text-emerald-700 shadow-sm"
-                                          : dayType === "日曜"
-                                            ? "bg-red-50 text-red-600"
-                                            : dayType === "土曜"
-                                              ? "bg-blue-100 text-blue-700"
-                                              : dayType === "祝日前日"
-                                                ? "bg-yellow-100 text-yellow-700"
-                                                : "bg-slate-100 text-slate-600"
-                                      }`}
-                                    >
-                                      {dayType}
-                                    </span>
-                                  </td>
-                                  <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
-                                    {formatCurrency(day.medicalRevenue)}
-                                  </td>
-                                  <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
-                                    {formatCurrency(day.selfPayRevenue)}
-                                  </td>
-                                  <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
-                                    {formatCurrency(day.otherRevenue)}
-                                  </td>
-                                  <td className="px-5 py-4 text-right text-lg font-black tabular-nums text-emerald-700">
-                                    {formatCurrency(day.totalRevenue)}
-                                  </td>
-                                  <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
-                                    {day.peopleCount !== null
-                                      ? day.peopleCount.toLocaleString("ja-JP")
-                                      : "—"}
-                                  </td>
-                                  <td className="px-5 py-4 text-left text-slate-600">
-                                    {day.note ?? "—"}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
                 </div>
-              ) : (
-                <div className="rounded-3xl border-2 border-dashed border-emerald-200 bg-emerald-50/30 p-16 text-center text-base text-slate-500 shadow-inner">
-                  表示する月を選択してください。
+              </div>
+
+              {/* Insights */}
+              {insights.length > 0 && (
+                <div className="rounded-3xl border border-emerald-100/60 bg-gradient-to-br from-emerald-50/50 via-teal-50/30 to-cyan-50/30 p-7 shadow-lg">
+                  <div className="mb-5 flex items-center gap-2.5">
+                    <div className="rounded-xl bg-white p-2 shadow-sm">
+                      <Sparkles className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-900">
+                      追加インサイト
+                    </h3>
+                  </div>
+                  <ul className="grid gap-4 sm:grid-cols-2">
+                    {insights.map((insight, index) => {
+                      const insightColors = [
+                        { bg: "from-emerald-50 to-teal-50", border: "border-emerald-200", icon: "bg-emerald-100", iconColor: "text-emerald-600", text: "text-emerald-800" },
+                        { bg: "from-blue-50 to-cyan-50", border: "border-blue-200", icon: "bg-blue-100", iconColor: "text-blue-600", text: "text-blue-800" },
+                        { bg: "from-purple-50 to-violet-50", border: "border-purple-200", icon: "bg-purple-100", iconColor: "text-purple-600", text: "text-purple-800" },
+                        { bg: "from-amber-50 to-orange-50", border: "border-amber-200", icon: "bg-amber-100", iconColor: "text-amber-600", text: "text-amber-800" },
+                      ];
+                      const color = insightColors[index % insightColors.length];
+                      return (
+                        <li
+                          key={insight.title}
+                          className={`flex items-start gap-3 rounded-2xl border ${color.border} bg-gradient-to-br ${color.bg} p-5 shadow-md hover:shadow-lg transition-all`}
+                        >
+                          <div className={`mt-1 rounded-full ${color.icon} p-2 shadow-sm`}>
+                            <Sparkles className={`h-4 w-4 ${color.iconColor}`} />
+                          </div>
+                          <div>
+                            <p className={`font-bold ${color.text}`}>
+                              {insight.title}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-600">
+                              {insight.description}
+                            </p>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
               )}
+
+              {/* Month by Month Details Table */}
+              <div className="rounded-3xl border border-emerald-100/60 bg-white shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => setDetailsOpen((value) => !value)}
+                  className="flex w-full items-center justify-between gap-4 rounded-t-3xl border-b border-emerald-100 bg-gradient-to-r from-emerald-50/50 to-teal-50/30 px-7 py-5 text-left transition-all hover:from-emerald-50 hover:to-teal-50"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-xl bg-white p-2 shadow-sm">
+                      <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <span className="text-lg font-bold text-slate-900">
+                      月別詳細データ
+                    </span>
+                  </div>
+                  {detailsOpen ? (
+                    <ChevronUp className="h-6 w-6 text-slate-500" />
+                  ) : (
+                    <ChevronDown className="h-6 w-6 text-slate-500" />
+                  )}
+                </button>
+                {detailsOpen && (
+                  <div className="max-h-[600px] overflow-y-auto">
+                    <table className="min-w-full divide-y divide-emerald-100 text-sm">
+                      <thead className="sticky top-0 bg-gradient-to-r from-emerald-50 to-teal-50/50 text-slate-700 backdrop-blur-sm">
+                        <tr>
+                          <th className="px-5 py-4 text-left font-bold">
+                            月
+                          </th>
+                          <th className="px-5 py-4 text-right font-bold">
+                            医療収益
+                          </th>
+                          <th className="px-5 py-4 text-right font-bold">
+                            自費
+                          </th>
+                          <th className="px-5 py-4 text-right font-bold">
+                            その他
+                          </th>
+                          <th className="px-5 py-4 text-right font-bold">
+                            合計
+                          </th>
+                          <th className="px-5 py-4 text-right font-bold">
+                            人数
+                          </th>
+                          <th className="px-5 py-4 text-right font-bold">
+                            日平均
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-emerald-50/50 bg-white text-slate-700">
+                        {filteredMonths.map((month) => (
+                          <tr
+                            key={month.id}
+                            className="transition-colors hover:bg-emerald-50/30"
+                          >
+                            <td className="px-5 py-4 font-bold text-slate-700">
+                              {month.label}
+                            </td>
+                            <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                              {formatCurrency(month.totalMedicalRevenue)}
+                            </td>
+                            <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                              {formatCurrency(month.totalSelfPayRevenue)}
+                            </td>
+                            <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                              {formatCurrency(month.totalOtherRevenue)}
+                            </td>
+                            <td className="px-5 py-4 text-right text-lg font-black tabular-nums text-emerald-700">
+                              {formatCurrency(month.totalRevenue)}
+                            </td>
+                            <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                              {month.totalPeopleCount !== null
+                                ? month.totalPeopleCount.toLocaleString("ja-JP")
+                                : "—"}
+                            </td>
+                            <td className="px-5 py-4 text-right font-semibold tabular-nums text-slate-800">
+                              {formatCurrency(month.averageDailyRevenue)}
+                            </td>
+                          </tr>
+                        ))}
+                        {/* 合計行 */}
+                        <tr className="bg-gradient-to-r from-emerald-100 to-teal-100 font-bold">
+                          <td className="px-5 py-4 font-black text-emerald-800">
+                            合計
+                          </td>
+                          <td className="px-5 py-4 text-right tabular-nums text-emerald-800">
+                            {formatCurrency(periodSummary.totalMedicalRevenue)}
+                          </td>
+                          <td className="px-5 py-4 text-right tabular-nums text-emerald-800">
+                            {formatCurrency(periodSummary.totalSelfPayRevenue)}
+                          </td>
+                          <td className="px-5 py-4 text-right tabular-nums text-emerald-800">
+                            {formatCurrency(periodSummary.totalOtherRevenue)}
+                          </td>
+                          <td className="px-5 py-4 text-right text-lg font-black tabular-nums text-emerald-900">
+                            {formatCurrency(periodSummary.totalRevenue)}
+                          </td>
+                          <td className="px-5 py-4 text-right tabular-nums text-emerald-800">
+                            {periodSummary.totalPeopleCount !== null
+                              ? periodSummary.totalPeopleCount.toLocaleString("ja-JP")
+                              : "—"}
+                          </td>
+                          <td className="px-5 py-4 text-right tabular-nums text-emerald-800">
+                            {formatCurrency(periodSummary.averageDailyRevenue)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </section>
 
             {/* 経費分析セクション */}
@@ -1311,13 +984,6 @@ export default function SalesPage() {
           </>
         ) : (
           <>
-            <SalesMonthPortal
-              months={[]}
-              selectedMonthId={null}
-              onChangeMonth={() => {}}
-              displayLabel="データなし"
-            />
-
             <section className="rounded-3xl border-2 border-dashed border-emerald-200 bg-emerald-50/30 p-16 text-center text-slate-500 shadow-inner">
               <div className="mx-auto max-w-md">
                 <div className="mx-auto mb-6 inline-flex rounded-full bg-emerald-100 p-4">

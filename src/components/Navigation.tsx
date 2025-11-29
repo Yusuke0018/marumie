@@ -60,6 +60,7 @@ export default function Navigation() {
   const isFilterablePage = useMemo(
     () =>
       [
+        "/sales",
         "/patients",
         "/reservations",
         // "/survey",
@@ -70,12 +71,7 @@ export default function Navigation() {
     [pathname],
   );
 
-  const isSalesPage = useMemo(
-    () => pathname === "/sales" || pathname.startsWith("/sales/"),
-    [pathname],
-  );
-
-  const showPeriodBadge = (isFilterablePage || isSalesPage) && analysisPeriodLabel;
+  const showPeriodBadge = isFilterablePage && analysisPeriodLabel;
 
   return (
     <>
