@@ -328,7 +328,8 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
     );
   }
 
-  if (!summary) return null;
+  // 連動モードで経費データがない月の場合でも、セクション自体は表示する
+  // （summaryがnullでも経費データ自体があれば表示）
 
   return (
     <section className="flex flex-col gap-7 rounded-3xl border border-orange-100/60 bg-white p-8 shadow-xl shadow-orange-500/5">
@@ -510,7 +511,7 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
       )}
 
       {/* 構成比グラフ（横棒）- 経費データがある場合のみ */}
-      {(!isLinkedMode || hasExpenseDataForLinkedMonth) && summary.accountSummaries.length > 0 && (
+      {(!isLinkedMode || hasExpenseDataForLinkedMonth) && summary && summary.accountSummaries.length > 0 && (
         <div className="rounded-2xl border border-orange-100/60 bg-gradient-to-br from-orange-50/30 to-amber-50/20 p-6 shadow-lg">
         <div className="mb-4 flex items-center gap-2.5">
           <div className="rounded-xl bg-white p-2 shadow-sm">
@@ -550,7 +551,7 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
       )}
 
       {/* 仕入高の詳細（前月比付き）- 経費データがある場合のみ */}
-      {(!isLinkedMode || hasExpenseDataForLinkedMonth) && summary.purchaseCategorySummaries.length > 0 && (
+      {(!isLinkedMode || hasExpenseDataForLinkedMonth) && summary && summary.purchaseCategorySummaries.length > 0 && (
         <div className="rounded-2xl border border-rose-100/60 bg-white shadow-lg overflow-hidden">
           <button
             type="button"
@@ -641,7 +642,7 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
       )}
 
       {/* 支払手数料の詳細（前月比付き）- 経費データがある場合のみ */}
-      {(!isLinkedMode || hasExpenseDataForLinkedMonth) && summary.feeCategorySummaries.length > 0 && (
+      {(!isLinkedMode || hasExpenseDataForLinkedMonth) && summary && summary.feeCategorySummaries.length > 0 && (
         <div className="rounded-2xl border border-amber-100/60 bg-white shadow-lg overflow-hidden">
           <button
             type="button"
