@@ -1,5 +1,6 @@
 import Papa from "papaparse";
 import { normalizeNameForMatching } from "@/lib/patientIdentity";
+import { setCompressedItem, getCompressedItem, clearCompressedItem } from './storageCompression';
 
 export type VisitType = "初診" | "再診" | "未設定";
 
@@ -912,27 +913,39 @@ export const loadReservationsFromStorage = (): Reservation[] => {
     return [];
   }
   try {
-    const stored = window.localStorage.getItem(RESERVATION_STORAGE_KEY);
+    // 圧縮版を試す
+    let stored = getCompressedItem(RESERVATION_STORAGE_KEY);
+
+    // 旧形式(非圧縮)も試す(後方互換性)
+    if (!stored) {
+      console.log('[loadReservationsFromStorage] Trying legacy uncompressed format');
+      stored = window.localStorage.getItem(RESERVATION_STORAGE_KEY);
+    }
+
     if (!stored) {
       console.log('[loadReservationsFromStorage] No data in localStorage');
       return [];
     }
+
     const parsed = JSON.parse(stored) as Reservation[];
     if (!Array.isArray(parsed)) {
       console.log('[loadReservationsFromStorage] Stored data is not an array');
       return [];
     }
+
     console.log('[loadReservationsFromStorage] Raw data count:', parsed.length);
     const filtered = parsed.filter(isValidReservationRecord);
     console.log('[loadReservationsFromStorage] After validation:', filtered.length);
+
     if (parsed.length !== filtered.length) {
-      console.warn('[loadReservationsFromStorage] Validation filtered out', parsed.length - filtered.length, 'records');
-      // 最初の無効なレコードをログ出力
+      console.warn('[loadReservationsFromStorage] Validation filtered out',
+                   parsed.length - filtered.length, 'records');
       const invalid = parsed.find(item => !isValidReservationRecord(item));
       if (invalid) {
         console.warn('[loadReservationsFromStorage] First invalid record:', invalid);
       }
     }
+
     return filtered;
   } catch (error) {
     console.error('[loadReservationsFromStorage] Error:', error);
@@ -959,13 +972,17 @@ export const saveReservationsToStorage = (
   const timestamp = timestampOverride ?? new Date().toISOString();
   if (typeof window !== "undefined") {
     try {
-      window.localStorage.setItem(
-        RESERVATION_STORAGE_KEY,
-        JSON.stringify(reservations),
-      );
+      console.log('[saveReservationsToStorage] Saving', reservations.length, 'records');
+      const jsonStr = JSON.stringify(reservations);
+      console.log('[saveReservationsToStorage] JSON size:', jsonStr.length, 'chars');
+
+      setCompressedItem(RESERVATION_STORAGE_KEY, jsonStr);
+
+      console.log('[saveReservationsToStorage] Compression complete');
       window.localStorage.setItem(RESERVATION_TIMESTAMP_KEY, timestamp);
     } catch (error) {
-      console.error(error);
+      console.error('[saveReservationsToStorage] Error:', error);
+      throw error;
     }
   }
   return timestamp;
@@ -976,10 +993,11 @@ export const clearReservationsStorage = () => {
     return;
   }
   try {
-    window.localStorage.removeItem(RESERVATION_STORAGE_KEY);
+    clearCompressedItem(RESERVATION_STORAGE_KEY);
+    clearCompressedItem(RESERVATION_DIFF_STORAGE_KEY);
     window.localStorage.removeItem(RESERVATION_TIMESTAMP_KEY);
   } catch (error) {
-    console.error(error);
+    console.error('[clearReservationsStorage] Error:', error);
   }
 };
 
@@ -989,15 +1007,16 @@ export const saveReservationDiff = (records: Reservation[]) => {
   }
   try {
     if (records.length === 0) {
-      window.localStorage.removeItem(RESERVATION_DIFF_STORAGE_KEY);
+      clearCompressedItem(RESERVATION_DIFF_STORAGE_KEY);
     } else {
-      window.localStorage.setItem(
+      console.log('[saveReservationDiff] Saving', records.length, 'diff records');
+      setCompressedItem(
         RESERVATION_DIFF_STORAGE_KEY,
         JSON.stringify(records),
       );
     }
   } catch (error) {
-    console.error(error);
+    console.error('[saveReservationDiff] Error:', error);
   }
 };
 
@@ -1006,14 +1025,20 @@ export const loadReservationDiff = (): Reservation[] => {
     return [];
   }
   try {
-    const stored = window.localStorage.getItem(RESERVATION_DIFF_STORAGE_KEY);
+    let stored = getCompressedItem(RESERVATION_DIFF_STORAGE_KEY);
+
+    if (!stored) {
+      stored = window.localStorage.getItem(RESERVATION_DIFF_STORAGE_KEY);
+    }
+
     if (!stored) {
       return [];
     }
+
     const parsed = JSON.parse(stored) as Reservation[];
     return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
-    console.error(error);
+    console.error('[loadReservationDiff] Error:', error);
     return [];
   }
 };
@@ -1023,9 +1048,9 @@ export const clearReservationDiff = () => {
     return;
   }
   try {
-    window.localStorage.removeItem(RESERVATION_DIFF_STORAGE_KEY);
+    clearCompressedItem(RESERVATION_DIFF_STORAGE_KEY);
   } catch (error) {
-    console.error(error);
+    console.error('[clearReservationDiff] Error:', error);
   }
 };
 

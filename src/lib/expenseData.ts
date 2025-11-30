@@ -2,6 +2,69 @@
  * 経費データの型定義とパース処理
  */
 
+/**
+ * 様々な日付フォーマットをYYYY-MM-DD形式に正規化
+ */
+function normalizeDateToYYYYMMDD(dateStr: string): string {
+  if (!dateStr || typeof dateStr !== 'string') {
+    console.warn('[normalizeDateToYYYYMMDD] Invalid input:', dateStr);
+    return '';
+  }
+
+  const trimmed = dateStr.trim();
+
+  // 既に YYYY-MM-DD 形式
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  // YYYY/MM/DD または YYYY/M/D
+  const slashMatch = trimmed.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (slashMatch) {
+    const [, year, month, day] = slashMatch;
+    const normalized = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    console.log('[normalizeDateToYYYYMMDD] Converted', trimmed, '→', normalized);
+    return normalized;
+  }
+
+  // YYYY年MM月DD日
+  const jpMatch = trimmed.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日$/);
+  if (jpMatch) {
+    const [, year, month, day] = jpMatch;
+    const normalized = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    console.log('[normalizeDateToYYYYMMDD] Converted', trimmed, '→', normalized);
+    return normalized;
+  }
+
+  // MM/DD/YYYY (US形式)
+  const usMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (usMatch) {
+    const [, month, day, year] = usMatch;
+    if (parseInt(month, 10) > 12) {
+      const normalized = `${year}-${day.padStart(2, '0')}-${month.padStart(2, '0')}`;
+      console.log('[normalizeDateToYYYYMMDD] Converted (EU)', trimmed, '→', normalized);
+      return normalized;
+    }
+    const normalized = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    console.log('[normalizeDateToYYYYMMDD] Converted (US)', trimmed, '→', normalized);
+    return normalized;
+  }
+
+  // YYYY-M-D (パディングなし)
+  const dashMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (dashMatch) {
+    const [, year, month, day] = dashMatch;
+    const normalized = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    if (normalized !== trimmed) {
+      console.log('[normalizeDateToYYYYMMDD] Padded', trimmed, '→', normalized);
+    }
+    return normalized;
+  }
+
+  console.warn('[normalizeDateToYYYYMMDD] Unknown date format:', trimmed);
+  return trimmed;
+}
+
 // 勘定科目の型
 export type AccountCategory =
   | '仕入高'
@@ -240,10 +303,13 @@ export function parseExpenseCsv(csvText: string): ExpenseRecord[] {
     if (!accountCategory || amount <= 0) continue;
 
     const description = values[idxDescription]?.trim() || '';
+    const rawDate = values[idxDate] || '';
+    const normalizedDate = normalizeDateToYYYYMMDD(rawDate);
+
     const record: ExpenseRecord = {
       id: values[idxId] || `${i}`,
       transactionNo: values[idxTransNo] || '',
-      date: values[idxDate] || '',
+      date: normalizedDate,
       accountCategory,
       subAccount: values[idxDebitSub] || '',
       department: values[idxDebitDept] || '',
@@ -253,6 +319,11 @@ export function parseExpenseCsv(csvText: string): ExpenseRecord[] {
       creditAccount,
       description,
     };
+
+    // デバッグ用
+    if (i <= 5) {
+      console.log('[parseExpenseCsv] Row', i, 'date:', rawDate, '→', normalizedDate);
+    }
 
     // カテゴリ分類
     if (accountCategory === '仕入高') {
@@ -319,12 +390,34 @@ function normalizeVendor(description: string, creditAccount: string): string {
 
 // 経費サマリーを生成
 export function generateExpenseSummary(allRecords: ExpenseRecord[], targetYearMonth?: string): MonthlyExpenseSummary {
+  console.log('[generateExpenseSummary] Input:', {
+    totalRecords: allRecords.length,
+    targetYearMonth,
+    sampleDates: allRecords.slice(0, 3).map(r => r.date),
+  });
+
   // 対象月でフィルタリング
   const records = targetYearMonth
-    ? allRecords.filter((r) => r.date.startsWith(targetYearMonth))
+    ? allRecords.filter((r) => {
+        const matches = r.date.startsWith(targetYearMonth);
+        if (!matches && r.date && allRecords.indexOf(r) < 3) {
+          console.log('[generateExpenseSummary] Date mismatch:', {
+            date: r.date,
+            expected: targetYearMonth,
+            reason: `"${r.date}" does not start with "${targetYearMonth}"`,
+          });
+        }
+        return matches;
+      })
     : allRecords;
 
+  console.log('[generateExpenseSummary] Filtered:', {
+    matchedRecords: records.length,
+    filteredOut: allRecords.length - records.length,
+  });
+
   if (records.length === 0) {
+    console.warn('[generateExpenseSummary] No records matched for', targetYearMonth);
     return {
       yearMonth: targetYearMonth || '',
       totalAmount: 0,
