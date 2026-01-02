@@ -1,9 +1,8 @@
 timestamp: 20260102-163551+0900
 branch: main
-head: ec08713a9ba3f97aba202c25179057e77dcefef8
+head: 1501f22a23713a641ba8e58749d2f85a9187cf9a
 diff_summary: ## main...origin/main
- M src/app/patients/PatientAnalysisPageContent.tsx
 lint: npm run lint (passed)
 tests: not run (no test script)
-push: pending
+push: success (origin/main)
 notes: lifestyle filter months use karte data only to avoid diagnosis-only months
