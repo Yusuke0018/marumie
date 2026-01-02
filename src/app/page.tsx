@@ -679,7 +679,7 @@ export default function HomePage() {
                   </div>
                   <div className="mt-2 flex h-12 items-end gap-1.5">
                     {trend.map((point, index) => (
-                      <div key={point.month} className="flex-1">
+                      <div key={point.month} className="flex-1 h-full flex items-end">
                         <span
                           className={`block w-full rounded-full bg-gradient-to-t ${trendGradient} shadow-sm`}
                           style={{ height: `${heights[index] ?? 0}%` }}
