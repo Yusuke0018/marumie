@@ -1625,22 +1625,29 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
     [diagnosisRecords],
   );
 
-  const allAvailableMonths = useMemo(() => {
+  const karteMonths = useMemo(() => {
     const months = new Set<string>();
     for (const record of classifiedRecords) {
       if (record.monthKey >= KARTE_MIN_MONTH) {
         months.add(record.monthKey);
       }
     }
+    return Array.from(months).sort();
+  }, [classifiedRecords]);
+
+  const allAvailableMonths = useMemo(() => {
+    const months = new Set<string>(karteMonths);
     for (const month of diagnosisMonths) {
       months.add(month);
     }
     return Array.from(months).sort();
-  }, [classifiedRecords, diagnosisMonths]);
+  }, [karteMonths, diagnosisMonths]);
+
+  const filterMonths = lifestyleOnly ? karteMonths : allAvailableMonths;
 
   const latestAvailableMonth = useMemo(
-    () => (allAvailableMonths.length > 0 ? allAvailableMonths[allAvailableMonths.length - 1] : null),
-    [allAvailableMonths],
+    () => (filterMonths.length > 0 ? filterMonths[filterMonths.length - 1] : null),
+    [filterMonths],
   );
 
   const {
@@ -1649,7 +1656,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
     setStartMonth,
     setEndMonth,
     resetPeriod,
-  } = useAnalysisPeriodRange(allAvailableMonths, {
+  } = useAnalysisPeriodRange(filterMonths, {
     autoSelectLatest: !lifestyleOnly,
     persistStart: !lifestyleOnly,
     singleMonth: !lifestyleOnly,
@@ -1659,7 +1666,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
     if (!lifestyleOnly) {
       return;
     }
-    if (!latestAvailableMonth || allAvailableMonths.length === 0) {
+    if (!latestAvailableMonth || filterMonths.length === 0) {
       return;
     }
 
@@ -1668,13 +1675,13 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
       setEndMonth(effectiveEnd);
     }
 
-    const endIndex = allAvailableMonths.indexOf(effectiveEnd);
+    const endIndex = filterMonths.indexOf(effectiveEnd);
     if (endIndex === -1) {
       return;
     }
 
     const desiredStartIndex = Math.max(0, endIndex - 5);
-    const desiredStart = allAvailableMonths[desiredStartIndex];
+    const desiredStart = filterMonths[desiredStartIndex];
     if (startMonth !== desiredStart) {
       setStartMonth(desiredStart);
     }
@@ -1683,7 +1690,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
     endMonth,
     startMonth,
     latestAvailableMonth,
-    allAvailableMonths,
+    filterMonths,
     setEndMonth,
     setStartMonth,
   ]);
@@ -1696,19 +1703,19 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
     if (!lifestyleOnly) {
       return startMonth;
     }
-    if (!lifestyleEffectiveEndMonth || allAvailableMonths.length === 0) {
+    if (!lifestyleEffectiveEndMonth || filterMonths.length === 0) {
       return startMonth;
     }
-    const endIndex = allAvailableMonths.indexOf(lifestyleEffectiveEndMonth);
+    const endIndex = filterMonths.indexOf(lifestyleEffectiveEndMonth);
     if (endIndex === -1) {
       return startMonth;
     }
-    return allAvailableMonths[Math.max(0, endIndex - 5)] ?? startMonth;
+    return filterMonths[Math.max(0, endIndex - 5)] ?? startMonth;
   }, [
     lifestyleOnly,
     startMonth,
     lifestyleEffectiveEndMonth,
-    allAvailableMonths,
+    filterMonths,
   ]);
 
   const periodFilteredRecords = useMemo(() => {
@@ -4964,7 +4971,7 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
           </section>
         )}
         <AnalysisFilterPortal
-          months={allAvailableMonths}
+          months={filterMonths}
           startMonth={startMonth}
           endMonth={endMonth}
           onChangeStart={setStartMonth}
