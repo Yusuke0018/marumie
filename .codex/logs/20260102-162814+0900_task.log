@@ -1,9 +1,8 @@
 timestamp: 20260102-162814+0900
 branch: main
-head: 3cf1090d1093a8e5742c15372db3be89ec090afe
+head: fb2a9aba36b21bbecd5ea4784982171725cf665c
 diff_summary: ## main...origin/main
- M src/app/sales/page.tsx
 lint: npm run lint (passed)
 tests: not run (no test script)
-push: pending
-notes: remove latest-month panel; pastelize monthly sales and MoM colors
+push: success (origin/main)
+notes: removed latest-month section; pastelized monthly sales and MoM cards
