@@ -258,10 +258,11 @@ export default function SalesPage() {
     const sorted = [...loaded].sort((a, b) => a.id.localeCompare(b.id));
     setSalesData(sorted);
 
-    // 初期値として全期間を選択
+    // 初期値として最新月を選択
     if (sorted.length > 0) {
-      setStartMonth((current) => current || sorted[0]!.id);
-      setEndMonth((current) => current || sorted[sorted.length - 1]!.id);
+      const latest = sorted[sorted.length - 1]!.id;
+      setStartMonth((current) => current || latest);
+      setEndMonth((current) => current || latest);
     }
 
     if (typeof window !== "undefined") {
@@ -362,8 +363,9 @@ export default function SalesPage() {
   // リセット処理
   const handleReset = useCallback(() => {
     if (salesData.length > 0) {
-      setStartMonth(salesData[0]!.id);
-      setEndMonth(salesData[salesData.length - 1]!.id);
+      const latest = salesData[salesData.length - 1]!.id;
+      setStartMonth(latest);
+      setEndMonth(latest);
     }
   }, [salesData]);
 
@@ -632,7 +634,7 @@ export default function SalesPage() {
                 売上分析ダッシュボード
               </h1>
               <p className="max-w-2xl text-base leading-relaxed text-slate-600">
-                期間を選択して、月次売上と曜日トレンドを可視化。データに基づいた意思決定をサポートします。
+                月を選択して、月次売上と曜日トレンドを可視化。データに基づいた意思決定をサポートします。
               </p>
               <div className="flex flex-wrap items-center gap-4">
                 <button

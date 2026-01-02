@@ -1652,6 +1652,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
   } = useAnalysisPeriodRange(allAvailableMonths, {
     autoSelectLatest: !lifestyleOnly,
     persistStart: !lifestyleOnly,
+    singleMonth: !lifestyleOnly,
   });
 
   useEffect(() => {
@@ -1674,19 +1675,7 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
 
     const desiredStartIndex = Math.max(0, endIndex - 5);
     const desiredStart = allAvailableMonths[desiredStartIndex];
-
-    if (!startMonth) {
-      setStartMonth(desiredStart);
-      return;
-    }
-
-    const startIndex = allAvailableMonths.indexOf(startMonth);
-    if (startIndex === -1) {
-      setStartMonth(desiredStart);
-      return;
-    }
-
-    if (endIndex - startIndex < 5 && startMonth !== desiredStart) {
+    if (startMonth !== desiredStart) {
       setStartMonth(desiredStart);
     }
   }, [
@@ -1713,12 +1702,6 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
     const endIndex = allAvailableMonths.indexOf(lifestyleEffectiveEndMonth);
     if (endIndex === -1) {
       return startMonth;
-    }
-    if (startMonth) {
-      const startIndex = allAvailableMonths.indexOf(startMonth);
-      if (startIndex !== -1 && endIndex - startIndex >= 5) {
-        return startMonth;
-      }
     }
     return allAvailableMonths[Math.max(0, endIndex - 5)] ?? startMonth;
   }, [
@@ -4988,6 +4971,13 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
           onChangeEnd={setEndMonth}
           onReset={resetPeriod}
           label={diagnosisRangeLabel}
+          rightContent={
+            lifestyleOnly ? (
+              <p className="text-[11px] font-semibold text-emerald-600">
+                選択月を含む半年分を自動表示
+              </p>
+            ) : null
+          }
           renderMonthLabel={formatMonthLabel}
         />
 

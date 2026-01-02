@@ -8,6 +8,7 @@ type UseAnalysisPeriodRangeOptions = {
   autoSelectLatest?: boolean;
   persistStart?: boolean;
   persistEnd?: boolean;
+  singleMonth?: boolean;
 };
 
 export const useAnalysisPeriodRange = (
@@ -21,6 +22,7 @@ export const useAnalysisPeriodRange = (
   const autoSelectLatest = options.autoSelectLatest ?? true;
   const persistStart = options.persistStart !== false;
   const persistEnd = options.persistEnd !== false;
+  const singleMonth = options.singleMonth !== false;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -96,6 +98,25 @@ export const useAnalysisPeriodRange = (
       setEndMonthState(adjustedEnd);
     }
   }, [availableMonths, endMonth, isInitialized, startMonth]);
+
+  useEffect(() => {
+    if (!isInitialized) {
+      return;
+    }
+    if (!singleMonth) {
+      return;
+    }
+    const selected = endMonth || startMonth;
+    if (!selected) {
+      return;
+    }
+    if (startMonth !== selected) {
+      setStartMonthState(selected);
+    }
+    if (endMonth !== selected) {
+      setEndMonthState(selected);
+    }
+  }, [endMonth, isInitialized, singleMonth, startMonth]);
 
   useEffect(() => {
     if (!isInitialized) {
