@@ -24,6 +24,7 @@ import {
   Clock,
   TrendingUp,
   ChevronDown,
+  Download,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Papa from "papaparse";
@@ -588,6 +589,23 @@ const parseSlashDate = (raw: string | undefined) => {
     return null;
   }
   return new Date(year, month - 1, day);
+};
+
+const formatIsoToSlash = (value: string | null | undefined) => {
+  if (!value) {
+    return "";
+  }
+  return value.replace(/-/g, "/");
+};
+
+const formatHourLabel = (value: number | null | undefined) => {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+  return `${String(value).padStart(2, "0")}:00`;
 };
 
 const formatDateKey = (date: Date) => {
@@ -3850,6 +3868,128 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
     }
   };
 
+  const downloadCsv = useCallback((rows: Record<string, string | number | null>[], filename: string) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const csv = `\uFEFF${Papa.unparse(rows)}`;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleKarteExport = useCallback(() => {
+    if (records.length === 0) {
+      setUploadError("カルテ集計データがありません。");
+      return;
+    }
+    try {
+      const rows = records.map((record) => ({
+        日付: formatIsoToSlash(record.dateIso),
+        "初診・再診": record.visitType,
+        患者番号: record.patientNumber ?? "",
+        患者生年月日: formatIsoToSlash(record.birthDateIso),
+        診療科: record.department ?? "",
+        点数: record.points ?? "",
+        患者氏名: record.patientNameNormalized ?? "",
+        患者住所: record.patientAddress ?? "",
+      }));
+      downloadCsv(rows, `karte_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    } catch (error) {
+      console.error(error);
+      setUploadError("カルテ集計CSVの出力に失敗しました。");
+    }
+  }, [downloadCsv, records]);
+
+  const handleReservationExport = useCallback(() => {
+    if (reservationsRecords.length === 0) {
+      setReservationUploadError("予約ログデータがありません。");
+      return;
+    }
+    try {
+      const rows = reservationsRecords.map((record) => ({
+        診療科: record.department,
+        "初診・再診": record.visitType,
+        予約日: formatIsoToSlash(record.reservationDate),
+        予約時間: formatHourLabel(record.reservationHour),
+        予約月: record.reservationMonth,
+        受付日時: record.receivedAtIso,
+        来院日時: record.appointmentIso ?? "",
+        予約受付日: formatIsoToSlash(record.bookingDate ?? ""),
+        予約受付時間: formatHourLabel(record.bookingHour ?? null),
+        患者ID: record.patientId,
+        患者氏名: record.patientName ?? record.patientNameNormalized ?? "",
+        患者年齢: record.patientAge ?? "",
+        都道府県: record.patientPrefecture ?? "",
+        市区町村: record.patientCity ?? "",
+        町名: record.patientTown ?? "",
+        住所: record.patientAddress ?? "",
+        当日予約: record.isSameDay ? "1" : "0",
+      }));
+      downloadCsv(rows, `reservation_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    } catch (error) {
+      console.error(error);
+      setReservationUploadError("予約ログCSVの出力に失敗しました。");
+    }
+  }, [downloadCsv, reservationsRecords]);
+
+  const handleDiagnosisExport = useCallback(() => {
+    if (diagnosisRecords.length === 0) {
+      setDiagnosisUploadError("傷病名データがありません。");
+      return;
+    }
+    try {
+      const rows = diagnosisRecords.map((record) => ({
+        主病: "主病",
+        診療科: record.department,
+        開始日: formatIsoToSlash(record.startDate),
+        傷病名: record.diseaseName,
+        患者番号: record.patientNumber ?? "",
+        患者氏名: record.patientNameNormalized ?? "",
+        患者生年月日: formatIsoToSlash(record.birthDateIso),
+        カテゴリ: record.category,
+      }));
+      downloadCsv(rows, `diagnosis_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    } catch (error) {
+      console.error(error);
+      setDiagnosisUploadError("傷病名CSVの出力に失敗しました。");
+    }
+  }, [diagnosisRecords, downloadCsv]);
+
+  const handleSalesExport = useCallback(() => {
+    const salesData = loadSalesDataFromStorage();
+    if (salesData.length === 0) {
+      setSalesUploadError("売上データがありません。");
+      return;
+    }
+    try {
+      const rows = salesData.flatMap((month) =>
+        month.days.map((day) => ({
+          月: month.label,
+          月ID: month.id,
+          日: day.day,
+          日付: day.date,
+          医療収益: day.medicalRevenue,
+          自費金額: day.selfPayRevenue,
+          その他: day.otherRevenue,
+          "日々の合計": day.totalRevenue,
+          人数: day.peopleCount ?? "",
+          メモ: day.note ?? "",
+        })),
+      );
+      downloadCsv(rows, `sales_export_${new Date().toISOString().slice(0, 10)}.csv`);
+    } catch (error) {
+      console.error(error);
+      setSalesUploadError("売上CSVの出力に失敗しました。");
+    }
+  }, [downloadCsv]);
+
   const handleReservationUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.target;
     const files = input.files ? Array.from(input.files) : [];
@@ -4417,6 +4557,19 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
               </button>
               <button
                 type="button"
+                onClick={handleKarteExport}
+                disabled={records.length === 0}
+                className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                  records.length === 0
+                    ? "cursor-not-allowed border-slate-100 bg-slate-100 text-slate-400"
+                    : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Download className="h-4 w-4" />
+                CSVをダウンロード
+              </button>
+              <button
+                type="button"
                 onClick={handleReset}
                 className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-500 transition hover:bg-slate-100"
               >
@@ -4470,6 +4623,19 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
               >
                 <Undo2 className="h-4 w-4" />
                 差分CSVをダウンロード
+              </button>
+              <button
+                type="button"
+                onClick={handleReservationExport}
+                disabled={reservationsRecords.length === 0}
+                className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                  reservationsRecords.length === 0
+                    ? "cursor-not-allowed border-slate-100 bg-slate-100 text-slate-400"
+                    : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Download className="h-4 w-4" />
+                予約ログCSVをダウンロード
               </button>
             </div>
             {reservationUploadError && (
@@ -4554,6 +4720,19 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
                   className="hidden"
                 />
               </label>
+              <button
+                type="button"
+                onClick={handleDiagnosisExport}
+                disabled={diagnosisRecords.length === 0}
+                className={`flex items-center justify-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                  diagnosisRecords.length === 0
+                    ? "cursor-not-allowed border-slate-100 bg-slate-100 text-slate-400"
+                    : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Download className="h-4 w-4" />
+                傷病名CSVをダウンロード
+              </button>
               {diagnosisUploadError && (
                 <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
                   {diagnosisUploadError}
@@ -4652,6 +4831,19 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
                   className="hidden"
                 />
               </label>
+              <button
+                type="button"
+                onClick={handleSalesExport}
+                disabled={salesStatus.totalMonths === 0}
+                className={`flex items-center justify-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold transition ${
+                  salesStatus.totalMonths === 0
+                    ? "cursor-not-allowed border-slate-100 bg-slate-100 text-slate-400"
+                    : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Download className="h-4 w-4" />
+                売上CSVをダウンロード
+              </button>
             </div>
             {salesUploadError && (
               <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
