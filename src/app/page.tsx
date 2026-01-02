@@ -38,6 +38,20 @@ type DashboardStats = {
   lifestylePeriodLabel: string | null;
 };
 
+type MetricTrendPoint = {
+  month: string;
+  value: number | null;
+};
+
+type DashboardTrends = {
+  totalPatients: MetricTrendPoint[];
+  pureFirstVisits: MetricTrendPoint[];
+  averageAge: MetricTrendPoint[];
+  endoscopyPatients: MetricTrendPoint[];
+  lifestyleDiseasePatients: MetricTrendPoint[];
+  internalReferrals: MetricTrendPoint[];
+};
+
 const INITIAL_STATS: DashboardStats = {
   totalPatients: null,
   pureFirstVisits: null,
@@ -49,6 +63,15 @@ const INITIAL_STATS: DashboardStats = {
   kartePeriodLabel: null,
   surveyPeriodLabel: null,
   lifestylePeriodLabel: null,
+};
+
+const INITIAL_TRENDS: DashboardTrends = {
+  totalPatients: [],
+  pureFirstVisits: [],
+  averageAge: [],
+  endoscopyPatients: [],
+  lifestyleDiseasePatients: [],
+  internalReferrals: [],
 };
 
 const formatCount = (value: number | null) =>
@@ -146,12 +169,28 @@ const selectLatestMonths = (months: string[], limit: number): string[] => {
   return months.slice(months.length - limit);
 };
 
+const calcAverage = (sum: number, count: number) =>
+  count > 0 ? Math.round((sum / count) * 10) / 10 : null;
+
+const computeTrendHeights = (trend: MetricTrendPoint[]): number[] => {
+  const values = trend.map((point) => (typeof point.value === "number" ? point.value : 0));
+  const max = Math.max(0, ...values);
+  return values.map((value) => {
+    if (max <= 0 || value <= 0) {
+      return 0;
+    }
+    return Math.max(18, Math.round((value / max) * 100));
+  });
+};
+
 export default function HomePage() {
   const [stats, setStats] = useState<DashboardStats>(INITIAL_STATS);
+  const [trends, setTrends] = useState<DashboardTrends>(INITIAL_TRENDS);
 
   useEffect(() => {
     const loadStats = () => {
       const next: DashboardStats = { ...INITIAL_STATS };
+      const nextTrends: DashboardTrends = { ...INITIAL_TRENDS };
 
       try {
         // カルテデータからKPI計算
@@ -217,6 +256,80 @@ export default function HomePage() {
               next.kartePeriodLabel = monthLabel;
             }
           }
+
+          const latestKarteMonths = selectLatestMonths(karteMonths, 6);
+          const karteMonthSet = new Set(latestKarteMonths);
+          const monthlyKarte = new Map<
+            string,
+            { total: number; endoscopy: number; ageSum: number; ageCount: number }
+          >();
+          latestKarteMonths.forEach((month) =>
+            monthlyKarte.set(month, { total: 0, endoscopy: 0, ageSum: 0, ageCount: 0 }),
+          );
+          karteRecords.forEach((record) => {
+            if (!karteMonthSet.has(record.monthKey)) {
+              return;
+            }
+            const bucket = monthlyKarte.get(record.monthKey);
+            if (!bucket) {
+              return;
+            }
+            bucket.total += 1;
+            if (isEndoscopyDepartment(record.department)) {
+              bucket.endoscopy += 1;
+            }
+            if (record.birthDateIso) {
+              const birthDate = toDateFromIso(record.birthDateIso);
+              const visitDate = toDateFromIso(record.dateIso);
+              if (birthDate && visitDate) {
+                const age = calcAge(birthDate, visitDate);
+                if (Number.isFinite(age) && age >= 0) {
+                  bucket.ageSum += age;
+                  bucket.ageCount += 1;
+                }
+              }
+            }
+          });
+
+          const targetDepartments = ["総合診療", "発熱外来", "内科"];
+          const filteredRecords = karteRecords.filter((record) => {
+            const dept = record.department?.trim() || "";
+            return targetDepartments.includes(dept);
+          });
+          const classified = classifyKarteRecords(filteredRecords);
+          const pureFirstByMonth = new Map<string, number>();
+          latestKarteMonths.forEach((month) => pureFirstByMonth.set(month, 0));
+          classified.forEach((record) => {
+            if (!karteMonthSet.has(record.monthKey)) {
+              return;
+            }
+            if (record.category === "pureFirst") {
+              pureFirstByMonth.set(
+                record.monthKey,
+                (pureFirstByMonth.get(record.monthKey) ?? 0) + 1,
+              );
+            }
+          });
+
+          nextTrends.totalPatients = latestKarteMonths.map((month) => ({
+            month,
+            value: monthlyKarte.get(month)?.total ?? null,
+          }));
+          nextTrends.endoscopyPatients = latestKarteMonths.map((month) => ({
+            month,
+            value: monthlyKarte.get(month)?.endoscopy ?? null,
+          }));
+          nextTrends.averageAge = latestKarteMonths.map((month) => ({
+            month,
+            value: calcAverage(
+              monthlyKarte.get(month)?.ageSum ?? 0,
+              monthlyKarte.get(month)?.ageCount ?? 0,
+            ),
+          }));
+          nextTrends.pureFirstVisits = latestKarteMonths.map((month) => ({
+            month,
+            value: pureFirstByMonth.get(month) ?? null,
+          }));
         }
         next.patientUpdated = window.localStorage.getItem(KARTE_TIMESTAMP_KEY);
       } catch (error) {
@@ -260,6 +373,31 @@ export default function HomePage() {
           if (periodLabel) {
             next.lifestylePeriodLabel = periodLabel;
           }
+
+          const lifestyleMonthSet = new Set(lifestyleMonths);
+          const lifestyleByMonth = new Map<string, Set<string>>();
+          lifestyleMonths.forEach((month) => lifestyleByMonth.set(month, new Set<string>()));
+          diagnosisData.forEach((record) => {
+            if (record.category !== "生活習慣病") {
+              return;
+            }
+            if (!lifestyleMonthSet.has(record.monthKey)) {
+              return;
+            }
+            const key = record.patientNumber
+              ? `pn:${record.patientNumber}`
+              : record.patientNameNormalized && record.birthDateIso
+                ? `nb:${record.patientNameNormalized}|${record.birthDateIso}`
+                : null;
+            if (!key) {
+              return;
+            }
+            lifestyleByMonth.get(record.monthKey)?.add(key);
+          });
+          nextTrends.lifestyleDiseasePatients = lifestyleMonths.map((month) => ({
+            month,
+            value: lifestyleByMonth.get(month)?.size ?? 0,
+          }));
         }
       } catch (error) {
         console.error("Failed to load diagnosis stats", error);
@@ -302,6 +440,12 @@ export default function HomePage() {
                 next.surveyPeriodLabel = surveyLabel;
               }
             }
+
+            const latestSurveyMonths = selectLatestMonths(surveyMonths, 6);
+            nextTrends.internalReferrals = latestSurveyMonths.map((month) => ({
+              month,
+              value: monthlyReferralTotals.get(month) ?? 0,
+            }));
           } else {
             next.internalReferrals = 0;
           }
@@ -311,6 +455,7 @@ export default function HomePage() {
       }
 
       setStats(next);
+      setTrends(nextTrends);
     };
 
     loadStats();
@@ -330,6 +475,8 @@ export default function HomePage() {
         : `カルテ記録の総数 (最終更新: ${formatTimestamp(stats.patientUpdated)})`,
       icon: Users,
       gradient: "from-brand-500 to-brand-400",
+      trend: trends.totalPatients,
+      trendGradient: "from-brand-200 to-brand-400",
     },
     {
       id: "pureFirst",
@@ -341,6 +488,8 @@ export default function HomePage() {
         : "総合診療・発熱外来・内科の純初診",
       icon: UserPlus,
       gradient: "from-emerald-500 to-emerald-400",
+      trend: trends.pureFirstVisits,
+      trendGradient: "from-emerald-200 to-emerald-400",
     },
     {
       id: "averageAge",
@@ -352,6 +501,8 @@ export default function HomePage() {
         : "来院患者の平均年齢",
       icon: Gauge,
       gradient: "from-sky-500 to-sky-400",
+      trend: trends.averageAge,
+      trendGradient: "from-sky-200 to-sky-400",
     },
     {
       id: "endoscopy",
@@ -363,6 +514,8 @@ export default function HomePage() {
         : "内視鏡（保険・自費）と人間ドックA/Bの合計",
       icon: Activity,
       gradient: "from-purple-500 to-purple-400",
+      trend: trends.endoscopyPatients,
+      trendGradient: "from-purple-200 to-purple-400",
     },
     {
       id: "lifestyle",
@@ -374,6 +527,8 @@ export default function HomePage() {
         : "主病登録から集計（ユニーク患者数）",
       icon: Activity,
       gradient: "from-amber-500 to-amber-400",
+      trend: trends.lifestyleDiseasePatients,
+      trendGradient: "from-amber-200 to-amber-400",
     },
     // {
     //   id: "referral",
@@ -488,7 +643,11 @@ export default function HomePage() {
         </section>
 
         <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-          {metricCards.map(({ id, label, value, unit, hint, icon: Icon, gradient }) => (
+          {metricCards.map(({ id, label, value, unit, hint, icon: Icon, gradient, trend, trendGradient }) => {
+            const trendRange =
+              trend.length > 0 ? formatMonthRangeDisplay(trend.map((point) => point.month)) : null;
+            const heights = computeTrendHeights(trend);
+            return (
             <div
               key={id}
               className="group relative overflow-hidden rounded-3xl border border-slate-100 bg-white/90 p-6 shadow-soft transition hover:-translate-y-1 hover:shadow-lg"
@@ -513,8 +672,30 @@ export default function HomePage() {
                   <Icon className="h-6 w-6" />
                 </span>
               </div>
+              {trend.length > 0 ? (
+                <div className="mt-4 rounded-2xl bg-slate-50/70 p-3">
+                  <div className="flex items-center justify-between text-[10px] text-slate-500">
+                    <span>過去{trend.length}ヶ月</span>
+                    <span>{trendRange ?? "—"}</span>
+                  </div>
+                  <div className="mt-2 flex h-12 items-end gap-1.5">
+                    {trend.map((point, index) => (
+                      <div key={point.month} className="flex-1">
+                        <span
+                          className={`block w-full rounded-full bg-gradient-to-t ${trendGradient} shadow-sm`}
+                          style={{ height: `${heights[index] ?? 0}%` }}
+                          title={`${formatMonthDisplay(point.month) ?? point.month}: ${formatCount(point.value)}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-4 text-xs text-slate-400">推移データなし</p>
+              )}
             </div>
-          ))}
+          );
+          })}
         </section>
 
         <section className="space-y-6">

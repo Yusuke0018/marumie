@@ -1,0 +1,9 @@
+timestamp: 20260102-164137+0900
+branch: main
+head: f5d3db5ae42e6ddd9c2db42332134e2a05583198
+diff_summary: ## main...origin/main
+ M src/app/page.tsx
+lint: npm run lint (passed)
+tests: not run (no test script)
+push: pending
+notes: add 6-month trend sparklines to home KPI cards
