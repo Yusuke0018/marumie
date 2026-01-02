@@ -1173,8 +1173,6 @@ const formatWeekdayWithSuffix = (weekday: number): string => {
   return label === "祝日" ? label : `${label}曜`;
 };
 
-const formatHourLabel = (hour: number) => `${hour.toString().padStart(2, "0")}:00`;
-
 const normalizeDepartmentLabel = (value: string) =>
   value.replace(/[\s・●()（）【】\[\]\-]/g, "").toLowerCase();
 

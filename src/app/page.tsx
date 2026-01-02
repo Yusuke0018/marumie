@@ -374,7 +374,6 @@ export default function HomePage() {
             next.lifestylePeriodLabel = periodLabel;
           }
 
-          const lifestyleMonthSet = new Set(lifestyleMonths);
           const lifestyleByMonth = new Map<string, Set<string>>();
           lifestyleMonths.forEach((month) => lifestyleByMonth.set(month, new Set<string>()));
           diagnosisData.forEach((record) => {
