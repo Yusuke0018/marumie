@@ -1,5 +1,7 @@
 # 変更履歴
 
+- ビルド検証を実施（Node 24.5.0環境）。`npm ci`は成功（EBADENGINE警告のみ）、`npm run build`も成功。5件の脆弱性（glob GHSA-5j98-mcp5-4vw2、js-yaml GHSA-mh29-5h37-fv8m等）を確認し60_errors.mdに記録。20_spec.mdに`/data-management`ページ、`SharedDataBundle`、診断/経費データヘルパーを追記。30_coding-rules.mdにデータヘルパー一覧を更新。(2026-01-02)[docs/20_spec.md][docs/30_coding-rules.md][docs/60_errors.md]
+
 - 売上分析ページに claude ブランチの UI/UX（ヒーローセクション、カード配色、テーブル装飾など）を適用し、既存の前月比・前年比/主要指標差分表示を新しいデザインへ統合した。(2025-11-06)[src/app/sales/page.tsx:1-760]
 - 曜日別平均売上グラフを曜日ごとのパステルカラー配色へ変更し、視覚的に曜日を判別しやすくした。(2025-11-06)[src/components/sales/WeekdaySalesAverageChart.tsx:1-120]
 - 売上分析ページに前月比・前年比の比較カードを追加し、月次合計の増減額と増減率をカード表示で可視化。比較対象がない月は「比較対象なし」として扱うようにした。(2025-11-06)[src/app/sales/page.tsx:1-520]

@@ -8,7 +8,7 @@
 広告と予約の相関分析(`/correlation`)はListingデータと予約データを読み込み、Pearson相関と散布図・時間帯比較で関係性を評価します。発熱訴求のCSVは発熱外来カテゴリとして扱い、診療科「発熱外来」との相関を算出します。内視鏡については「胃カメラ」「大腸カメラ」を切り替えて分析でき、リスティング側は両者を内視鏡として集約して相関を計測します（合計モードも提供）。なお内視鏡（胃/大腸/合計）モードではアンケートは参照せず、予約ログとリスティングのみを用います。[src/app/correlation/page.tsx:1-520][src/lib/correlationData.ts:1-320]
 患者分析(`/patients`)はカルテ・予約・診断・アンケート・リスティングを統合し、月次トレンドや診療科別指標、データ共有を提供します。多変量解析タブでは全体・総合診療・発熱外来の各セグメントを切り替え、曜日カードを展開すると時間帯グラフと年齢別サマリが表示されます。[src/app/patients/page.tsx:1-540]
 生活習慣病フォーカス分析(`/patients/lifestyle`)は `LifestyleViewContext` を `true` にして `/patients` 画面のロジックを再利用し、診断CSVから生活習慣病カテゴリに該当する直近6か月の患者数と期間ラベルを抽出します。[src/app/patients/lifestyle/page.tsx:1-12][src/app/patients/page.tsx:105][src/app/patients/page.tsx:995-1150]
-データ管理からはカルテ・予約・アンケート・リスティング・傷病名・売上のCSVを個別またはまとめて取り込める一括アップロードを提供します。ファイル名のキーワードで自動振り分けします。[src/app/patients/page.tsx:5908-6390]
+データ管理(`/data-management`)はカルテ・予約・アンケート・リスティング・傷病名・売上のCSVを個別またはまとめて取り込める一括アップロードを提供します。ファイル名のキーワードで自動振り分けします。`PatientAnalysisPageContent`を`mode="data-management"`で再利用しており、患者分析ページ(`/patients`)からも同様のUIを呼び出せます。[src/app/data-management/page.tsx:1-12][src/app/patients/PatientAnalysisPageContent.tsx:1-540]
 アンケート分析(`/survey`)は流入チャネル別の円グラフと比較ビューでアンケート回答を分析します。[src/app/survey/page.tsx:1-240]
 Cloudflare Worker は `/api/upload` と `/api/data/:id` を提供し、R2バケットでデータ共有を行います。[cloudflare-worker/src/index.ts:48-134]
 地図表示は大阪府町丁目データと全国市区町村座標を組み合わせ、町丁目未特定の場合は市区町村代表点を描画します。[public/data/osaka_towns.json:1][public/data/municipalities.json:1][src/components/reservations/GeoDistributionMap.tsx:538-940]
@@ -17,8 +17,11 @@ ABテスト分析(`/ab-test`)は、カルテCSVの取り込みまたは保存済
 
 ## データ入力/出力
 - フロントCSV: 予約ログ・カルテ・アンケートをブラウザ圧縮保存する。[src/lib/storageCompression.ts:1-120]
+- 共有バンドル: `SharedDataBundle`型でカルテ・予約・アンケート・リスティング・診断・売上を一括でまとめ、R2経由で共有する。[src/lib/sharedBundle.ts:1-24]
 - 共有API: JSON文字列をR2へ保存しID付きURLを返却する。[cloudflare-worker/src/index.ts:48-75]
 - 地理マスター: `public/data/osaka_towns.json` と `public/data/municipalities.json` をロードし、町丁目と市区町村代表点を使い分ける。[src/components/reservations/GeoDistributionMap.tsx:538-940]
+- 診断データ: 傷病名CSV（diagnosisData）から生活習慣病カテゴリを抽出し、ホームKPIや生活習慣病フォーカス分析で使用する。[src/lib/diagnosisData.ts:1-520]
+- 経費データ: 経費CSV（expenseData）を取り込み、売上分析ページで参照する。[src/lib/expenseData.ts:1-200]
 
 ## ビルド/ホスティング
 - Vercel: `npm run build` の標準ビルドを使用し、環境変数の追加設定は不要。
