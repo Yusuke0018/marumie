@@ -1,12 +1,8 @@
 timestamp: 20260102-160729+0900
 branch: main
-head: b711ca40b37a6582108cb8ef1a2b63f0365fa45d
+head: 726c7972b6c2780c192f86ecd67a3ea4303e4221
 diff_summary: ## main...origin/main
- M src/app/patients/PatientAnalysisPageContent.tsx
- M src/app/sales/page.tsx
- M src/components/AnalysisFilterPortal.tsx
- M src/hooks/useAnalysisPeriodRange.ts
 lint: npm run lint (passed)
 tests: not run (no test script)
-push: pending
-notes: switch analysis filters to single-month; lifestyle range fixed to 6 months
+push: success (origin/main)
+notes: single-month selector; lifestyle view auto-applies 6-month window
