@@ -285,18 +285,6 @@ export default function SalesPage() {
     [salesData],
   );
 
-  // 最新月のデータ
-  const latestMonth = useMemo(
-    () => (salesData.length > 0 ? salesData[salesData.length - 1]! : null),
-    [salesData],
-  );
-
-  // 最新月の比較データ
-  const latestComparison = useMemo(() => {
-    if (!latestMonth) return null;
-    return calculateComparison(salesData, latestMonth);
-  }, [salesData, latestMonth]);
-
   // 期間内の月データをフィルタリング
   const filteredMonths = useMemo(() => {
     if (!startMonth || !endMonth) {
@@ -563,18 +551,18 @@ export default function SalesPage() {
 
     const colors = colorScheme === "emerald"
       ? {
-          border: isPositive ? "border-emerald-300" : isNegative ? "border-rose-300" : "border-slate-200",
-          bg: isPositive ? "from-emerald-50 to-teal-50" : isNegative ? "from-rose-50 to-pink-50" : "from-slate-50 to-gray-50",
-          icon: isPositive ? "bg-emerald-100 text-emerald-600" : isNegative ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-500",
-          value: isPositive ? "text-emerald-700" : isNegative ? "text-rose-600" : "text-slate-600",
-          percent: isPositive ? "text-emerald-600" : isNegative ? "text-rose-500" : "text-slate-500",
+          border: isPositive ? "border-emerald-200/80" : isNegative ? "border-rose-200/80" : "border-slate-200/80",
+          bg: isPositive ? "from-emerald-50/80 to-teal-50/80" : isNegative ? "from-rose-50/80 to-pink-50/80" : "from-slate-50/80 to-gray-50/80",
+          icon: isPositive ? "bg-emerald-200/70 text-emerald-700" : isNegative ? "bg-rose-200/70 text-rose-700" : "bg-slate-200/70 text-slate-600",
+          value: isPositive ? "text-emerald-800" : isNegative ? "text-rose-700" : "text-slate-700",
+          percent: isPositive ? "text-emerald-700" : isNegative ? "text-rose-600" : "text-slate-600",
         }
       : {
-          border: isPositive ? "border-blue-300" : isNegative ? "border-rose-300" : "border-slate-200",
-          bg: isPositive ? "from-blue-50 to-cyan-50" : isNegative ? "from-rose-50 to-pink-50" : "from-slate-50 to-gray-50",
-          icon: isPositive ? "bg-blue-100 text-blue-600" : isNegative ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-500",
-          value: isPositive ? "text-blue-700" : isNegative ? "text-rose-600" : "text-slate-600",
-          percent: isPositive ? "text-blue-600" : isNegative ? "text-rose-500" : "text-slate-500",
+          border: isPositive ? "border-sky-200/80" : isNegative ? "border-rose-200/80" : "border-slate-200/80",
+          bg: isPositive ? "from-sky-50/80 to-blue-50/80" : isNegative ? "from-rose-50/80 to-pink-50/80" : "from-slate-50/80 to-gray-50/80",
+          icon: isPositive ? "bg-sky-200/70 text-sky-700" : isNegative ? "bg-rose-200/70 text-rose-700" : "bg-slate-200/70 text-slate-600",
+          value: isPositive ? "text-sky-800" : isNegative ? "text-rose-700" : "text-slate-700",
+          percent: isPositive ? "text-sky-700" : isNegative ? "text-rose-600" : "text-slate-600",
         };
 
     return (
@@ -652,58 +640,6 @@ export default function SalesPage() {
 
         {hasData ? (
           <>
-            {/* 最新月の情報（常時表示） */}
-            {latestComparison && (
-              <section className="rounded-3xl border-2 border-amber-200 bg-gradient-to-br from-amber-50/80 via-yellow-50/50 to-orange-50/30 p-6 shadow-xl">
-                <div className="flex flex-col gap-5">
-                  <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 p-2.5 shadow-md">
-                        <Sparkles className="h-5 w-5 text-white" />
-                      </div>
-                      <div>
-                        <h2 className="text-xl font-black text-slate-900">
-                          最新月: {latestComparison.current.label}
-                        </h2>
-                        <p className="text-sm text-slate-600">常に最新の売上状況を確認</p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleSelectSingleMonth(latestComparison.current.id)}
-                      className="inline-flex items-center gap-2 rounded-full bg-amber-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-amber-500/30 transition-all hover:bg-amber-600 hover:shadow-xl"
-                    >
-                      <Calendar className="h-4 w-4" />
-                      この月を詳しく見る
-                    </button>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    <div className="rounded-2xl border border-amber-200 bg-white/90 p-5 shadow-md">
-                      <p className="text-sm font-medium text-slate-500">月間売上</p>
-                      <p className="mt-2 text-3xl font-black text-amber-600">
-                        {formatCurrency(latestComparison.current.totalRevenue)}
-                      </p>
-                    </div>
-                    {renderComparisonCard(
-                      "前月比",
-                      latestComparison.previous?.label ?? null,
-                      latestComparison.diffPrevMonth,
-                      latestComparison.percentPrevMonth,
-                      "emerald",
-                    )}
-                    {renderComparisonCard(
-                      "前年同月比",
-                      latestComparison.previousYear?.label ?? null,
-                      latestComparison.diffPrevYear,
-                      latestComparison.percentPrevYear,
-                      "blue",
-                    )}
-                  </div>
-                </div>
-              </section>
-            )}
-
             {/* 単月クイック選択 */}
             <section className="rounded-3xl border border-emerald-100/60 bg-white p-6 shadow-xl shadow-emerald-500/5">
               <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
@@ -716,13 +652,12 @@ export default function SalesPage() {
                   onClick={handleReset}
                   className="text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors"
                 >
-                  全期間に戻す
+                  選択をリセット
                 </button>
               </div>
               <div className="flex flex-wrap gap-2">
                 {salesData.map((month) => {
                   const isSelected = isSingleMonth && filteredMonths[0]?.id === month.id;
-                  const isLatest = month.id === latestMonth?.id;
                   return (
                     <button
                       key={month.id}
@@ -731,15 +666,10 @@ export default function SalesPage() {
                       className={`rounded-full px-4 py-2 text-sm font-bold transition-all ${
                         isSelected
                           ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/40 scale-105"
-                          : isLatest
-                            ? "border-2 border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                            : "border-2 border-emerald-200 text-slate-600 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700"
+                          : "border-2 border-emerald-200 text-slate-600 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700"
                       }`}
                     >
                       {month.label}
-                      {isLatest && !isSelected && (
-                        <span className="ml-1.5 text-xs">(最新)</span>
-                      )}
                     </button>
                   );
                 })}
@@ -749,17 +679,17 @@ export default function SalesPage() {
             {/* 単月表示時の前月比・前年比 */}
             {isSingleMonth && singleMonthComparison && (
               <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="group relative overflow-hidden rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-6 shadow-lg">
-                  <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-emerald-300/40 blur-2xl" />
+                <div className="group relative overflow-hidden rounded-2xl border border-sky-200/70 bg-gradient-to-br from-sky-50/80 to-blue-50/70 p-6 shadow-lg">
+                  <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 -translate-y-8 rounded-full bg-sky-200/40 blur-2xl" />
                   <div className="relative">
-                    <div className="mb-3 inline-flex rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-500 p-2.5 shadow-md">
-                      <DollarSign className="h-5 w-5 text-white" />
+                    <div className="mb-3 inline-flex rounded-xl bg-sky-200/80 p-2.5 shadow-md">
+                      <DollarSign className="h-5 w-5 text-sky-700" />
                     </div>
-                    <p className="text-sm font-semibold text-emerald-700">月間売上</p>
-                    <p className="mt-2 text-3xl font-black text-emerald-600">
+                    <p className="text-sm font-semibold text-sky-700">月間売上</p>
+                    <p className="mt-2 text-3xl font-black text-slate-900">
                       {formatCurrency(singleMonthComparison.current.totalRevenue)}
                     </p>
-                    <p className="mt-2 text-xs text-emerald-600/80">
+                    <p className="mt-2 text-xs text-sky-700/80">
                       {singleMonthComparison.current.label}
                     </p>
                   </div>
