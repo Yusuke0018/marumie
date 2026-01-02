@@ -12,7 +12,18 @@ import {
   BarChart3,
   Map as MapIcon,
   Gauge,
+  X,
 } from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from "recharts";
 import { getCompressedItem } from "@/lib/storageCompression";
 import { KARTE_STORAGE_KEY, KARTE_TIMESTAMP_KEY } from "@/lib/storageKeys";
 import {
@@ -183,9 +194,18 @@ const computeTrendHeights = (trend: MetricTrendPoint[]): number[] => {
   });
 };
 
+type SelectedMetric = {
+  id: string;
+  label: string;
+  unit: string;
+  trend: MetricTrendPoint[];
+  color: string;
+} | null;
+
 export default function HomePage() {
   const [stats, setStats] = useState<DashboardStats>(INITIAL_STATS);
   const [trends, setTrends] = useState<DashboardTrends>(INITIAL_TRENDS);
+  const [selectedMetric, setSelectedMetric] = useState<SelectedMetric>(null);
 
   useEffect(() => {
     const loadStats = () => {
@@ -476,6 +496,7 @@ export default function HomePage() {
       gradient: "from-brand-500 to-brand-400",
       trend: trends.totalPatients,
       trendGradient: "from-brand-200 to-brand-400",
+      color: "#4B9FD6",
     },
     {
       id: "pureFirst",
@@ -489,6 +510,7 @@ export default function HomePage() {
       gradient: "from-emerald-500 to-emerald-400",
       trend: trends.pureFirstVisits,
       trendGradient: "from-emerald-200 to-emerald-400",
+      color: "#10B981",
     },
     {
       id: "averageAge",
@@ -502,6 +524,7 @@ export default function HomePage() {
       gradient: "from-sky-500 to-sky-400",
       trend: trends.averageAge,
       trendGradient: "from-sky-200 to-sky-400",
+      color: "#0EA5E9",
     },
     {
       id: "endoscopy",
@@ -515,6 +538,7 @@ export default function HomePage() {
       gradient: "from-purple-500 to-purple-400",
       trend: trends.endoscopyPatients,
       trendGradient: "from-purple-200 to-purple-400",
+      color: "#A855F7",
     },
     {
       id: "lifestyle",
@@ -528,6 +552,7 @@ export default function HomePage() {
       gradient: "from-amber-500 to-amber-400",
       trend: trends.lifestyleDiseasePatients,
       trendGradient: "from-amber-200 to-amber-400",
+      color: "#F59E0B",
     },
     // {
     //   id: "referral",
@@ -642,14 +667,17 @@ export default function HomePage() {
         </section>
 
         <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-          {metricCards.map(({ id, label, value, unit, hint, icon: Icon, gradient, trend, trendGradient }) => {
+          {metricCards.map(({ id, label, value, unit, hint, icon: Icon, gradient, trend, trendGradient, color }) => {
             const trendRange =
               trend.length > 0 ? formatMonthRangeDisplay(trend.map((point) => point.month)) : null;
             const heights = computeTrendHeights(trend);
+            const hasData = trend.length > 0;
             return (
-            <div
+            <button
               key={id}
-              className="group relative overflow-hidden rounded-3xl border border-slate-100 bg-white/90 p-6 shadow-soft transition hover:-translate-y-1 hover:shadow-lg"
+              type="button"
+              onClick={() => hasData && setSelectedMetric({ id, label, unit, trend, color })}
+              className={`group relative overflow-hidden rounded-3xl border border-slate-100 bg-white/90 p-6 shadow-soft transition hover:-translate-y-1 hover:shadow-lg text-left w-full ${hasData ? "cursor-pointer" : "cursor-default"}`}
             >
               <div
                 className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${gradient}`}
@@ -671,10 +699,10 @@ export default function HomePage() {
                   <Icon className="h-6 w-6" />
                 </span>
               </div>
-              {trend.length > 0 ? (
+              {hasData ? (
                 <div className="mt-4 rounded-2xl bg-slate-50/70 p-3">
                   <div className="flex items-center justify-between text-[10px] text-slate-500">
-                    <span>過去{trend.length}ヶ月</span>
+                    <span>過去{trend.length}ヶ月（タップで詳細）</span>
                     <span>{trendRange ?? "—"}</span>
                   </div>
                   <div className="mt-2 flex h-12 items-end gap-1.5">
@@ -692,7 +720,7 @@ export default function HomePage() {
               ) : (
                 <p className="mt-4 text-xs text-slate-400">推移データなし</p>
               )}
-            </div>
+            </button>
           );
           })}
         </section>
@@ -741,6 +769,101 @@ export default function HomePage() {
           </div>
         </section>
       </div>
+
+      {/* 詳細グラフモーダル */}
+      {selectedMetric && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setSelectedMetric(null)}
+        >
+          <div
+            className="relative w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setSelectedMetric(null)}
+              className="absolute right-4 top-4 rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+              aria-label="閉じる"
+            >
+              <X className="h-6 w-6" />
+            </button>
+
+            <h3 className="text-xl font-bold text-slate-900 mb-2">
+              {selectedMetric.label}の推移
+            </h3>
+            <p className="text-sm text-slate-500 mb-6">
+              {formatMonthRangeDisplay(selectedMetric.trend.map((p) => p.month)) ?? "—"}
+            </p>
+
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={selectedMetric.trend.map((point) => ({
+                    month: formatMonthDisplay(point.month) ?? point.month,
+                    value: point.value ?? 0,
+                  }))}
+                  margin={{ top: 20, right: 20, left: 20, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis
+                    dataKey="month"
+                    tick={{ fontSize: 12, fill: "#64748b" }}
+                    axisLine={{ stroke: "#e2e8f0" }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 12, fill: "#64748b" }}
+                    axisLine={{ stroke: "#e2e8f0" }}
+                    tickLine={false}
+                    tickFormatter={(value) =>
+                      selectedMetric.id === "averageAge"
+                        ? value.toFixed(1)
+                        : value.toLocaleString()
+                    }
+                  />
+                  <Tooltip
+                    formatter={(value: number) => [
+                      selectedMetric.id === "averageAge"
+                        ? `${value.toFixed(1)}${selectedMetric.unit}`
+                        : `${value.toLocaleString()}${selectedMetric.unit}`,
+                      selectedMetric.label,
+                    ]}
+                    contentStyle={{
+                      borderRadius: "12px",
+                      border: "none",
+                      boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+                    }}
+                  />
+                  <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                    {selectedMetric.trend.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={selectedMetric.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+              {selectedMetric.trend.map((point) => (
+                <div key={point.month} className="rounded-xl bg-slate-50 p-3">
+                  <p className="text-xs text-slate-500">
+                    {formatMonthDisplay(point.month)}
+                  </p>
+                  <p className="text-lg font-bold text-slate-900">
+                    {selectedMetric.id === "averageAge"
+                      ? point.value?.toFixed(1) ?? "—"
+                      : formatCount(point.value)}
+                    <span className="text-sm font-normal text-slate-500 ml-0.5">
+                      {selectedMetric.unit}
+                    </span>
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
