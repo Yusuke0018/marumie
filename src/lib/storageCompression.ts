@@ -15,6 +15,96 @@ const textEncoder = typeof TextEncoder !== "undefined" ? new TextEncoder() : nul
 const textDecoder = typeof TextDecoder !== "undefined" ? new TextDecoder() : null;
 
 /**
+ * LocalStorageの使用状況を取得
+ */
+export function getStorageUsage(): { used: number; total: number; available: number } {
+  if (typeof window === "undefined") {
+    return { used: 0, total: 5 * 1024 * 1024, available: 5 * 1024 * 1024 };
+  }
+
+  let used = 0;
+  try {
+    for (const key in window.localStorage) {
+      if (Object.prototype.hasOwnProperty.call(window.localStorage, key)) {
+        // UTF-16なので2バイト/文字
+        used += (window.localStorage[key].length + key.length) * 2;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // ブラウザのLocalStorage制限は通常5MB（一部10MB）
+  const total = 5 * 1024 * 1024;
+  return { used, total, available: Math.max(0, total - used) };
+}
+
+/**
+ * 指定キーの使用容量を取得
+ */
+export function getKeyUsage(key: string): number {
+  if (typeof window === "undefined") {
+    return 0;
+  }
+
+  let size = 0;
+  try {
+    const meta = window.localStorage.getItem(key);
+    if (meta) {
+      size += (key.length + meta.length) * 2;
+      if (meta.startsWith(CHUNK_META_PREFIX)) {
+        const count = Number.parseInt(meta.slice(CHUNK_META_PREFIX.length), 10);
+        if (Number.isFinite(count) && count > 0) {
+          for (let i = 0; i < count; i++) {
+            const chunkKey = `${key}${CHUNK_KEY_SEPARATOR}${i}`;
+            const chunk = window.localStorage.getItem(chunkKey);
+            if (chunk) {
+              size += (chunkKey.length + chunk.length) * 2;
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return size;
+}
+
+/**
+ * clinic-analytics配下のキー一覧を取得（サイズ順）
+ */
+export function getClinicAnalyticsKeys(): Array<{ key: string; size: number }> {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const keys: Array<{ key: string; size: number }> = [];
+  const seen = new Set<string>();
+
+  try {
+    for (const key in window.localStorage) {
+      if (!Object.prototype.hasOwnProperty.call(window.localStorage, key)) continue;
+      if (!key.startsWith("clinic-analytics/")) continue;
+
+      // チャンクキーは親キーにまとめる
+      const baseKey = key.includes(CHUNK_KEY_SEPARATOR)
+        ? key.split(CHUNK_KEY_SEPARATOR)[0]
+        : key;
+
+      if (seen.has(baseKey)) continue;
+      seen.add(baseKey);
+
+      keys.push({ key: baseKey, size: getKeyUsage(baseKey) });
+    }
+  } catch {
+    // ignore
+  }
+
+  return keys.sort((a, b) => b.size - a.size);
+}
+
+/**
  * 文字列をUTF-16でエンコード
  */
 function compress(uncompressed: string): string {

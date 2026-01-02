@@ -1463,13 +1463,16 @@ const [expandedWeekdayBySegment, setExpandedWeekdayBySegment] = useState<
 
       if (Array.isArray(bundle.diagnosisData)) {
         const diagnosisDataset = bundle.diagnosisData as DiagnosisRecord[];
-        const diagnosisTimestamp = saveDiagnosisToStorage(
+        const saveResult = saveDiagnosisToStorage(
           diagnosisDataset,
           bundle.diagnosisTimestamp ?? fallbackTimestamp ?? generatedAt,
         );
+        if (saveResult.warning) {
+          console.warn(saveResult.warning);
+        }
         setDiagnosisRecords(diagnosisDataset);
         setDiagnosisStatus({
-          lastUpdated: diagnosisTimestamp,
+          lastUpdated: saveResult.timestamp,
           total: diagnosisDataset.length,
           byDepartment: calculateDiagnosisDepartmentTotals(diagnosisDataset),
           byCategory: calculateDiagnosisCategoryTotals(diagnosisDataset),
@@ -3759,11 +3762,15 @@ const resolveSegments = (value: string | null | undefined): MultivariateSegmentK
         }
 
         const merged = mergeDiagnosisRecords(existing, incoming);
-        const timestamp = saveDiagnosisToStorage(merged);
+        const saveResult = saveDiagnosisToStorage(merged);
+
+        if (saveResult.warning) {
+          setDiagnosisUploadError(saveResult.warning);
+        }
 
         setDiagnosisRecords(merged);
         setDiagnosisStatus({
-          lastUpdated: timestamp,
+          lastUpdated: saveResult.timestamp,
           total: merged.length,
           byDepartment: calculateDiagnosisDepartmentTotals(merged),
           byCategory: calculateDiagnosisCategoryTotals(merged),

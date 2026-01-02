@@ -3,6 +3,7 @@ import {
   setCompressedItem,
   getCompressedItem,
   clearCompressedItem,
+  getStorageUsage,
 } from "./storageCompression";
 
 export type DiagnosisDepartment =
@@ -481,23 +482,96 @@ export const loadDiagnosisTimestamp = (): string | null => {
   }
 };
 
+/**
+ * 直近Nヶ月のデータのみ抽出
+ */
+const filterRecentMonths = (
+  data: DiagnosisRecord[],
+  months: number,
+): DiagnosisRecord[] => {
+  if (data.length === 0) return [];
+
+  const allMonths = Array.from(new Set(data.map((r) => r.monthKey))).sort();
+  if (allMonths.length <= months) return data;
+
+  const cutoffMonth = allMonths[allMonths.length - months];
+  return data.filter((r) => r.monthKey >= cutoffMonth);
+};
+
+export type SaveDiagnosisResult = {
+  timestamp: string;
+  savedCount: number;
+  originalCount: number;
+  truncatedMonths: number | null;
+  warning: string | null;
+};
+
 export const saveDiagnosisToStorage = (
   data: DiagnosisRecord[],
   timestampOverride?: string,
-): string => {
+): SaveDiagnosisResult => {
   const timestamp = timestampOverride ?? new Date().toISOString();
-  if (typeof window !== "undefined") {
+  const originalCount = data.length;
+
+  if (typeof window === "undefined") {
+    return {
+      timestamp,
+      savedCount: originalCount,
+      originalCount,
+      truncatedMonths: null,
+      warning: null,
+    };
+  }
+
+  // 段階的フォールバック: 全件 → 18ヶ月 → 12ヶ月 → 9ヶ月 → 6ヶ月 → 3ヶ月
+  const fallbackMonths = [null, 18, 12, 9, 6, 3];
+
+  for (const months of fallbackMonths) {
+    const targetData = months === null ? data : filterRecentMonths(data, months);
+
     try {
-      setCompressedItem(DIAGNOSIS_STORAGE_KEY, JSON.stringify(data));
+      // 保存前に既存データを削除してスペース確保
+      clearCompressedItem(DIAGNOSIS_STORAGE_KEY);
+
+      setCompressedItem(DIAGNOSIS_STORAGE_KEY, JSON.stringify(targetData));
       window.localStorage.setItem(DIAGNOSIS_TIMESTAMP_KEY, timestamp);
+
+      const warning =
+        months !== null
+          ? `容量制限のため直近${months}ヶ月分（${targetData.length}件）のみ保存しました。全件保存には「データ共有URL」をご利用ください。`
+          : null;
+
+      if (warning) {
+        console.warn(warning);
+      }
+
+      return {
+        timestamp,
+        savedCount: targetData.length,
+        originalCount,
+        truncatedMonths: months,
+        warning,
+      };
     } catch (error) {
-      console.error("主病データの保存エラー:", error);
-      throw new Error(
-        "主病データの保存に失敗しました。データ量が多すぎる可能性があります。",
+      // 最後のフォールバックでも失敗した場合
+      if (months === 3) {
+        const usage = getStorageUsage();
+        const usedMB = (usage.used / 1024 / 1024).toFixed(2);
+        console.error("主病データの保存エラー:", error);
+        throw new Error(
+          `主病データの保存に失敗しました。LocalStorageが満杯です（${usedMB}MB使用中）。` +
+            "他のデータを削除するか、「データ共有URL」機能をご利用ください。",
+        );
+      }
+      // 次のフォールバックを試行
+      console.warn(
+        `保存失敗（${months === null ? "全件" : `${months}ヶ月`}）、次のフォールバックを試行...`,
       );
     }
   }
-  return timestamp;
+
+  // ここには到達しないはずだが、型安全のため
+  throw new Error("主病データの保存に失敗しました。");
 };
 
 export const clearDiagnosisStorage = () => {
