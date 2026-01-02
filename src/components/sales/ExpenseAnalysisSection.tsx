@@ -470,7 +470,7 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
         </div>
       )}
 
-      {/* 勘定科目別サマリー（前月比付き）- 経費データがある場合のみ */}
+      {/* 勘定科目別サマリー（前月比・前年比付き）- 経費データがある場合のみ */}
       {(!isLinkedMode || hasExpenseDataForLinkedMonth) && comparison && comparison.accountComparisons.length > 0 && (
         <div>
           <h3 className="mb-4 text-lg font-bold text-slate-800">勘定科目別</h3>
@@ -478,6 +478,10 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
             {comparison.accountComparisons.slice(0, 8).map((account) => {
               const style = accountCategoryStyles[account.category] || accountCategoryStyles["その他"];
               const Icon = style.icon;
+              // 前年比データを取得
+              const yearAccount = yearComparison?.accountComparisons.find(
+                (a) => a.category === account.category
+              );
               return (
                 <div
                   key={account.category}
@@ -492,14 +496,28 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
                     <p className="mt-2 text-2xl font-black text-slate-800">
                       {formatCurrency(account.currentAmount)}
                     </p>
+                    {/* 前月比 */}
                     {hasPreviousData && account.previousAmount > 0 && (
-                      <div className="mt-2">
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className="text-xs text-slate-500">前月比:</span>
                         <ChangeIndicator change={account.change} changeRatio={account.changeRatio} />
                       </div>
                     )}
                     {hasPreviousData && account.previousAmount > 0 && (
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-0.5 text-xs text-slate-500">
                         前月: {formatCurrency(account.previousAmount)}
+                      </p>
+                    )}
+                    {/* 前年比 */}
+                    {hasPreviousYearData && yearAccount && yearAccount.previousAmount > 0 && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className="text-xs text-slate-500">前年比:</span>
+                        <ChangeIndicator change={yearAccount.change} changeRatio={yearAccount.changeRatio} />
+                      </div>
+                    )}
+                    {hasPreviousYearData && yearAccount && yearAccount.previousAmount > 0 && (
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        前年: {formatCurrency(yearAccount.previousAmount)}
                       </p>
                     )}
                   </div>
@@ -577,33 +595,55 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
           </button>
           {expandedSection === "purchase" && comparison && (
             <div className="p-6 space-y-4">
-              {/* カテゴリ別（前月比付き） */}
+              {/* カテゴリ別（前月比・前年比付き） */}
               <div>
                 <h4 className="mb-3 text-sm font-bold text-slate-700">品目カテゴリ別</h4>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {comparison.purchaseCategoryComparisons.map((cat) => (
-                    <div
-                      key={cat.category}
-                      className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm hover:shadow-md transition-all"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className={`rounded-full px-3 py-1 text-xs font-bold ${purchaseCategoryColors[cat.category] || purchaseCategoryColors["その他"]}`}>
-                          {cat.category}
-                        </span>
-                      </div>
-                      <p className="text-lg font-black text-slate-800">
-                        {formatCurrency(cat.currentAmount)}
-                      </p>
-                      {hasPreviousData && cat.previousAmount > 0 && (
-                        <div className="mt-2 space-y-1">
-                          <ChangeIndicator change={cat.change} changeRatio={cat.changeRatio} />
-                          <p className="text-xs text-slate-500">
-                            前月: {formatCurrency(cat.previousAmount)}
-                          </p>
+                  {comparison.purchaseCategoryComparisons.map((cat) => {
+                    // 前年比データを取得
+                    const yearCat = yearComparison?.purchaseCategoryComparisons.find(
+                      (p) => p.category === cat.category
+                    );
+                    return (
+                      <div
+                        key={cat.category}
+                        className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm hover:shadow-md transition-all"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className={`rounded-full px-3 py-1 text-xs font-bold ${purchaseCategoryColors[cat.category] || purchaseCategoryColors["その他"]}`}>
+                            {cat.category}
+                          </span>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        <p className="text-lg font-black text-slate-800">
+                          {formatCurrency(cat.currentAmount)}
+                        </p>
+                        {/* 前月比 */}
+                        {hasPreviousData && cat.previousAmount > 0 && (
+                          <div className="mt-2 space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-slate-500">前月比:</span>
+                              <ChangeIndicator change={cat.change} changeRatio={cat.changeRatio} />
+                            </div>
+                            <p className="text-xs text-slate-500">
+                              前月: {formatCurrency(cat.previousAmount)}
+                            </p>
+                          </div>
+                        )}
+                        {/* 前年比 */}
+                        {hasPreviousYearData && yearCat && yearCat.previousAmount > 0 && (
+                          <div className="mt-2 space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-slate-500">前年比:</span>
+                              <ChangeIndicator change={yearCat.change} changeRatio={yearCat.changeRatio} />
+                            </div>
+                            <p className="text-xs text-slate-500">
+                              前年: {formatCurrency(yearCat.previousAmount)}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
               {/* 取引先別 */}
@@ -669,29 +709,51 @@ export function ExpenseAnalysisSection({ records, linkedStartMonth, linkedEndMon
           {expandedSection === "fee" && comparison && (
             <div className="p-6">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {comparison.feeCategoryComparisons.map((cat) => (
-                  <div
-                    key={cat.category}
-                    className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm hover:shadow-md transition-all"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className={`rounded-full px-3 py-1 text-xs font-bold ${feeCategoryColors[cat.category] || feeCategoryColors["その他"]}`}>
-                        {cat.category}
-                      </span>
-                    </div>
-                    <p className="text-lg font-black text-slate-800">
-                      {formatCurrency(cat.currentAmount)}
-                    </p>
-                    {hasPreviousData && cat.previousAmount > 0 && (
-                      <div className="mt-2 space-y-1">
-                        <ChangeIndicator change={cat.change} changeRatio={cat.changeRatio} />
-                        <p className="text-xs text-slate-500">
-                          前月: {formatCurrency(cat.previousAmount)}
-                        </p>
+                {comparison.feeCategoryComparisons.map((cat) => {
+                  // 前年比データを取得
+                  const yearCat = yearComparison?.feeCategoryComparisons.find(
+                    (f) => f.category === cat.category
+                  );
+                  return (
+                    <div
+                      key={cat.category}
+                      className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm hover:shadow-md transition-all"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`rounded-full px-3 py-1 text-xs font-bold ${feeCategoryColors[cat.category] || feeCategoryColors["その他"]}`}>
+                          {cat.category}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                ))}
+                      <p className="text-lg font-black text-slate-800">
+                        {formatCurrency(cat.currentAmount)}
+                      </p>
+                      {/* 前月比 */}
+                      {hasPreviousData && cat.previousAmount > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500">前月比:</span>
+                            <ChangeIndicator change={cat.change} changeRatio={cat.changeRatio} />
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            前月: {formatCurrency(cat.previousAmount)}
+                          </p>
+                        </div>
+                      )}
+                      {/* 前年比 */}
+                      {hasPreviousYearData && yearCat && yearCat.previousAmount > 0 && (
+                        <div className="mt-2 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500">前年比:</span>
+                            <ChangeIndicator change={yearCat.change} changeRatio={yearCat.changeRatio} />
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            前年: {formatCurrency(yearCat.previousAmount)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
