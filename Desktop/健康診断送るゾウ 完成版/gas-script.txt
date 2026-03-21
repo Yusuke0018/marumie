@@ -1,0 +1,94 @@
+// 健康診断送るゾウ - GAS v10
+// 対象スプレッドシート:
+// https://docs.google.com/spreadsheets/d/17TrKCH1Zjw2zkS_AX2pnz0wIO77xy-JRtkFZya8c9Zg/edit?gid=2110734138#gid=2110734138
+
+var SPREADSHEET_ID = '17TrKCH1Zjw2zkS_AX2pnz0wIO77xy-JRtkFZya8c9Zg';
+var SHEET_NAME = '外部';
+var HEADER_ROW = 10;
+
+function getTargetSheet_() {
+  var spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sheet = spreadsheet.getSheetByName(SHEET_NAME);
+  if (!sheet) {
+    throw new Error('シート "' + SHEET_NAME + '" が見つかりません');
+  }
+  return sheet;
+}
+
+function getHeaderMap_(sheet) {
+  var lastColumn = sheet.getLastColumn();
+  if (lastColumn === 0) {
+    throw new Error('ヘッダー行を取得できません');
+  }
+
+  var headers = sheet.getRange(HEADER_ROW, 1, 1, lastColumn).getDisplayValues()[0];
+  var map = {};
+  for (var i = 0; i < headers.length; i++) {
+    var header = String(headers[i] || '').trim();
+    if (header) {
+      map[header] = i;
+    }
+  }
+  return { headers: headers, map: map };
+}
+
+function buildRow_(fields, headerInfo) {
+  var row = new Array(headerInfo.headers.length).fill('');
+  var matched = 0;
+  var skipped = [];
+
+  Object.keys(fields).forEach(function (key) {
+    if (Object.prototype.hasOwnProperty.call(headerInfo.map, key)) {
+      row[headerInfo.map[key]] = fields[key];
+      matched++;
+    } else {
+      skipped.push(key);
+    }
+  });
+
+  return { row: row, matched: matched, skipped: skipped };
+}
+
+function doPost(e) {
+  try {
+    var rawData = (e.postData && e.postData.contents) ? e.postData.contents : '';
+    if (!rawData) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false, error: 'データが空です'
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var fields = JSON.parse(rawData).fields || {};
+    Logger.log('受信: ' + Object.keys(fields).length + '項目');
+
+    var sheet = getTargetSheet_();
+    var headerInfo = getHeaderMap_(sheet);
+    var result = buildRow_(fields, headerInfo);
+    Logger.log('マッチ: ' + result.matched + '/' + Object.keys(fields).length);
+    if (result.skipped.length > 0) {
+      Logger.log('未対応: ' + result.skipped.join(', '));
+    }
+
+    sheet.appendRow(result.row);
+
+    Logger.log('書き込み完了');
+
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      matched: result.matched,
+      skipped: result.skipped
+    })).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    Logger.log('ERROR: ' + err.message + '\n' + err.stack);
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false, error: err.message
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({
+    success: true, message: 'GAS v10'
+  })).setMimeType(ContentService.MimeType.JSON);
+}
