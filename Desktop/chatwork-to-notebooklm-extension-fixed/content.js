@@ -144,29 +144,41 @@
 
     let lastScrollTop = -1;
     let sameCount = 0;
-    const maxIterations = 10000; // 3年分対応: 大幅増
-    const BASE_DELAY = 20;      // ベース待機: 20ms
-    const LOAD_WAIT = 300;      // Chatworkのメッセージロード待ち
-    let consecutiveZero = 0;    // scrollTop=0が続いた回数
+    const TIMEOUT_MS = 5 * 60 * 1000; // 5分タイムアウト
+    const BASE_DELAY = 20;
+    const LOAD_WAIT = 400;
+    let consecutiveZero = 0;
+    let scrollCount = 0;
+    const startTime = Date.now();
 
-    for (let i = 0; i < maxIterations && !shouldCancel; i++) {
+    while (!shouldCancel) {
+      scrollCount++;
+      const elapsed = Date.now() - startTime;
+
+      // タイムアウト
+      if (elapsed > TIMEOUT_MS) {
+        console.log(`[CW-NLM] タイムアウト(5分) ${scrollCount}回, 経過${Math.round(elapsed/1000)}秒`);
+        break;
+      }
+
       // 進捗更新と日付チェック（10回に1回）
-      if (i % 10 === 0) {
+      if (scrollCount % 10 === 0) {
         const count = document.querySelectorAll('[data-mid], ._message').length;
-        updateProgress(count, i);
+        const sec = Math.round(elapsed / 1000);
+        updateProgress(count, scrollCount, sec);
 
         if (targetDate) {
           const oldestDate = getOldestVisibleDate();
           if (oldestDate && oldestDate <= targetDate) {
-            console.log(`[CW-NLM] 目標日付に到達 (${i}回のスクロール, ${count}件)`);
+            console.log(`[CW-NLM] 目標日付に到達 (${scrollCount}回, ${sec}秒, ${count}件)`);
             break;
           }
         }
 
-        // 100回ごとに経過ログ
-        if (i > 0 && i % 100 === 0) {
+        // 500回ごとに経過ログ
+        if (scrollCount % 500 === 0) {
           const oldest = getOldestVisibleDate();
-          console.log(`[CW-NLM] スクロール中... ${i}回目, ${count}件, 最古: ${oldest?.toLocaleDateString('ja-JP') || '不明'}`);
+          console.log(`[CW-NLM] スクロール中... ${scrollCount}回, ${sec}秒, ${count}件, 最古: ${oldest?.toLocaleDateString('ja-JP') || '不明'}`);
         }
       }
 
@@ -174,22 +186,20 @@
       const currentScrollTop = container.scrollTop;
       if (currentScrollTop === lastScrollTop) {
         sameCount++;
-        if (currentScrollTop === 0) {
-          consecutiveZero++;
-        }
-        // Chatworkが新しいメッセージをロード中の可能性 → 長めに待つ
-        if (sameCount >= 3 && sameCount <= 8) {
+        if (currentScrollTop === 0) consecutiveZero++;
+
+        // Chatworkがロード中 → 長めに待つ
+        if (sameCount >= 3 && sameCount <= 15) {
           await sleep(LOAD_WAIT);
           continue;
         }
-        // それでも動かない → 本当の上限
-        if (sameCount > 8) {
-          // scrollTop=0で止まった → チャットの先頭に到達
-          if (consecutiveZero > 5) {
-            console.log(`[CW-NLM] チャット先頭に到達 (${i}回のスクロール)`);
-            break;
+        // それでも動かない
+        if (sameCount > 15) {
+          if (consecutiveZero > 10) {
+            console.log(`[CW-NLM] チャット先頭に到達 (${scrollCount}回, ${Math.round(elapsed/1000)}秒)`);
+          } else {
+            console.log(`[CW-NLM] スクロール上限に到達 (${scrollCount}回)`);
           }
-          console.log('[CW-NLM] スクロール上限に到達');
           break;
         }
       } else {
@@ -198,7 +208,7 @@
         lastScrollTop = currentScrollTop;
       }
 
-      // 高速スクロール（大きめにジャンプ）
+      // 高速スクロール
       container.scrollTop = Math.max(0, container.scrollTop - container.clientHeight * 3);
 
       await sleep(BASE_DELAY);
@@ -536,7 +546,7 @@
     });
   }
 
-  function updateProgress(messageCount, scrollAttempts) {
+  function updateProgress(messageCount, scrollAttempts, elapsedSec) {
     const progressText = document.getElementById('cw-nlm-progress-text');
     const progressFill = document.getElementById('cw-nlm-progress-fill');
     const stats = document.getElementById('cw-nlm-stats');
@@ -546,7 +556,10 @@
       const percent = Math.min(Math.log(messageCount + 1) * 20, 95);
       progressFill.style.width = `${percent}%`;
     }
-    if (stats) stats.textContent = `スクロール: ${scrollAttempts}回`;
+    if (stats) {
+      const timeStr = elapsedSec != null ? ` (${elapsedSec}秒)` : '';
+      stats.textContent = `スクロール: ${scrollAttempts}回${timeStr}`;
+    }
   }
 
   function updateProgressText(text) {
