@@ -608,7 +608,8 @@
     const roomName = getRoomName();
     let totalCount = 0;
     let fileCount = 0;
-    let lastSavedMids = new Set();
+
+    let savedMids = new Set();
 
     console.log('[CW-NLM] 全ログ一括収集開始:', { startDate: startDateObj, endDate: endDateObj });
 
@@ -620,26 +621,36 @@
         throw new Error('チャットのスクロールエリアが見つかりません');
       }
 
-      const TIMEOUT_MS = 60 * 60 * 1000; // 1時間タイムアウト
-      const BASE_DELAY = 20;
+      // === turboScrollToDateと完全に同じスクロールロジック ===
+      // （途中でバッチ保存を挟む以外は同一）
+      if (startDateObj) {
+        const oldestDate = getOldestVisibleDate();
+        if (oldestDate && oldestDate <= startDateObj) {
+          console.log('[CW-NLM] 既に目標日付が表示されています。スクロール不要');
+        }
+      }
+
       let lastScrollTop = -1;
       let sameCount = 0;
+      const TIMEOUT_MS = 30 * 60 * 1000; // 30分タイムアウト（turboScrollと同じ）
+      const BASE_DELAY = 20;
+      const LOAD_WAIT = 400;
       let consecutiveZero = 0;
       let scrollCount = 0;
       const startTime = Date.now();
-      let reachedTarget = false;
       let lastBatchCheck = 0;
 
-      while (!shouldCancel && !reachedTarget) {
+      while (!shouldCancel) {
         scrollCount++;
         const elapsed = Date.now() - startTime;
 
+        // タイムアウト（turboScrollと同じ30分）
         if (elapsed > TIMEOUT_MS) {
-          console.log(`[CW-NLM] タイムアウト(60分)`);
+          console.log(`[CW-NLM] タイムアウト(30分) ${scrollCount}回, 経過${Math.round(elapsed/1000)}秒`);
           break;
         }
 
-        // 10回に1回: 進捗表示
+        // 進捗更新と日付チェック（10回に1回 — turboScrollと同じ頻度）
         if (scrollCount % 10 === 0) {
           const count = document.querySelectorAll('[data-mid], ._message').length;
           const sec = Math.round(elapsed / 1000);
@@ -647,56 +658,50 @@
           const secRem = sec % 60;
           updateProgressText(`スクロール中... DOM:${count}件 + 保存済み:${totalCount}件 (${min}分${secRem}秒)`);
 
-          // 目標日付チェック
           if (startDateObj) {
             const oldestDate = getOldestVisibleDate();
             if (oldestDate && oldestDate <= startDateObj) {
-              console.log(`[CW-NLM] 目標日付に到達`);
-              reachedTarget = true;
+              console.log(`[CW-NLM] 目標日付に到達 (${scrollCount}回, ${sec}秒, ${count}件)`);
               break;
             }
           }
 
-          // 500回ごとに経過ログ
           if (scrollCount % 500 === 0) {
             const oldest = getOldestVisibleDate();
             console.log(`[CW-NLM] 一括収集中... ${scrollCount}回, ${sec}秒, DOM:${count}件, 保存済:${totalCount}件, 最古: ${oldest?.toLocaleDateString('ja-JP') || '不明'}`);
           }
         }
 
-        // 50回に1回: バッチ保存チェック（extractAllMessagesは重いので頻度を下げる）
-        if (scrollCount - lastBatchCheck >= 50) {
+        // バッチ保存チェック（200回に1回 — スクロールを邪魔しない頻度に）
+        if (scrollCount - lastBatchCheck >= 200) {
           lastBatchCheck = scrollCount;
           const domCount = document.querySelectorAll('[data-mid], ._message').length;
 
           if (domCount >= BATCH_SIZE) {
             const allMsgs = extractAllMessages({ includeSender, includeTimestamp, includeReactions });
-            const batch = filterAndSort(allMsgs, startDateObj, endDateObj);
+            const batch = filterAndSort(allMsgs, startDateObj, endDateObj)
+              .filter(m => !m.id || !savedMids.has(m.id));
 
             if (batch.length >= BATCH_SIZE) {
               fileCount++;
               const text = formatMessages(batch, options);
               downloadTextFile(text, roomName, fileCount);
               totalCount += batch.length;
+              for (const m of batch) { if (m.id) savedMids.add(m.id); }
               console.log(`[CW-NLM] ファイル${fileCount}保存: ${batch.length}件 (累計${totalCount}件)`);
               updateProgressText(`ファイル${fileCount}保存完了！ 累計${totalCount}件`);
-
-              lastSavedMids = new Set(allMsgs.map(m => m.id).filter(Boolean));
-
-              // 保存後、ページをリロードせずにスクロール位置をリセット
-              // → 古いDOMが残っているので、さらに上にスクロールを続行
             }
           }
         }
 
-        // スクロール位置チェック（turboScrollToDateと同じ粘り強いロジック）
+        // スクロール位置チェック（turboScrollと完全同一ロジック）
         const currentScrollTop = scrollContainer.scrollTop;
         if (currentScrollTop === lastScrollTop) {
           sameCount++;
           if (currentScrollTop === 0) consecutiveZero++;
 
-          // Chatworkがロード中 → 段階的に待つ（最大約60秒粘る）
           if (sameCount >= 3) {
+            // 段階的に待機時間を増やす: 500ms → 1s → 2s
             const wait = sameCount < 10 ? 500 : sameCount < 20 ? 1000 : 2000;
             await sleep(wait);
 
@@ -718,25 +723,31 @@
           lastScrollTop = currentScrollTop;
         }
 
-        // 高速スクロール
+        // 高速スクロール（turboScrollと同じ速度）
         scrollContainer.scrollTop = Math.max(0, scrollContainer.scrollTop - scrollContainer.clientHeight * 3);
         await sleep(BASE_DELAY);
       }
 
-      // 最終バッチ: 残りのメッセージを保存
+      // === スクロール完了後、残りのメッセージを保存 ===
       scrollContainer.scrollTop = scrollContainer.scrollHeight;
       await sleep(300);
 
+      updateProgressText('最終メッセージを抽出中...');
       const finalMsgs = extractAllMessages({ includeSender, includeTimestamp, includeReactions });
       const finalBatch = filterAndSort(finalMsgs, startDateObj, endDateObj)
-        .filter(m => !m.id || !lastSavedMids.has(m.id));
+        .filter(m => !m.id || !savedMids.has(m.id));
 
       if (finalBatch.length > 0) {
-        fileCount++;
-        const text = formatMessages(finalBatch, options);
-        downloadTextFile(text, roomName, fileCount);
-        totalCount += finalBatch.length;
-        console.log(`[CW-NLM] 最終ファイル${fileCount}保存: ${finalBatch.length}件 (累計${totalCount}件)`);
+        // 2000件ずつ分割保存
+        for (let i = 0; i < finalBatch.length; i += BATCH_SIZE) {
+          const chunk = finalBatch.slice(i, i + BATCH_SIZE);
+          fileCount++;
+          const text = formatMessages(chunk, options);
+          downloadTextFile(text, roomName, fileCount);
+          totalCount += chunk.length;
+          console.log(`[CW-NLM] ファイル${fileCount}保存: ${chunk.length}件 (累計${totalCount}件)`);
+          updateProgressText(`ファイル${fileCount}保存完了！ 累計${totalCount}件`);
+        }
       }
 
       hideProgressOverlay();
