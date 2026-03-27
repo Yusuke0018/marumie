@@ -266,20 +266,39 @@
       '[data-mid], ._message, [class*="timelineMessage"], [class*="TimelineMessage"], [class*="chatTimeLineMessage"]'
     );
 
+    console.log(`[CW-NLM] DOM上のメッセージ要素数: ${messageElements.length}`);
+
+    // 最後の5件のDOM情報をデバッグ出力
+    const lastFive = Array.from(messageElements).slice(-5);
+    lastFive.forEach((el, i) => {
+      const mid = el.getAttribute('data-mid') || el.id || '(no id)';
+      const text = el.textContent?.substring(0, 80)?.trim() || '(empty)';
+      const tag = el.tagName;
+      const cls = el.className?.substring?.(0, 60) || '';
+      console.log(`[CW-NLM] 末尾${5-i}: mid=${mid} tag=${tag} class=${cls} text=${text}`);
+    });
+
+    let skippedEmpty = 0;
+    let skippedDupe = 0;
+
     for (const el of messageElements) {
       try {
         const mid = el.getAttribute('data-mid') || el.id;
-        if (mid && seen.has(mid)) continue;
+        if (mid && seen.has(mid)) { skippedDupe++; continue; }
         if (mid) seen.add(mid);
 
         const message = parseMessageElement(el, options);
         if (message && message.content && message.content.trim()) {
           messages.push(message);
+        } else {
+          skippedEmpty++;
         }
       } catch (e) {
         // skip
       }
     }
+
+    console.log(`[CW-NLM] 抽出結果: ${messages.length}件 (重複スキップ: ${skippedDupe}, 空スキップ: ${skippedEmpty})`);
 
     return messages;
   }
