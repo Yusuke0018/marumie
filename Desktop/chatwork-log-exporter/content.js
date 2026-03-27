@@ -162,10 +162,18 @@
         await sleep(20);
       }
 
-      // 最終吸い上げ
+      // 最終吸い上げ: 現在位置（先頭側）のメッセージ
       await sleep(300);
-      const lastMsgs = harvestMessages({ includeSender, includeTimestamp, includeReactions }, seenKeys, startDateObj, endDateObj);
-      collected.push(...lastMsgs);
+      const topMsgs = harvestMessages({ includeSender, includeTimestamp, includeReactions }, seenKeys, startDateObj, endDateObj);
+      collected.push(...topMsgs);
+      console.log(`[LogExporter] 先頭側吸い上げ: +${topMsgs.length}件`);
+
+      // 最下部（最新側）に戻って再吸い上げ
+      container.scrollTop = container.scrollHeight;
+      await sleep(500);
+      const bottomMsgs = harvestMessages({ includeSender, includeTimestamp, includeReactions }, seenKeys, startDateObj, endDateObj);
+      collected.push(...bottomMsgs);
+      console.log(`[LogExporter] 最新側吸い上げ: +${bottomMsgs.length}件`);
 
       // 残りを保存（2000件ずつ）
       if (collected.length > 0) {
