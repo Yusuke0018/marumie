@@ -144,7 +144,7 @@
 
     let lastScrollTop = -1;
     let sameCount = 0;
-    const TIMEOUT_MS = 5 * 60 * 1000; // 5分タイムアウト
+    const TIMEOUT_MS = 30 * 60 * 1000; // 30分タイムアウト
     const BASE_DELAY = 20;
     const LOAD_WAIT = 400;
     let consecutiveZero = 0;
@@ -157,7 +157,7 @@
 
       // タイムアウト
       if (elapsed > TIMEOUT_MS) {
-        console.log(`[CW-NLM] タイムアウト(5分) ${scrollCount}回, 経過${Math.round(elapsed/1000)}秒`);
+        console.log(`[CW-NLM] タイムアウト(30分) ${scrollCount}回, 経過${Math.round(elapsed/1000)}秒`);
         break;
       }
 
