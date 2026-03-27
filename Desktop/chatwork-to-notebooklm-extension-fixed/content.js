@@ -144,21 +144,29 @@
 
     let lastScrollTop = -1;
     let sameCount = 0;
-    const maxIterations = 500;
-    const SCROLL_DELAY = 30; // 超高速: 30ms
+    const maxIterations = 10000; // 3年分対応: 大幅増
+    const BASE_DELAY = 20;      // ベース待機: 20ms
+    const LOAD_WAIT = 300;      // Chatworkのメッセージロード待ち
+    let consecutiveZero = 0;    // scrollTop=0が続いた回数
 
     for (let i = 0; i < maxIterations && !shouldCancel; i++) {
-      // 進捗更新と日付チェック（5回に1回 — DOM走査のコストを削減）
-      if (i % 5 === 0) {
+      // 進捗更新と日付チェック（10回に1回）
+      if (i % 10 === 0) {
         const count = document.querySelectorAll('[data-mid], ._message').length;
         updateProgress(count, i);
 
         if (targetDate) {
           const oldestDate = getOldestVisibleDate();
           if (oldestDate && oldestDate <= targetDate) {
-            console.log(`[CW-NLM] 目標日付に到達 (${i}回のスクロール)`);
+            console.log(`[CW-NLM] 目標日付に到達 (${i}回のスクロール, ${count}件)`);
             break;
           }
+        }
+
+        // 100回ごとに経過ログ
+        if (i > 0 && i % 100 === 0) {
+          const oldest = getOldestVisibleDate();
+          console.log(`[CW-NLM] スクロール中... ${i}回目, ${count}件, 最古: ${oldest?.toLocaleDateString('ja-JP') || '不明'}`);
         }
       }
 
@@ -166,23 +174,38 @@
       const currentScrollTop = container.scrollTop;
       if (currentScrollTop === lastScrollTop) {
         sameCount++;
-        if (sameCount >= 3) {
+        if (currentScrollTop === 0) {
+          consecutiveZero++;
+        }
+        // Chatworkが新しいメッセージをロード中の可能性 → 長めに待つ
+        if (sameCount >= 3 && sameCount <= 8) {
+          await sleep(LOAD_WAIT);
+          continue;
+        }
+        // それでも動かない → 本当の上限
+        if (sameCount > 8) {
+          // scrollTop=0で止まった → チャットの先頭に到達
+          if (consecutiveZero > 5) {
+            console.log(`[CW-NLM] チャット先頭に到達 (${i}回のスクロール)`);
+            break;
+          }
           console.log('[CW-NLM] スクロール上限に到達');
           break;
         }
       } else {
         sameCount = 0;
+        consecutiveZero = 0;
         lastScrollTop = currentScrollTop;
       }
 
-      // 高速スクロール
-      container.scrollTop = Math.max(0, container.scrollTop - container.clientHeight * 2);
-      
-      await sleep(SCROLL_DELAY);
+      // 高速スクロール（大きめにジャンプ）
+      container.scrollTop = Math.max(0, container.scrollTop - container.clientHeight * 3);
+
+      await sleep(BASE_DELAY);
     }
 
     // 最終安定化待機
-    await sleep(50);
+    await sleep(100);
   }
 
   /**
