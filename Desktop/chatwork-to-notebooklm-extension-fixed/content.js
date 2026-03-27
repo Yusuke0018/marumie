@@ -609,7 +609,8 @@
     let totalCount = 0;
     let fileCount = 0;
 
-    let savedMids = new Set();
+    let collectedBulk = []; // メモリに蓄積（DOMから消えても保持）
+    let seenMids = new Set();
 
     console.log('[CW-NLM] 全ログ一括収集開始:', { startDate: startDateObj, endDate: endDateObj });
 
@@ -621,66 +622,70 @@
         throw new Error('チャットのスクロールエリアが見つかりません');
       }
 
-      // === 全ログ一括保存: チャットの先頭まで必ずスクロール ===
-      // 日付チェックでスクロールを停止しない（日付フィルタは保存時のみ適用）
+      // === 全ログ一括保存: スクロールしながらメッセージをメモリに蓄積 ===
+      // Chatworkは仮想スクロールでDOMからメッセージを消すため、
+      // 定期的にDOMから抽出してメモリに貯め、2000件ごとにファイル保存
       console.log('[CW-NLM] 一括収集: チャット先頭までスクロール開始...');
 
       let lastScrollTop = -1;
       let sameCount = 0;
-      const TIMEOUT_MS = 30 * 60 * 1000; // 30分タイムアウト（turboScrollと同じ）
+      const TIMEOUT_MS = 30 * 60 * 1000;
       const BASE_DELAY = 20;
-      const LOAD_WAIT = 400;
       let consecutiveZero = 0;
       let scrollCount = 0;
       const startTime = Date.now();
-      let lastBatchCheck = 0;
 
       while (!shouldCancel) {
         scrollCount++;
         const elapsed = Date.now() - startTime;
 
-        // タイムアウト（turboScrollと同じ30分）
         if (elapsed > TIMEOUT_MS) {
           console.log(`[CW-NLM] タイムアウト(30分) ${scrollCount}回, 経過${Math.round(elapsed/1000)}秒`);
           break;
         }
 
-        // 進捗更新と日付チェック（10回に1回 — turboScrollと同じ頻度）
+        // 進捗更新（10回に1回）
         if (scrollCount % 10 === 0) {
-          const count = document.querySelectorAll('[data-mid], ._message').length;
           const sec = Math.round(elapsed / 1000);
           const min = Math.floor(sec / 60);
           const secRem = sec % 60;
-          updateProgressText(`スクロール中... DOM:${count}件 + 保存済み:${totalCount}件 (${min}分${secRem}秒)`);
-
-          // 全ログ一括保存: 日付ではなくチャット先頭到達でのみ停止
-          // (日付フィルタは保存時に適用)
+          updateProgressText(`スクロール中... 蓄積:${collectedBulk.length}件 + 保存済み:${totalCount}件 (${min}分${secRem}秒)`);
 
           if (scrollCount % 500 === 0) {
             const oldest = getOldestVisibleDate();
-            console.log(`[CW-NLM] 一括収集中... ${scrollCount}回, ${sec}秒, DOM:${count}件, 保存済:${totalCount}件, 最古: ${oldest?.toLocaleDateString('ja-JP') || '不明'}`);
+            console.log(`[CW-NLM] 一括収集中... ${scrollCount}回, ${sec}秒, 蓄積:${collectedBulk.length}件, 保存済:${totalCount}件, 最古: ${oldest?.toLocaleDateString('ja-JP') || '不明'}`);
           }
         }
 
-        // バッチ保存チェック（200回に1回 — スクロールを邪魔しない頻度に）
-        if (scrollCount - lastBatchCheck >= 200) {
-          lastBatchCheck = scrollCount;
-          const domCount = document.querySelectorAll('[data-mid], ._message').length;
-
-          if (domCount >= BATCH_SIZE) {
-            const allMsgs = extractAllMessages({ includeSender, includeTimestamp, includeReactions });
-            const batch = filterAndSort(allMsgs, startDateObj, endDateObj)
-              .filter(m => !m.id || !savedMids.has(m.id));
-
-            if (batch.length >= BATCH_SIZE) {
-              fileCount++;
-              const text = formatMessages(batch, options);
-              downloadTextFile(text, roomName, fileCount);
-              totalCount += batch.length;
-              for (const m of batch) { if (m.id) savedMids.add(m.id); }
-              console.log(`[CW-NLM] ファイル${fileCount}保存: ${batch.length}件 (累計${totalCount}件)`);
-              updateProgressText(`ファイル${fileCount}保存完了！ 累計${totalCount}件`);
+        // 100回に1回: DOMからメッセージを吸い上げてメモリに蓄積
+        if (scrollCount % 100 === 0) {
+          const domMsgs = extractAllMessages({ includeSender, includeTimestamp, includeReactions });
+          let newCount = 0;
+          for (const msg of domMsgs) {
+            const key = msg.id || `${msg.sender}_${msg.timestamp}_${msg.content.slice(0, 50)}`;
+            if (!seenMids.has(key)) {
+              seenMids.add(key);
+              // 日付フィルタ
+              if (endDateObj && msg.date > endDateObj) continue;
+              if (startDateObj && msg.date < startDateObj) continue;
+              collectedBulk.push(msg);
+              newCount++;
             }
+          }
+          if (newCount > 0) {
+            console.log(`[CW-NLM] +${newCount}件吸い上げ (蓄積:${collectedBulk.length}件)`);
+          }
+
+          // 2000件溜まったらファイル保存
+          if (collectedBulk.length >= BATCH_SIZE) {
+            collectedBulk.sort((a, b) => a.date - b.date);
+            const batch = collectedBulk.splice(0, BATCH_SIZE);
+            fileCount++;
+            const text = formatMessages(batch, options);
+            downloadTextFile(text, roomName, fileCount);
+            totalCount += batch.length;
+            console.log(`[CW-NLM] ファイル${fileCount}保存: ${batch.length}件 (累計${totalCount}件)`);
+            updateProgressText(`ファイル${fileCount}保存完了！ 累計${totalCount}件`);
           }
         }
 
@@ -691,16 +696,13 @@
           if (currentScrollTop === 0) consecutiveZero++;
 
           if (sameCount >= 3) {
-            // 段階的に待機時間を増やす: 500ms → 1s → 2s
             const wait = sameCount < 10 ? 500 : sameCount < 20 ? 1000 : 2000;
             await sleep(wait);
 
-            // scrollTop=0で30回以上 → 本当にチャットの先頭
             if (consecutiveZero > 30) {
               console.log(`[CW-NLM] チャット先頭に到達 (${scrollCount}回, ${Math.round(elapsed/1000)}秒)`);
               break;
             }
-            // scrollTop≠0で60回以上動かない → サーバー側の制限
             if (sameCount > 60) {
               console.log(`[CW-NLM] ロード停止を検出 (${scrollCount}回, ${Math.round(elapsed/1000)}秒)`);
               break;
@@ -713,24 +715,28 @@
           lastScrollTop = currentScrollTop;
         }
 
-        // 高速スクロール（turboScrollと同じ速度）
         scrollContainer.scrollTop = Math.max(0, scrollContainer.scrollTop - scrollContainer.clientHeight * 3);
         await sleep(BASE_DELAY);
       }
 
-      // === スクロール完了後、残りのメッセージを保存 ===
-      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      // === スクロール完了: 最後にDOMに残っているメッセージも吸い上げ ===
       await sleep(300);
+      const finalDomMsgs = extractAllMessages({ includeSender, includeTimestamp, includeReactions });
+      for (const msg of finalDomMsgs) {
+        const key = msg.id || `${msg.sender}_${msg.timestamp}_${msg.content.slice(0, 50)}`;
+        if (!seenMids.has(key)) {
+          seenMids.add(key);
+          if (endDateObj && msg.date > endDateObj) continue;
+          if (startDateObj && msg.date < startDateObj) continue;
+          collectedBulk.push(msg);
+        }
+      }
 
-      updateProgressText('最終メッセージを抽出中...');
-      const finalMsgs = extractAllMessages({ includeSender, includeTimestamp, includeReactions });
-      const finalBatch = filterAndSort(finalMsgs, startDateObj, endDateObj)
-        .filter(m => !m.id || !savedMids.has(m.id));
-
-      if (finalBatch.length > 0) {
-        // 2000件ずつ分割保存
-        for (let i = 0; i < finalBatch.length; i += BATCH_SIZE) {
-          const chunk = finalBatch.slice(i, i + BATCH_SIZE);
+      // 残りをファイル保存（2000件ずつ）
+      if (collectedBulk.length > 0) {
+        collectedBulk.sort((a, b) => a.date - b.date);
+        for (let i = 0; i < collectedBulk.length; i += BATCH_SIZE) {
+          const chunk = collectedBulk.slice(i, i + BATCH_SIZE);
           fileCount++;
           const text = formatMessages(chunk, options);
           downloadTextFile(text, roomName, fileCount);
