@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { width: 340px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8f9fa; color: #333; }
+
+.header { background: linear-gradient(135deg, #4285f4, #34a853); padding: 16px; color: #fff; }
+.header h1 { font-size: 15px; font-weight: 600; }
+.header p { font-size: 11px; opacity: 0.85; margin-top: 4px; }
+
+.content { padding: 16px; }
+
+.section { margin-bottom: 14px; }
+.section-title { font-size: 12px; font-weight: 600; color: #555; margin-bottom: 8px; }
+
+/* モード切替 */
+.mode-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+.mode-tab {
+  flex: 1; padding: 10px 8px; border: 2px solid #e0e0e0; border-radius: 8px;
+  background: #fff; font-size: 13px; font-weight: 600; text-align: center;
+  cursor: pointer; transition: all 0.15s;
+}
+.mode-tab:hover { border-color: #4285f4; }
+.mode-tab.active { border-color: #4285f4; background: #e8f0fe; color: #1a73e8; }
+
+/* 日付 */
+.date-row { display: none; gap: 8px; align-items: center; margin-bottom: 12px; }
+.date-row.show { display: flex; }
+.date-row input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; }
+.date-sep { font-size: 13px; color: #999; }
+
+/* オプション */
+.options { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.opt-label {
+  display: flex; align-items: center; gap: 4px; padding: 6px 10px;
+  background: #fff; border: 1px solid #e0e0e0; border-radius: 6px;
+  font-size: 12px; cursor: pointer; transition: all 0.15s;
+}
+.opt-label:hover { border-color: #4285f4; }
+.opt-label input { accent-color: #4285f4; }
+
+/* ボタン */
+.btn {
+  width: 100%; padding: 12px; border: none; border-radius: 8px;
+  font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+}
+.btn-primary { background: #4285f4; color: #fff; }
+.btn-primary:hover { background: #3367d6; }
+.btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+
+/* エラー */
+.error { display: none; padding: 8px 12px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px; color: #dc2626; font-size: 12px; margin-bottom: 12px; }
+.error.show { display: block; }
+
+/* 処理中 */
+.screen { display: none; }
+.screen.active { display: block; }
+.processing-box { text-align: center; padding: 24px 16px; }
+.processing-box .icon { font-size: 36px; margin-bottom: 12px; }
+.processing-box .title { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+.processing-box .detail { font-size: 12px; color: #666; }
+.progress-bar { height: 6px; background: #e0e0e0; border-radius: 3px; margin: 12px 0; overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #4285f4, #34a853); border-radius: 3px; width: 0%; transition: width 0.3s; }
+
+/* 完了 */
+.result-card { padding: 16px; border-radius: 8px; text-align: center; margin-bottom: 12px; }
+.result-card.success { background: #f0fdf4; border: 1px solid #86efac; }
+.result-card.error { background: #fef2f2; border: 1px solid #fca5a5; }
+.result-card .icon { font-size: 32px; margin-bottom: 8px; }
+.result-card .title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.result-card .detail { font-size: 12px; color: #666; }
+.btn-back { background: #f5f5f5; color: #333; border: 1px solid #ddd; margin-top: 8px; }
+.btn-back:hover { background: #e8e8e8; }
+
+.not-chatwork { text-align: center; padding: 32px 16px; }
+.not-chatwork .icon { font-size: 36px; margin-bottom: 12px; }
+.not-chatwork p { font-size: 13px; color: #666; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Chatwork Log Exporter</h1>
+  <p>チャットログをテキストファイルに保存</p>
+</div>
+
+<!-- Chatworkではない -->
+<div id="screen-not-chatwork" class="screen">
+  <div class="not-chatwork">
+    <div class="icon">💬</div>
+    <p>Chatworkのチャットルームを開いてから<br>このボタンを押してください</p>
+  </div>
+</div>
+
+<!-- メイン画面 -->
+<div id="screen-main" class="screen">
+  <div class="content">
+    <div class="section">
+      <div class="section-title">取得範囲</div>
+      <div class="mode-tabs">
+        <div class="mode-tab active" data-mode="all">全期間一括</div>
+        <div class="mode-tab" data-mode="range">期間指定</div>
+      </div>
+      <div id="date-row" class="date-row">
+        <input type="date" id="start-date">
+        <span class="date-sep">〜</span>
+        <input type="date" id="end-date">
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">含める情報</div>
+      <div class="options">
+        <label class="opt-label"><input type="checkbox" id="opt-sender" checked> 送信者</label>
+        <label class="opt-label"><input type="checkbox" id="opt-time" checked> 日時</label>
+        <label class="opt-label"><input type="checkbox" id="opt-reaction"> リアクション</label>
+      </div>
+    </div>
+
+    <div id="error-msg" class="error"></div>
+
+    <button id="btn-start" class="btn btn-primary">ログをテキスト保存</button>
+  </div>
+</div>
+
+<!-- 処理中 -->
+<div id="screen-processing" class="screen">
+  <div class="processing-box">
+    <div class="icon" id="proc-icon">📥</div>
+    <div class="title" id="proc-title">収集中...</div>
+    <div class="progress-bar"><div class="progress-fill" id="proc-fill"></div></div>
+    <div class="detail" id="proc-detail">スクロールしてメッセージを取得しています</div>
+    <button id="btn-cancel" class="btn btn-back" style="margin-top:16px">キャンセル</button>
+  </div>
+</div>
+
+<!-- 完了 -->
+<div id="screen-complete" class="screen">
+  <div class="content">
+    <div id="result-card" class="result-card success">
+      <div class="icon" id="result-icon">✅</div>
+      <div class="title" id="result-title">保存完了</div>
+      <div class="detail" id="result-detail"></div>
+    </div>
+    <button id="btn-back" class="btn btn-back">戻る</button>
+  </div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
