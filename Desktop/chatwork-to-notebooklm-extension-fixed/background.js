@@ -108,7 +108,11 @@ function scrapeNotebooks() {
   const seen = new Set();
 
   // 方法1: project-button カスタム要素から取得（2025〜現行DOM）
-  const projectButtons = document.querySelectorAll('project-button.project-button');
+  // .my-projects-container 内のみ取得（おすすめノートブックを除外）
+  const myContainer = document.querySelector('.my-projects-container');
+  const projectButtons = myContainer
+    ? myContainer.querySelectorAll('project-button.project-button')
+    : document.querySelectorAll('.my-projects-container project-button.project-button');
   projectButtons.forEach(btn => {
     try {
       // IDをリンクのhrefから抽出: /notebook/{UUID}
@@ -134,7 +138,8 @@ function scrapeNotebooks() {
 
   // 方法2: mat-card内のproject-button-titleから取得（フォールバック）
   if (notebooks.length === 0) {
-    const cards = document.querySelectorAll('mat-card.project-button-card');
+    const scope = document.querySelector('.my-projects-container') || document;
+    const cards = scope.querySelectorAll('mat-card.project-button-card');
     cards.forEach((card, index) => {
       try {
         const link = card.querySelector('a[href*="/notebook/"]');

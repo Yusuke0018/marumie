@@ -64,6 +64,10 @@
       await turboScrollToDate(scrollContainer, startDateObj);
       console.log('[CW-NLM] スクロール完了');
 
+      // スクロール後に最下部（最新）に戻してDOMの遅延レンダリングを待つ
+      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      await sleep(200);
+
       // メッセージ抽出
       updateProgressText('メッセージを抽出中...');
       const messages = extractAllMessages({ includeSender, includeTimestamp, includeReactions });
