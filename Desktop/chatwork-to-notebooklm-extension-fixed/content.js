@@ -19,6 +19,11 @@
         .then(result => sendResponse(result))
         .catch(error => sendResponse({ success: false, error: error.message }));
       return true;
+    } else if (request.action === 'bulkCollectAndSave') {
+      bulkCollectAndSave(request.options)
+        .then(result => sendResponse(result))
+        .catch(error => sendResponse({ success: false, error: error.message }));
+      return true;
     } else if (request.action === 'cancelCollection') {
       shouldCancel = true;
       sendResponse({ success: true });
@@ -574,6 +579,191 @@
   function hideProgressOverlay() {
     const overlay = document.getElementById('cw-nlm-overlay');
     if (overlay) overlay.remove();
+  }
+
+  /**
+   * 全ログ一括収集: スクロールしながら2000件ごとにテキストファイルとして保存
+   */
+  async function bulkCollectAndSave(options) {
+    if (isCollecting) {
+      return { success: false, error: '既に収集中です' };
+    }
+
+    isCollecting = true;
+    shouldCancel = false;
+
+    const { startDate, endDate, includeSender, includeTimestamp, includeReactions } = options;
+    let startDateObj = null;
+    let endDateObj = null;
+    if (startDate) {
+      const [sy, sm, sd] = startDate.split('-').map(Number);
+      startDateObj = new Date(sy, sm - 1, sd, 0, 0, 0, 0);
+    }
+    if (endDate) {
+      const [ey, em, ed] = endDate.split('-').map(Number);
+      endDateObj = new Date(ey, em - 1, ed, 23, 59, 59, 999);
+    }
+
+    const BATCH_SIZE = 2000;
+    const roomName = getRoomName();
+    let totalCount = 0;
+    let fileCount = 0;
+    let lastSavedMids = new Set();
+
+    console.log('[CW-NLM] 全ログ一括収集開始:', { startDate: startDateObj, endDate: endDateObj });
+
+    try {
+      showProgressOverlay();
+
+      const scrollContainer = findScrollContainer();
+      if (!scrollContainer) {
+        throw new Error('チャットのスクロールエリアが見つかりません');
+      }
+
+      const TIMEOUT_MS = 60 * 60 * 1000; // 1時間タイムアウト
+      const BASE_DELAY = 30;
+      let lastScrollTop = -1;
+      let sameCount = 0;
+      let consecutiveZero = 0;
+      let scrollCount = 0;
+      const startTime = Date.now();
+      let reachedTarget = false;
+
+      while (!shouldCancel && !reachedTarget) {
+        scrollCount++;
+        const elapsed = Date.now() - startTime;
+
+        if (elapsed > TIMEOUT_MS) {
+          console.log(`[CW-NLM] タイムアウト(60分)`);
+          break;
+        }
+
+        // 20回に1回チェック
+        if (scrollCount % 20 === 0) {
+          const allMsgs = extractAllMessages({ includeSender, includeTimestamp, includeReactions });
+          const sec = Math.round(elapsed / 1000);
+          const min = Math.floor(sec / 60);
+          const secRem = sec % 60;
+          updateProgressText(`${allMsgs.length + totalCount}件検出中... (${min}分${secRem}秒)`);
+
+          // 2000件溜まったらファイル保存
+          if (allMsgs.length >= BATCH_SIZE) {
+            const batch = filterAndSort(allMsgs, startDateObj, endDateObj);
+            if (batch.length > 0) {
+              fileCount++;
+              const text = formatMessages(batch, options);
+              downloadTextFile(text, roomName, fileCount);
+              totalCount += batch.length;
+              console.log(`[CW-NLM] ファイル${fileCount}保存: ${batch.length}件 (累計${totalCount}件)`);
+              updateProgressText(`ファイル${fileCount}保存完了 (累計${totalCount}件)`);
+
+              // 保存済みのmidを記録
+              lastSavedMids = new Set(allMsgs.map(m => m.id).filter(Boolean));
+            }
+          }
+
+          // 目標日付チェック
+          if (startDateObj) {
+            const oldestDate = getOldestVisibleDate();
+            if (oldestDate && oldestDate <= startDateObj) {
+              console.log(`[CW-NLM] 目標日付に到達`);
+              reachedTarget = true;
+              break;
+            }
+          }
+        }
+
+        // スクロール位置チェック
+        const currentScrollTop = scrollContainer.scrollTop;
+        if (currentScrollTop === lastScrollTop) {
+          sameCount++;
+          if (currentScrollTop === 0) consecutiveZero++;
+
+          if (sameCount >= 3) {
+            const wait = sameCount < 10 ? 500 : sameCount < 20 ? 1000 : 2000;
+            await sleep(wait);
+            if (consecutiveZero > 30) {
+              console.log('[CW-NLM] チャット先頭に到達');
+              break;
+            }
+            if (sameCount > 60) {
+              console.log('[CW-NLM] ロード停止を検出');
+              break;
+            }
+            continue;
+          }
+        } else {
+          sameCount = 0;
+          consecutiveZero = 0;
+          lastScrollTop = currentScrollTop;
+        }
+
+        scrollContainer.scrollTop = Math.max(0, scrollContainer.scrollTop - scrollContainer.clientHeight * 3);
+        await sleep(BASE_DELAY);
+      }
+
+      // 最終バッチ: 残りのメッセージを保存
+      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      await sleep(300);
+
+      const finalMsgs = extractAllMessages({ includeSender, includeTimestamp, includeReactions });
+      const finalBatch = filterAndSort(finalMsgs, startDateObj, endDateObj)
+        .filter(m => !m.id || !lastSavedMids.has(m.id));
+
+      if (finalBatch.length > 0) {
+        fileCount++;
+        const text = formatMessages(finalBatch, options);
+        downloadTextFile(text, roomName, fileCount);
+        totalCount += finalBatch.length;
+        console.log(`[CW-NLM] 最終ファイル${fileCount}保存: ${finalBatch.length}件 (累計${totalCount}件)`);
+      }
+
+      hideProgressOverlay();
+
+      console.log(`[CW-NLM] 全ログ収集完了: ${totalCount}件, ${fileCount}ファイル`);
+
+      return {
+        success: true,
+        totalCount,
+        fileCount,
+        roomName
+      };
+
+    } catch (error) {
+      console.error('[CW-NLM] エラー:', error);
+      hideProgressOverlay();
+      return { success: false, error: error.message };
+    } finally {
+      isCollecting = false;
+    }
+  }
+
+  function filterAndSort(messages, startDateObj, endDateObj) {
+    const filtered = [];
+    for (const msg of messages) {
+      if (endDateObj && msg.date > endDateObj) continue;
+      if (startDateObj && msg.date < startDateObj) continue;
+      filtered.push(msg);
+    }
+    filtered.sort((a, b) => a.date - b.date);
+    return filtered;
+  }
+
+  function downloadTextFile(text, roomName, fileNum) {
+    const safeName = (roomName || 'chatwork').replace(/[\/\\:*?"<>|]/g, '_');
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const filename = `${safeName}_${timestamp}_part${String(fileNum).padStart(3, '0')}.txt`;
+
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   function sleep(ms) {

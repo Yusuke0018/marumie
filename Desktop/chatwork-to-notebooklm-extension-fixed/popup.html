@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Chatwork → NotebookLM</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    :root {
+      --bg: #fafafa;
+      --card: #ffffff;
+      --text: #1a1a1a;
+      --text-sub: #666666;
+      --border: #e5e5e5;
+      --accent: #a8d5ba;
+      --accent-hover: #8fc9a3;
+      --accent2: #f5c6d0;
+      --accent3: #b8d4e8;
+    }
+
+    body {
+      width: 360px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .container { padding: 20px; }
+
+    /* ヘッダー */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .logo {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--accent), var(--accent3));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+    .header h1 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .header p {
+      font-size: 11px;
+      color: var(--text-sub);
+    }
+
+    /* セクション */
+    .section {
+      margin-bottom: 20px;
+    }
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-sub);
+      margin-bottom: 8px;
+    }
+
+    /* 期間選択 */
+    .period-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .period-btn {
+      padding: 10px 4px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .period-btn:hover {
+      border-color: var(--accent);
+      background: #f0faf3;
+    }
+    .period-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #1a1a1a;
+    }
+
+    .custom-dates {
+      display: none;
+      gap: 8px;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .custom-dates.show { display: flex; }
+    .date-input {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--text);
+    }
+    .date-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    /* オプション */
+    .options-row {
+      display: flex;
+      gap: 16px;
+    }
+    .opt-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .opt-item input {
+      accent-color: var(--accent);
+    }
+    .opt-item label {
+      font-size: 12px;
+      color: var(--text-sub);
+      cursor: pointer;
+    }
+
+    /* インポート先 - タブ切り替え */
+    .dest-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .dest-tab {
+      flex: 1;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--card);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+    .dest-tab:hover {
+      border-color: var(--accent);
+    }
+    .dest-tab.active {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    .dest-tab .icon {
+      font-size: 20px;
+      margin-bottom: 4px;
+    }
+    .dest-tab .label {
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    /* ノートブック選択ドロップダウン */
+    .notebook-select {
+      display: none;
+    }
+    .notebook-select.show { display: block; }
+
+    .notebook-dropdown { position: relative; }
+    .notebook-btn {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--card);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .notebook-btn:hover { border-color: var(--accent); }
+    .notebook-btn .info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .notebook-btn .emoji { font-size: 16px; }
+    .notebook-btn .title {
+      font-size: 13px;
+      color: var(--text);
+    }
+    .notebook-btn .arrow {
+      font-size: 10px;
+      color: var(--text-sub);
+      transition: transform 0.2s;
+    }
+    .notebook-btn .arrow.open { transform: rotate(180deg); }
+
+    .notebook-list {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      max-height: 220px;
+      overflow-y: auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      z-index: 100;
+      display: none;
+    }
+    .notebook-list.show { display: block; }
+
+    .notebook-search {
+      padding: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .notebook-search input {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .notebook-search input:focus { outline: none; border-color: var(--accent); }
+
+    .notebook-items { max-height: 160px; overflow-y: auto; }
+    .notebook-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .notebook-item:hover { background: #f5f5f5; }
+    .notebook-item.selected { background: #e8f5ec; }
+    .notebook-item .check { width: 14px; font-size: 11px; color: var(--accent); }
+    .notebook-item .emoji { font-size: 14px; }
+    .notebook-item .title {
+      font-size: 12px;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ボタン */
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-primary {
+      background: var(--text);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: #333;
+    }
+    .btn-primary:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .btn-secondary {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+      margin-top: 8px;
+    }
+    .btn-secondary:hover {
+      background: #f5f5f5;
+    }
+
+    /* エラー */
+    .error-msg {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+      font-size: 12px;
+      color: #dc2626;
+      display: none;
+    }
+    .error-msg.show { display: block; }
+
+    /* ステータス画面 */
+    .status-screen {
+      text-align: center;
+      padding: 40px 20px;
+    }
+    .status-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+    .status-icon.spin { animation: spin 1s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .status-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .status-detail {
+      font-size: 12px;
+      color: var(--text-sub);
+    }
+
+    /* 結果画面 */
+    .result-card {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .result-card.error {
+      background: #fef2f2;
+      border-color: #fecaca;
+    }
+    .result-icon { font-size: 36px; margin-bottom: 8px; }
+    .result-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #16a34a;
+    }
+    .result-card.error .result-title { color: #dc2626; }
+    .result-detail {
+      font-size: 12px;
+      color: var(--text-sub);
+      margin-top: 4px;
+    }
+
+    .btn-row { display: flex; gap: 8px; }
+    .btn-row .btn { flex: 1; margin-top: 0; }
+
+    /* 画面切り替え */
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* 非Chatwork */
+    .not-chatwork {
+      text-align: center;
+      padding: 60px 20px;
+    }
+    .not-chatwork-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+    .not-chatwork-text {
+      font-size: 13px;
+      color: var(--text-sub);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- 非Chatwork -->
+    <div class="screen" id="screen-not-chatwork">
+      <div class="not-chatwork">
+        <div class="not-chatwork-icon">💬</div>
+        <p class="not-chatwork-text">Chatworkのチャットルームを<br>開いてお使いください</p>
+      </div>
+    </div>
+
+    <!-- メイン -->
+    <div class="screen" id="screen-main">
+      <div class="header">
+        <div class="logo">📚</div>
+        <div>
+          <h1>Chatwork → NotebookLM</h1>
+          <p>チャットを収集してインポート</p>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">期間</div>
+        <div class="period-grid">
+          <button class="period-btn active" data-days="0">今日</button>
+          <button class="period-btn" data-days="1">昨日</button>
+          <button class="period-btn" data-days="7">1週間</button>
+          <button class="period-btn" data-days="-1">指定</button>
+        </div>
+        <div class="custom-dates" id="custom-dates">
+          <input type="date" class="date-input" id="start-date">
+          <span style="color:#999">→</span>
+          <input type="date" class="date-input" id="end-date">
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">オプション</div>
+        <div class="options-row">
+          <div class="opt-item">
+            <input type="checkbox" id="opt-sender" checked>
+            <label for="opt-sender">送信者</label>
+          </div>
+          <div class="opt-item">
+            <input type="checkbox" id="opt-time" checked>
+            <label for="opt-time">日時</label>
+          </div>
+          <div class="opt-item">
+            <input type="checkbox" id="opt-reaction">
+            <label for="opt-reaction">リアクション</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">インポート先</div>
+        <div class="dest-tabs">
+          <div class="dest-tab active" data-dest="select">
+            <div class="icon">📓</div>
+            <div class="label">既存を選択</div>
+          </div>
+          <div class="dest-tab" data-dest="new">
+            <div class="icon">✨</div>
+            <div class="label">新規作成</div>
+          </div>
+        </div>
+
+        <div class="notebook-select show" id="notebook-select">
+          <div class="notebook-dropdown">
+            <div class="notebook-btn" id="notebook-btn">
+              <div class="info">
+                <span class="emoji" id="selected-emoji">📓</span>
+                <span class="title" id="selected-title">選択してください</span>
+              </div>
+              <span class="arrow" id="dropdown-arrow">▼</span>
+            </div>
+            <div class="notebook-list" id="notebook-list">
+              <div class="notebook-search">
+                <input type="text" placeholder="検索..." id="notebook-search">
+              </div>
+              <div class="notebook-items" id="notebook-items">
+                <div style="padding:20px;text-align:center;color:#999;font-size:12px">読み込み中...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="error-msg" id="error-msg"></div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="btn-copy-only">📋 コピーだけ</button>
+        <button class="btn btn-primary" id="btn-start">インポート</button>
+      </div>
+      <button class="btn btn-secondary" id="btn-bulk-save" style="margin-top:8px;background:#e8f0fe;border-color:#b8d4e8;color:#1a73e8;font-size:12px;">📁 全ログ一括保存（2000件ずつファイル出力）</button>
+    </div>
+
+    <!-- 処理中 -->
+    <div class="screen" id="screen-processing">
+      <div class="header">
+        <div class="logo">📚</div>
+        <div>
+          <h1>Chatwork → NotebookLM</h1>
+          <p id="processing-subtitle">処理中...</p>
+        </div>
+      </div>
+      <div class="status-screen">
+        <div class="status-icon spin" id="processing-icon">⏳</div>
+        <div class="status-title" id="processing-title">処理中...</div>
+        <div class="status-detail" id="processing-detail"></div>
+      </div>
+    </div>
+
+    <!-- 完了 -->
+    <div class="screen" id="screen-complete">
+      <div class="header">
+        <div class="logo">📚</div>
+        <div>
+          <h1>Chatwork → NotebookLM</h1>
+          <p>完了</p>
+        </div>
+      </div>
+      <div class="result-card" id="result-card">
+        <div class="result-icon" id="result-icon">✅</div>
+        <div class="result-title" id="result-title">インポート完了</div>
+        <div class="result-detail" id="result-detail"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="btn-copy">📋 コピー</button>
+        <button class="btn btn-primary" id="btn-new">新規収集</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
