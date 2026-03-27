@@ -66,6 +66,11 @@
       const container = findScrollContainer();
       if (!container) throw new Error('チャットのスクロールエリアが見つかりません');
 
+      // === まず現在表示中のメッセージ（最新側）を先に吸い上げ ===
+      const initialMsgs = harvestMessages({ includeSender, includeTimestamp, includeReactions }, seenKeys, startDateObj, endDateObj);
+      collected.push(...initialMsgs);
+      console.log(`[LogExporter] 初回吸い上げ: ${initialMsgs.length}件`);
+
       // === スクロールしながらメッセージを蓄積 ===
       let lastScrollTop = -1;
       let sameCount = 0;
