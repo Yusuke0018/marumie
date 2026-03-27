@@ -261,33 +261,38 @@
     const messages = [];
     const seen = new Set();
 
-    // 1回のクエリで全候補を取得（複数回のquerySelectorAllを回避）
-    const messageElements = document.querySelectorAll(
-      '[data-mid], ._message, [class*="timelineMessage"], [class*="TimelineMessage"], [class*="chatTimeLineMessage"]'
+    // タイムライン内の全要素（日付ヘッダー + メッセージ）をDOM順に取得
+    const timeline = document.querySelector('#_timeLine, #_chatContent, ._cwLTBody, [class*="timelineBody"], [class*="TimelineBody"]') || document;
+    const allNodes = timeline.querySelectorAll(
+      '[data-mid], ._message, [class*="timelineMessage"], [class*="TimelineMessage"], [class*="chatTimeLineMessage"], [class*="dateHeader"], ._dateHeader, [class*="DateHeader"], [class*="timeLine__date"]'
     );
 
-    console.log(`[CW-NLM] DOM上のメッセージ要素数: ${messageElements.length}`);
+    console.log(`[CW-NLM] タイムライン内の要素数: ${allNodes.length}`);
 
-    // 最後の5件のDOM情報をデバッグ出力
-    const lastFive = Array.from(messageElements).slice(-5);
-    lastFive.forEach((el, i) => {
-      const mid = el.getAttribute('data-mid') || el.id || '(no id)';
-      const text = el.textContent?.substring(0, 80)?.trim() || '(empty)';
-      const tag = el.tagName;
-      const cls = el.className?.substring?.(0, 60) || '';
-      console.log(`[CW-NLM] 末尾${5-i}: mid=${mid} tag=${tag} class=${cls} text=${text}`);
-    });
-
+    // DOM順に走査し、日付ヘッダーから現在の日付を追跡する
+    let currentDate = new Date(); // デフォルトは今日
     let skippedEmpty = 0;
     let skippedDupe = 0;
 
-    for (const el of messageElements) {
+    for (const el of allNodes) {
+      // 日付ヘッダーかチェック
+      const isDateHeader = el.matches('[class*="dateHeader"], ._dateHeader, [class*="DateHeader"], [class*="timeLine__date"]');
+      if (isDateHeader) {
+        const parsed = parseJapaneseDate(el.textContent.trim());
+        if (parsed) {
+          currentDate = parsed;
+          console.log(`[CW-NLM] 日付ヘッダー検出: "${el.textContent.trim()}" → ${currentDate.toLocaleDateString('ja-JP')}`);
+        }
+        continue;
+      }
+
+      // メッセージ要素
       try {
         const mid = el.getAttribute('data-mid') || el.id;
         if (mid && seen.has(mid)) { skippedDupe++; continue; }
         if (mid) seen.add(mid);
 
-        const message = parseMessageElement(el, options);
+        const message = parseMessageElement(el, options, currentDate);
         if (message && message.content && message.content.trim()) {
           messages.push(message);
         } else {
@@ -303,7 +308,7 @@
     return messages;
   }
 
-  function parseMessageElement(el, options) {
+  function parseMessageElement(el, options, currentDate) {
     const id = el.getAttribute('data-mid') || el.id || null;
 
     let sender = '';
@@ -319,8 +324,8 @@
     }
 
     let timestamp = '';
-    let date = new Date();
-    
+    let date = currentDate ? new Date(currentDate) : new Date();
+
     const timeSelectors = ['._timeStamp', '[class*="timeStamp"]', '[class*="timestamp"]', 'time', '[datetime]'];
     let timeEl = null;
     for (const selector of timeSelectors) {
@@ -341,11 +346,10 @@
       timestamp = timeEl.textContent.trim();
       const datetime = timeEl.getAttribute('datetime');
       if (datetime) {
-        // datetime属性はUTC(ISO 8601)の場合がある → ローカル時間に変換
         const parsed = new Date(datetime);
-        date = isNaN(parsed.getTime()) ? parseJapaneseDate(timestamp) : parsed;
+        date = isNaN(parsed.getTime()) ? parseJapaneseDate(timestamp, currentDate) : parsed;
       } else {
-        date = parseJapaneseDate(timestamp);
+        date = parseJapaneseDate(timestamp, currentDate);
       }
     }
 
@@ -374,19 +378,21 @@
     return { id, sender, timestamp, date, content, reactions };
   }
 
-  function parseJapaneseDate(dateStr) {
+  function parseJapaneseDate(dateStr, baseDate) {
     const now = new Date();
-    if (!dateStr) return now;
+    // baseDateが指定されていればその日付をベースに使う（日付ヘッダーからの情報）
+    const base = baseDate || now;
+    if (!dateStr) return new Date(base);
 
     if (dateStr.includes('今日')) {
       const timeMatch = dateStr.match(/(\d{1,2}):(\d{2})/);
       if (timeMatch) {
-        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate(),
           parseInt(timeMatch[1]), parseInt(timeMatch[2]));
       }
-      return now;
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate());
     }
-    
+
     if (dateStr.includes('昨日')) {
       const yesterday = new Date(now);
       yesterday.setDate(yesterday.getDate() - 1);
@@ -420,7 +426,7 @@
       return new Date(year, month, day, parseInt(match[3]), parseInt(match[4]));
     }
 
-    // 「12月15日」形式
+    // 「12月15日」「3月27日」形式
     match = dateStr.match(/(\d{1,2})月(\d{1,2})日/);
     if (match) {
       let year = now.getFullYear();
@@ -435,14 +441,14 @@
       return new Date(year, month, day);
     }
 
-    // 時刻のみ
-    const timeOnlyMatch = dateStr.match(/^(\d{1,2}):(\d{2})$/);
+    // 時刻のみ（例: "9:30", "13:25"）→ baseDateの日付 + この時刻
+    const timeOnlyMatch = dateStr.match(/(\d{1,2}):(\d{2})/);
     if (timeOnlyMatch) {
-      return new Date(now.getFullYear(), now.getMonth(), now.getDate(),
+      return new Date(base.getFullYear(), base.getMonth(), base.getDate(),
         parseInt(timeOnlyMatch[1]), parseInt(timeOnlyMatch[2]));
     }
 
-    return now;
+    return new Date(base);
   }
 
   function formatMessages(messages, options) {
