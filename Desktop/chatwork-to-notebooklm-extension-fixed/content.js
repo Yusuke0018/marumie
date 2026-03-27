@@ -621,14 +621,9 @@
         throw new Error('チャットのスクロールエリアが見つかりません');
       }
 
-      // === turboScrollToDateと完全に同じスクロールロジック ===
-      // （途中でバッチ保存を挟む以外は同一）
-      if (startDateObj) {
-        const oldestDate = getOldestVisibleDate();
-        if (oldestDate && oldestDate <= startDateObj) {
-          console.log('[CW-NLM] 既に目標日付が表示されています。スクロール不要');
-        }
-      }
+      // === 全ログ一括保存: チャットの先頭まで必ずスクロール ===
+      // 日付チェックでスクロールを停止しない（日付フィルタは保存時のみ適用）
+      console.log('[CW-NLM] 一括収集: チャット先頭までスクロール開始...');
 
       let lastScrollTop = -1;
       let sameCount = 0;
@@ -658,13 +653,8 @@
           const secRem = sec % 60;
           updateProgressText(`スクロール中... DOM:${count}件 + 保存済み:${totalCount}件 (${min}分${secRem}秒)`);
 
-          if (startDateObj) {
-            const oldestDate = getOldestVisibleDate();
-            if (oldestDate && oldestDate <= startDateObj) {
-              console.log(`[CW-NLM] 目標日付に到達 (${scrollCount}回, ${sec}秒, ${count}件)`);
-              break;
-            }
-          }
+          // 全ログ一括保存: 日付ではなくチャット先頭到達でのみ停止
+          // (日付フィルタは保存時に適用)
 
           if (scrollCount % 500 === 0) {
             const oldest = getOldestVisibleDate();
