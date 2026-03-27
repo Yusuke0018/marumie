@@ -188,19 +188,23 @@
         sameCount++;
         if (currentScrollTop === 0) consecutiveZero++;
 
-        // Chatworkがロード中 → 長めに待つ
-        if (sameCount >= 3 && sameCount <= 15) {
-          await sleep(LOAD_WAIT);
-          continue;
-        }
-        // それでも動かない
-        if (sameCount > 15) {
-          if (consecutiveZero > 10) {
+        // Chatworkがロード中 → 待つ（最大30秒まで粘る）
+        if (sameCount >= 3) {
+          // 段階的に待機時間を増やす: 500ms → 1s → 2s
+          const wait = sameCount < 10 ? 500 : sameCount < 20 ? 1000 : 2000;
+          await sleep(wait);
+
+          // scrollTop=0で30回以上 → 本当にチャットの先頭
+          if (consecutiveZero > 30) {
             console.log(`[CW-NLM] チャット先頭に到達 (${scrollCount}回, ${Math.round(elapsed/1000)}秒)`);
-          } else {
-            console.log(`[CW-NLM] スクロール上限に到達 (${scrollCount}回)`);
+            break;
           }
-          break;
+          // scrollTop≠0で60回以上動かない → サーバー側の制限
+          if (sameCount > 60) {
+            console.log(`[CW-NLM] ロード停止を検出 (${scrollCount}回, ${Math.round(elapsed/1000)}秒)`);
+            break;
+          }
+          continue;
         }
       } else {
         sameCount = 0;
