@@ -88,27 +88,24 @@
           break;
         }
 
-        // 10回に1回: 進捗表示
-        if (scrollCount % 10 === 0) {
+        // 20回に1回: DOMからメッセージを吸い上げ＋進捗表示
+        if (scrollCount % 20 === 0) {
+          const newMsgs = harvestMessages({ includeSender, includeTimestamp, includeReactions }, seenKeys, startDateObj, endDateObj);
+          if (newMsgs.length > 0) {
+            collected.push(...newMsgs);
+          }
+
+          // 進捗表示（吸い上げ直後に更新）
+          const total = collected.length + totalSaved;
           const sec = Math.round(elapsed / 1000);
           const min = Math.floor(sec / 60);
           const secRem = sec % 60;
-          const total = collected.length + totalSaved;
           updateOverlayText(`スクロール中... 取得:${total}件 (${min}分${secRem}秒)`);
           updateOverlayBar(Math.min(Math.log(total + 1) * 15, 90));
 
           if (scrollCount % 500 === 0) {
             const oldest = getOldestVisibleDate();
             console.log(`[LogExporter] ${scrollCount}回, ${sec}秒, 蓄積:${collected.length}件, 保存済:${totalSaved}件, 最古: ${oldest?.toLocaleDateString('ja-JP') || '不明'}`);
-          }
-        }
-
-        // 100回に1回: DOMからメッセージを吸い上げ
-        if (scrollCount % 100 === 0) {
-          const newMsgs = harvestMessages({ includeSender, includeTimestamp, includeReactions }, seenKeys, startDateObj, endDateObj);
-          if (newMsgs.length > 0) {
-            collected.push(...newMsgs);
-            console.log(`[LogExporter] +${newMsgs.length}件 (蓄積:${collected.length}件)`);
           }
 
           // 2000件溜まったらファイル保存
