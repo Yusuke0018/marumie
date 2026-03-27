@@ -621,13 +621,14 @@
       }
 
       const TIMEOUT_MS = 60 * 60 * 1000; // 1時間タイムアウト
-      const BASE_DELAY = 30;
+      const BASE_DELAY = 20;
       let lastScrollTop = -1;
       let sameCount = 0;
       let consecutiveZero = 0;
       let scrollCount = 0;
       const startTime = Date.now();
       let reachedTarget = false;
+      let lastBatchCheck = 0;
 
       while (!shouldCancel && !reachedTarget) {
         scrollCount++;
@@ -638,29 +639,13 @@
           break;
         }
 
-        // 20回に1回チェック
-        if (scrollCount % 20 === 0) {
-          const allMsgs = extractAllMessages({ includeSender, includeTimestamp, includeReactions });
+        // 10回に1回: 進捗表示
+        if (scrollCount % 10 === 0) {
+          const count = document.querySelectorAll('[data-mid], ._message').length;
           const sec = Math.round(elapsed / 1000);
           const min = Math.floor(sec / 60);
           const secRem = sec % 60;
-          updateProgressText(`${allMsgs.length + totalCount}件検出中... (${min}分${secRem}秒)`);
-
-          // 2000件溜まったらファイル保存
-          if (allMsgs.length >= BATCH_SIZE) {
-            const batch = filterAndSort(allMsgs, startDateObj, endDateObj);
-            if (batch.length > 0) {
-              fileCount++;
-              const text = formatMessages(batch, options);
-              downloadTextFile(text, roomName, fileCount);
-              totalCount += batch.length;
-              console.log(`[CW-NLM] ファイル${fileCount}保存: ${batch.length}件 (累計${totalCount}件)`);
-              updateProgressText(`ファイル${fileCount}保存完了 (累計${totalCount}件)`);
-
-              // 保存済みのmidを記録
-              lastSavedMids = new Set(allMsgs.map(m => m.id).filter(Boolean));
-            }
-          }
+          updateProgressText(`スクロール中... DOM:${count}件 + 保存済み:${totalCount}件 (${min}分${secRem}秒)`);
 
           // 目標日付チェック
           if (startDateObj) {
@@ -671,23 +656,58 @@
               break;
             }
           }
+
+          // 500回ごとに経過ログ
+          if (scrollCount % 500 === 0) {
+            const oldest = getOldestVisibleDate();
+            console.log(`[CW-NLM] 一括収集中... ${scrollCount}回, ${sec}秒, DOM:${count}件, 保存済:${totalCount}件, 最古: ${oldest?.toLocaleDateString('ja-JP') || '不明'}`);
+          }
         }
 
-        // スクロール位置チェック
+        // 50回に1回: バッチ保存チェック（extractAllMessagesは重いので頻度を下げる）
+        if (scrollCount - lastBatchCheck >= 50) {
+          lastBatchCheck = scrollCount;
+          const domCount = document.querySelectorAll('[data-mid], ._message').length;
+
+          if (domCount >= BATCH_SIZE) {
+            const allMsgs = extractAllMessages({ includeSender, includeTimestamp, includeReactions });
+            const batch = filterAndSort(allMsgs, startDateObj, endDateObj);
+
+            if (batch.length >= BATCH_SIZE) {
+              fileCount++;
+              const text = formatMessages(batch, options);
+              downloadTextFile(text, roomName, fileCount);
+              totalCount += batch.length;
+              console.log(`[CW-NLM] ファイル${fileCount}保存: ${batch.length}件 (累計${totalCount}件)`);
+              updateProgressText(`ファイル${fileCount}保存完了！ 累計${totalCount}件`);
+
+              lastSavedMids = new Set(allMsgs.map(m => m.id).filter(Boolean));
+
+              // 保存後、ページをリロードせずにスクロール位置をリセット
+              // → 古いDOMが残っているので、さらに上にスクロールを続行
+            }
+          }
+        }
+
+        // スクロール位置チェック（turboScrollToDateと同じ粘り強いロジック）
         const currentScrollTop = scrollContainer.scrollTop;
         if (currentScrollTop === lastScrollTop) {
           sameCount++;
           if (currentScrollTop === 0) consecutiveZero++;
 
+          // Chatworkがロード中 → 段階的に待つ（最大約60秒粘る）
           if (sameCount >= 3) {
             const wait = sameCount < 10 ? 500 : sameCount < 20 ? 1000 : 2000;
             await sleep(wait);
+
+            // scrollTop=0で30回以上 → 本当にチャットの先頭
             if (consecutiveZero > 30) {
-              console.log('[CW-NLM] チャット先頭に到達');
+              console.log(`[CW-NLM] チャット先頭に到達 (${scrollCount}回, ${Math.round(elapsed/1000)}秒)`);
               break;
             }
+            // scrollTop≠0で60回以上動かない → サーバー側の制限
             if (sameCount > 60) {
-              console.log('[CW-NLM] ロード停止を検出');
+              console.log(`[CW-NLM] ロード停止を検出 (${scrollCount}回, ${Math.round(elapsed/1000)}秒)`);
               break;
             }
             continue;
@@ -698,6 +718,7 @@
           lastScrollTop = currentScrollTop;
         }
 
+        // 高速スクロール
         scrollContainer.scrollTop = Math.max(0, scrollContainer.scrollTop - scrollContainer.clientHeight * 3);
         await sleep(BASE_DELAY);
       }
