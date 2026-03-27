@@ -43,11 +43,19 @@
     collectedMessages = [];
 
     const { startDate, endDate, includeSender, includeTimestamp, includeReactions } = options;
-    const startDateObj = startDate ? new Date(startDate) : null;
-    const endDateObj = endDate ? new Date(endDate) : null;
 
-    if (startDateObj) startDateObj.setHours(0, 0, 0, 0);
-    if (endDateObj) endDateObj.setHours(23, 59, 59, 999);
+    // 日付文字列("2026-03-27")をローカル日付として確実にパース
+    // new Date("2026-03-27") はUTC解釈されるため、明示的にローカルで構築する
+    let startDateObj = null;
+    let endDateObj = null;
+    if (startDate) {
+      const [sy, sm, sd] = startDate.split('-').map(Number);
+      startDateObj = new Date(sy, sm - 1, sd, 0, 0, 0, 0);
+    }
+    if (endDate) {
+      const [ey, em, ed] = endDate.split('-').map(Number);
+      endDateObj = new Date(ey, em - 1, ed, 23, 59, 59, 999);
+    }
 
     console.log('[CW-NLM] 超高速収集開始:', { startDate: startDateObj, endDate: endDateObj });
 
@@ -72,12 +80,24 @@
       updateProgressText('メッセージを抽出中...');
       const messages = extractAllMessages({ includeSender, includeTimestamp, includeReactions });
       
-      // 日付フィルタリング
+      // 日付フィルタリング（日付単位で比較 — タイムゾーンずれに強くする）
+      let skippedCount = 0;
       for (const msg of messages) {
         const msgDate = msg.date;
-        if (endDateObj && msgDate > endDateObj) continue;
-        if (startDateObj && msgDate < startDateObj) continue;
+        if (endDateObj && msgDate > endDateObj) {
+          skippedCount++;
+          if (skippedCount <= 3) {
+            console.log('[CW-NLM] フィルタ除外(endDate超過):', msg.timestamp, msgDate.toISOString(), 'end:', endDateObj.toISOString());
+          }
+          continue;
+        }
+        if (startDateObj && msgDate < startDateObj) {
+          continue;
+        }
         collectedMessages.push(msg);
+      }
+      if (skippedCount > 0) {
+        console.log(`[CW-NLM] endDate超過で${skippedCount}件除外`);
       }
 
       hideProgressOverlay();
@@ -302,7 +322,9 @@
       timestamp = timeEl.textContent.trim();
       const datetime = timeEl.getAttribute('datetime');
       if (datetime) {
-        date = new Date(datetime);
+        // datetime属性はUTC(ISO 8601)の場合がある → ローカル時間に変換
+        const parsed = new Date(datetime);
+        date = isNaN(parsed.getTime()) ? parseJapaneseDate(timestamp) : parsed;
       } else {
         date = parseJapaneseDate(timestamp);
       }
