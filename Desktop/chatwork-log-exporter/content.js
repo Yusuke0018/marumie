@@ -134,14 +134,14 @@
           if (currentScrollTop === 0) consecutiveZero++;
 
           if (sameCount >= 3) {
-            const wait = sameCount < 10 ? 500 : sameCount < 20 ? 1000 : 2000;
+            const wait = sameCount < 6 ? 500 : 1000;
             await sleep(wait);
 
-            if (consecutiveZero > 30) {
+            if (consecutiveZero > 8) {
               console.log(`[LogExporter] チャット先頭に到達`);
               break;
             }
-            if (sameCount > 60) {
+            if (sameCount > 15) {
               console.log(`[LogExporter] ロード停止を検出`);
               break;
             }
