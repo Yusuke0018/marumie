@@ -2,96 +2,132 @@
  * kakehashi - Side Panel v2
  * おすすめ/履歴/検索 + ピン留め・タグ・展開・右クリックメニュー・ショートカット
  */
-const $ = s => document.querySelector(s);
-const $$ = s => document.querySelectorAll(s);
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => document.querySelectorAll(s);
 
-const statusDot = $('#status-dot'), statusText = $('#status-text');
-const contextBar = $('#context-bar'), contextInfo = $('#context-info'), keywordsArea = $('#keywords');
-const searchBar = $('#search-bar'), searchInput = $('#search-input'), searchClear = $('#search-clear');
-const suggestCount = $('#suggest-count'), historyCount = $('#history-count');
-const tabSuggest = $('#tab-suggest'), tabHistory = $('#tab-history'), tabSearch = $('#tab-search');
-const toastEl = $('#toast'), ctxMenu = $('#ctx-menu');
+const statusDot = $("#status-dot"),
+  statusText = $("#status-text");
+const contextBar = $("#context-bar"),
+  contextInfo = $("#context-info"),
+  keywordsArea = $("#keywords");
+const searchBar = $("#search-bar"),
+  searchInput = $("#search-input"),
+  searchClear = $("#search-clear");
+const suggestCount = $("#suggest-count"),
+  historyCount = $("#history-count");
+const tabSuggest = $("#tab-suggest"),
+  tabHistory = $("#tab-history"),
+  tabSearch = $("#tab-search");
+const toastEl = $("#toast"),
+  ctxMenu = $("#ctx-menu");
 
-let activeTab = 'suggest', lastContextUrl = '', lastKeywordsHash = '';
-let searchFilter = 'all', historyLoaded = false;
-let suggestResults = [], searchResults = [], historyConvs = [];
+let activeTab = "suggest",
+  lastContextUrl = "",
+  lastKeywordsHash = "";
+let searchFilter = "all",
+  historyLoaded = false;
+let suggestResults = [],
+  searchResults = [],
+  historyConvs = [];
 let ctxConv = null;
 let favSet = new Set();
 
 function sendMsg(type, payload = {}) {
-  return new Promise(r => chrome.runtime.sendMessage({ type, payload }, res => r(res || { ok: false })));
+  return new Promise((r) =>
+    chrome.runtime.sendMessage({ type, payload }, (res) =>
+      r(res || { ok: false }),
+    ),
+  );
 }
 
 // Load favorites
 (async () => {
-  const res = await sendMsg('GET_FAVORITES');
-  if (res.ok && res.favorites) res.favorites.forEach(f => favSet.add(f.conversationId));
+  const res = await sendMsg("GET_FAVORITES");
+  if (res.ok && res.favorites)
+    res.favorites.forEach((f) => favSet.add(f.conversationId));
 })();
 
 // ── Tabs ──
-$$('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
+$$(".tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
     const name = tab.dataset.tab;
     if (name === activeTab) return;
-    $$('.tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    $$('.tab-content').forEach(tc => tc.classList.remove('active'));
-    $(`#tab-${name}`).classList.add('active');
+    $$(".tab").forEach((t) => t.classList.remove("active"));
+    tab.classList.add("active");
+    $$(".tab-content").forEach((tc) => tc.classList.remove("active"));
+    $(`#tab-${name}`).classList.add("active");
     activeTab = name;
-    contextBar.classList.toggle('visible', name === 'suggest');
-    searchBar.classList.toggle('visible', name === 'search');
-    if (name === 'history' && !historyLoaded) loadHistory();
-    if (name === 'search') searchInput.focus();
+    contextBar.classList.toggle("visible", name === "suggest");
+    searchBar.classList.toggle("visible", name === "search");
+    if (name === "history" && !historyLoaded) loadHistory();
+    if (name === "search") searchInput.focus();
   });
 });
 
 // ── Keyboard shortcuts ──
-document.addEventListener('keydown', e => {
-  if (e.key === '/' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT') {
+document.addEventListener("keydown", (e) => {
+  if (
+    e.key === "/" &&
+    !e.ctrlKey &&
+    !e.metaKey &&
+    document.activeElement.tagName !== "INPUT"
+  ) {
     e.preventDefault();
-    $$('.tab').forEach(t => t.classList.remove('active'));
-    $$('.tab-content').forEach(tc => tc.classList.remove('active'));
-    $('[data-tab="search"]').classList.add('active');
-    $('#tab-search').classList.add('active');
-    activeTab = 'search';
-    contextBar.classList.remove('visible');
-    searchBar.classList.add('visible');
+    $$(".tab").forEach((t) => t.classList.remove("active"));
+    $$(".tab-content").forEach((tc) => tc.classList.remove("active"));
+    $('[data-tab="search"]').classList.add("active");
+    $("#tab-search").classList.add("active");
+    activeTab = "search";
+    contextBar.classList.remove("visible");
+    searchBar.classList.add("visible");
     searchInput.focus();
   }
-  if (e.key === 'Escape') {
-    ctxMenu.classList.remove('open');
-    if (document.activeElement === searchInput) { searchInput.blur(); searchInput.value = ''; searchClear.classList.remove('visible'); }
+  if (e.key === "Escape") {
+    ctxMenu.classList.remove("open");
+    if (document.activeElement === searchInput) {
+      searchInput.blur();
+      searchInput.value = "";
+      searchClear.classList.remove("visible");
+    }
   }
 });
 
 // ── おすすめ: Context polling ──
 async function pollContext() {
   try {
-    const res = await sendMsg('GET_CONTEXT');
+    const res = await sendMsg("GET_CONTEXT");
     if (!res.ok || !res.context) return;
     const ctx = res.context;
-    if (Date.now() - ctx.updatedAt > 60000) { statusDot.className = 'status-dot'; statusText.textContent = '待機中'; return; }
-    statusDot.className = 'status-dot active';
-    statusText.textContent = ctx.service || 'active';
-    const kwHash = ctx.keywords.join(',');
+    if (Date.now() - ctx.updatedAt > 60000) {
+      statusDot.className = "status-dot";
+      statusText.textContent = "待機中";
+      return;
+    }
+    statusDot.className = "status-dot active";
+    statusText.textContent = ctx.service || "active";
+    const kwHash = ctx.keywords.join(",");
     const urlChanged = ctx.url !== lastContextUrl;
     if (kwHash === lastKeywordsHash && !urlChanged) return;
-    lastContextUrl = ctx.url; lastKeywordsHash = kwHash;
+    lastContextUrl = ctx.url;
+    lastKeywordsHash = kwHash;
 
     // URL変更（ルーム切替・会話切替）を検知したら履歴も即更新
     if (urlChanged && historyLoaded) loadHistory(true);
     contextInfo.textContent = ctx.title || ctx.url;
-    keywordsArea.innerHTML = ctx.keywords.map(kw => `<span class="keyword-tag">${esc(kw)}</span>`).join('');
+    keywordsArea.innerHTML = ctx.keywords
+      .map((kw) => `<span class="keyword-tag">${esc(kw)}</span>`)
+      .join("");
 
     // 初期画面（キーワードなし）の場合はおすすめをクリア
     if (!ctx.keywords || ctx.keywords.length === 0) {
-      suggestResults = []; suggestCount.textContent = '0';
-      tabSuggest.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🌉</div><div class="empty-state-title">${esc(ctx.service || '')} の初期画面</div><p>会話を開くと関連する過去の会話が表示されます</p></div>`;
+      suggestResults = [];
+      suggestCount.textContent = "0";
+      tabSuggest.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🌉</div><div class="empty-state-title">${esc(ctx.service || "")} の初期画面</div><p>会話を開くと関連する過去の会話が表示されます</p></div>`;
       return;
     }
 
     // Chatworkの場合は「AIに相談」UIを表示
-    if (ctx.service === 'chatwork') {
+    if (ctx.service === "chatwork") {
       await showAiConsult(ctx);
       return;
     }
@@ -106,48 +142,55 @@ setTimeout(pollContext, 500);
 let cwMsgRange = 20; // 直近何件を含めるか
 
 async function showAiConsult(ctx) {
-  suggestCount.textContent = '💬';
+  suggestCount.textContent = "💬";
 
   // 現在のルームのメッセージを取得
-  const allConvRes = await sendMsg('GET_CONVERSATIONS', { service: 'chatwork', limit: 100 });
+  const allConvRes = await sendMsg("GET_CONVERSATIONS", {
+    service: "chatwork",
+    limit: 100,
+  });
   let roomConv = null;
   if (allConvRes.ok && allConvRes.results) {
-    roomConv = allConvRes.results.find(c => c.url === ctx.url);
+    roomConv = allConvRes.results.find((c) => c.url === ctx.url);
   }
 
   let messages = [];
   if (roomConv) {
-    const msgRes = await sendMsg('GET_MESSAGES', { conversationId: roomConv.id });
+    const msgRes = await sendMsg("GET_MESSAGES", {
+      conversationId: roomConv.id,
+    });
     if (msgRes.ok && msgRes.results) messages = msgRes.results;
   }
 
   const recentMsgs = messages.slice(-cwMsgRange);
-  const roomTitle = ctx.title || 'Chatwork';
+  const roomTitle = ctx.title || "Chatwork";
 
   // プレビュー用テキスト
-  const previewHtml = recentMsgs.map(m => {
-    const text = m.content || '';
-    // [speaker] content 形式を分解
-    const match = text.match(/^\[(.+?)\]\s*([\s\S]*)$/);
-    if (match) {
-      return `<span class="cw-speaker">${esc(match[1])}</span>: ${esc(match[2].slice(0, 150))}`;
-    }
-    return esc(text.slice(0, 150));
-  }).join('\n');
+  const previewHtml = recentMsgs
+    .map((m) => {
+      const text = m.content || "";
+      // [speaker] content 形式を分解
+      const match = text.match(/^\[(.+?)\]\s*([\s\S]*)$/);
+      if (match) {
+        return `<span class="cw-speaker">${esc(match[1])}</span>: ${esc(match[2].slice(0, 150))}`;
+      }
+      return esc(text.slice(0, 150));
+    })
+    .join("\n");
 
   // AIに渡すテキスト
-  const contextText = recentMsgs.map(m => m.content || '').join('\n');
+  const contextText = recentMsgs.map((m) => m.content || "").join("\n");
 
   tabSuggest.innerHTML = `
     <div class="ai-consult">
       <div class="ai-consult-header">📋 ${esc(roomTitle)} の直近メッセージ</div>
       <div class="ai-consult-range">
-        <button class="range-btn ${cwMsgRange===10?'active':''}" data-range="10">直近10件</button>
-        <button class="range-btn ${cwMsgRange===20?'active':''}" data-range="20">直近20件</button>
-        <button class="range-btn ${cwMsgRange===50?'active':''}" data-range="50">直近50件</button>
-        <button class="range-btn ${cwMsgRange===9999?'active':''}" data-range="9999">すべて</button>
+        <button class="range-btn ${cwMsgRange === 10 ? "active" : ""}" data-range="10">直近10件</button>
+        <button class="range-btn ${cwMsgRange === 20 ? "active" : ""}" data-range="20">直近20件</button>
+        <button class="range-btn ${cwMsgRange === 50 ? "active" : ""}" data-range="50">直近50件</button>
+        <button class="range-btn ${cwMsgRange === 9999 ? "active" : ""}" data-range="9999">すべて</button>
       </div>
-      <div class="ai-consult-preview">${previewHtml || '（メッセージなし）'}</div>
+      <div class="ai-consult-preview">${previewHtml || "（メッセージなし）"}</div>
       <textarea class="ai-consult-prompt" id="ai-prompt" placeholder="AIへの指示を追加（例: この議論を要約して / 問題点を整理して）"></textarea>
       <div class="ai-consult-buttons">
         <button class="ai-btn claude" data-ai="claude">Claude</button>
@@ -159,36 +202,40 @@ async function showAiConsult(ctx) {
   `;
 
   // 範囲切替
-  tabSuggest.querySelectorAll('.range-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+  tabSuggest.querySelectorAll(".range-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
       cwMsgRange = parseInt(btn.dataset.range);
       showAiConsult(ctx);
     });
   });
 
   // AIボタン
-  tabSuggest.querySelectorAll('.ai-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
+  tabSuggest.querySelectorAll(".ai-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
       const ai = btn.dataset.ai;
-      const userPrompt = document.getElementById('ai-prompt').value.trim();
+      const userPrompt = document.getElementById("ai-prompt").value.trim();
       const fullPrompt = buildAiPrompt(roomTitle, contextText, userPrompt);
       const urls = {
-        claude: 'https://claude.ai/new',
-        chatgpt: 'https://chatgpt.com/',
-        gemini: 'https://gemini.google.com/app'
+        claude: "https://claude.ai/new",
+        chatgpt: "https://chatgpt.com/",
+        gemini: "https://gemini.google.com/app",
       };
 
       // クリップボードにもコピー（フォールバック用）
       navigator.clipboard.writeText(fullPrompt).catch(() => {});
 
       // タブを開いて自動貼付
-      btn.textContent = '⏳ 開いています...';
+      btn.textContent = "⏳ 開いています...";
       btn.disabled = true;
-      await sendMsg('OPEN_AI_AND_PASTE', { url: urls[ai], text: fullPrompt });
+      await sendMsg("OPEN_AI_AND_PASTE", { url: urls[ai], text: fullPrompt });
       showToast(`${ai} を開いて自動貼付します`);
 
       setTimeout(() => {
-        btn.textContent = { claude: 'Claude', chatgpt: 'ChatGPT', gemini: 'Gemini' }[ai];
+        btn.textContent = {
+          claude: "Claude",
+          chatgpt: "ChatGPT",
+          gemini: "Gemini",
+        }[ai];
         btn.disabled = false;
       }, 3000);
     });
@@ -197,48 +244,65 @@ async function showAiConsult(ctx) {
 
 function buildAiPrompt(roomTitle, contextText, userPrompt) {
   const lines = [];
-  lines.push('以下はChatworkのルーム「' + roomTitle + '」での直近のやり取りです。');
-  lines.push('');
-  lines.push('---');
+  lines.push(
+    "以下はChatworkのルーム「" + roomTitle + "」での直近のやり取りです。",
+  );
+  lines.push("");
+  lines.push("---");
   lines.push(contextText);
-  lines.push('---');
-  lines.push('');
+  lines.push("---");
+  lines.push("");
   if (userPrompt) {
     lines.push(userPrompt);
   } else {
-    lines.push('上記のやり取りの内容を踏まえて、要点を整理してください。');
+    lines.push("上記のやり取りの内容を踏まえて、要点を整理してください。");
   }
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
 // タブ切替を検知 → コンテキストを強制リセットして即再取得
 chrome.tabs.onActivated.addListener(() => {
-  lastContextUrl = '';
-  lastKeywordsHash = '';
+  lastContextUrl = "";
+  lastKeywordsHash = "";
   setTimeout(pollContext, 300);
 });
 // ウィンドウフォーカス変更時も
-window.addEventListener('focus', () => {
-  lastContextUrl = '';
-  lastKeywordsHash = '';
+window.addEventListener("focus", () => {
+  lastContextUrl = "";
+  lastKeywordsHash = "";
   setTimeout(pollContext, 300);
 });
 
 async function findRelated(keywords, currentUrl, currentService) {
-  const res = await sendMsg('FIND_RELATED', { keywords, currentUrl, currentService, limit: 30 });
+  const res = await sendMsg("FIND_RELATED", {
+    keywords,
+    currentUrl,
+    currentService,
+    limit: 30,
+  });
   if (!res.ok || !res.results || !res.results.length) {
-    suggestResults = []; suggestCount.textContent = '0';
-    tabSuggest.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-title">関連する会話が見つかりません</div><p>会話が蓄積されるとここに表示されます</p></div>';
+    suggestResults = [];
+    suggestCount.textContent = "0";
+    tabSuggest.innerHTML =
+      '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-title">関連する会話が見つかりません</div><p>会話が蓄積されるとここに表示されます</p></div>';
     return;
   }
   suggestResults = res.results;
   suggestCount.textContent = String(res.results.length);
-  const pinned = res.results.filter(c => favSet.has(c.conversationId));
-  const others = res.results.filter(c => !favSet.has(c.conversationId));
-  let html = '<div class="drag-hint">📎→チャットに直接貼付 / クリック→.txtダウンロード / 右クリック→メニュー</div>';
-  if (pinned.length) { html += '<div class="section-label">📌 ピン留め</div>'; pinned.forEach(c => { html += renderCard(c, res.results.indexOf(c), 'suggest'); }); }
+  const pinned = res.results.filter((c) => favSet.has(c.conversationId));
+  const others = res.results.filter((c) => !favSet.has(c.conversationId));
+  let html =
+    '<div class="drag-hint">📎→チャットに直接貼付 / クリック→.txtダウンロード / 右クリック→メニュー</div>';
+  if (pinned.length) {
+    html += '<div class="section-label">📌 ピン留め</div>';
+    pinned.forEach((c) => {
+      html += renderCard(c, res.results.indexOf(c), "suggest");
+    });
+  }
   html += '<div class="section-label">関連する過去の会話</div>';
-  others.forEach(c => { html += renderCard(c, res.results.indexOf(c), 'suggest'); });
+  others.forEach((c) => {
+    html += renderCard(c, res.results.indexOf(c), "suggest");
+  });
   tabSuggest.innerHTML = html;
   attachCardEvents(tabSuggest, suggestResults);
 }
@@ -249,11 +313,14 @@ let lastHistoryCount = 0;
 async function loadHistory(silent = false) {
   if (!silent) {
     historyConvs = [];
-    tabHistory.innerHTML = '<div class="loading"><div class="loading-spinner"></div><div>読み込み中...</div></div>';
+    tabHistory.innerHTML =
+      '<div class="loading"><div class="loading-spinner"></div><div>読み込み中...</div></div>';
   }
-  const res = await sendMsg('GET_CONVERSATIONS', { limit: 200 });
+  const res = await sendMsg("GET_CONVERSATIONS", { limit: 200 });
   if (!res.ok || !res.results) {
-    if (!silent) tabHistory.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><p>まだ会話がありません</p></div>';
+    if (!silent)
+      tabHistory.innerHTML =
+        '<div class="empty-state"><div class="empty-state-icon">📭</div><p>まだ会話がありません</p></div>';
     return;
   }
   historyLoaded = true;
@@ -263,8 +330,8 @@ async function loadHistory(silent = false) {
   historyCount.textContent = String(res.results.length);
   historyConvs = [];
   for (const conv of res.results) {
-    const msgRes = await sendMsg('GET_MESSAGES', { conversationId: conv.id });
-    conv.allMessages = (msgRes.ok && msgRes.results) ? msgRes.results : [];
+    const msgRes = await sendMsg("GET_MESSAGES", { conversationId: conv.id });
+    conv.allMessages = msgRes.ok && msgRes.results ? msgRes.results : [];
     conv.conversationId = conv.id;
     historyConvs.push(conv);
   }
@@ -272,21 +339,51 @@ async function loadHistory(silent = false) {
 }
 
 function renderHistory() {
-  if (!historyConvs.length) { tabHistory.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><p>まだ会話がありません</p></div>'; return; }
-  const pinned = historyConvs.filter(c => favSet.has(c.id || c.conversationId));
-  const others = historyConvs.filter(c => !favSet.has(c.id || c.conversationId));
-  const groups = {}; const today = new Date();
-  others.forEach(conv => {
-    const d = new Date(conv.updatedAt), diff = Math.floor((today - d) / 86400000);
-    const label = diff === 0 ? '今日' : diff === 1 ? '昨日' : diff < 7 ? `${diff}日前` : diff < 30 ? `${Math.floor(diff/7)}週間前` : d.toLocaleDateString('ja-JP', { year: 'numeric', month: 'short', day: 'numeric' });
+  if (!historyConvs.length) {
+    tabHistory.innerHTML =
+      '<div class="empty-state"><div class="empty-state-icon">📭</div><p>まだ会話がありません</p></div>';
+    return;
+  }
+  const pinned = historyConvs.filter((c) =>
+    favSet.has(c.id || c.conversationId),
+  );
+  const others = historyConvs.filter(
+    (c) => !favSet.has(c.id || c.conversationId),
+  );
+  const groups = {};
+  const today = new Date();
+  others.forEach((conv) => {
+    const d = new Date(conv.updatedAt),
+      diff = Math.floor((today - d) / 86400000);
+    const label =
+      diff === 0
+        ? "今日"
+        : diff === 1
+          ? "昨日"
+          : diff < 7
+            ? `${diff}日前`
+            : diff < 30
+              ? `${Math.floor(diff / 7)}週間前`
+              : d.toLocaleDateString("ja-JP", {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                });
     if (!groups[label]) groups[label] = [];
     groups[label].push(conv);
   });
-  let html = '';
-  if (pinned.length) { html += '<div class="section-label">📌 ピン留め</div>'; pinned.forEach(c => { html += renderCard(c, historyConvs.indexOf(c), 'history'); }); }
+  let html = "";
+  if (pinned.length) {
+    html += '<div class="section-label">📌 ピン留め</div>';
+    pinned.forEach((c) => {
+      html += renderCard(c, historyConvs.indexOf(c), "history");
+    });
+  }
   for (const [label, convs] of Object.entries(groups)) {
     html += `<div class="date-group">${esc(label)}</div>`;
-    convs.forEach(c => { html += renderCard(c, historyConvs.indexOf(c), 'history'); });
+    convs.forEach((c) => {
+      html += renderCard(c, historyConvs.indexOf(c), "history");
+    });
   }
   tabHistory.innerHTML = html;
   attachCardEvents(tabHistory, historyConvs);
@@ -294,36 +391,78 @@ function renderHistory() {
 
 // ── 検索 ──
 let searchTO = null;
-searchInput.addEventListener('input', () => {
+searchInput.addEventListener("input", () => {
   const q = searchInput.value.trim();
-  searchClear.classList.toggle('visible', q.length > 0);
+  searchClear.classList.toggle("visible", q.length > 0);
   clearTimeout(searchTO);
-  if (!q) { tabSearch.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⌕</div><p>キーワードを入力</p></div>'; return; }
+  if (!q) {
+    tabSearch.innerHTML =
+      '<div class="empty-state"><div class="empty-state-icon">⌕</div><p>キーワードを入力</p></div>';
+    return;
+  }
   searchTO = setTimeout(() => executeSearch(q), 300);
 });
-searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(searchTO); const q = searchInput.value.trim(); if (q) executeSearch(q); } });
-searchClear.addEventListener('click', () => { searchInput.value = ''; searchClear.classList.remove('visible'); searchInput.focus(); tabSearch.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⌕</div><p>キーワードを入力</p></div>'; });
-$$('.filter-btn').forEach(btn => { btn.addEventListener('click', () => { $$('.filter-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); searchFilter = btn.dataset.service; const q = searchInput.value.trim(); if (q) executeSearch(q); }); });
+searchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    clearTimeout(searchTO);
+    const q = searchInput.value.trim();
+    if (q) executeSearch(q);
+  }
+});
+searchClear.addEventListener("click", () => {
+  searchInput.value = "";
+  searchClear.classList.remove("visible");
+  searchInput.focus();
+  tabSearch.innerHTML =
+    '<div class="empty-state"><div class="empty-state-icon">⌕</div><p>キーワードを入力</p></div>';
+});
+$$(".filter-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    $$(".filter-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    searchFilter = btn.dataset.service;
+    const q = searchInput.value.trim();
+    if (q) executeSearch(q);
+  });
+});
 
 async function executeSearch(query) {
-  tabSearch.innerHTML = '<div class="loading"><div class="loading-spinner"></div><div>検索中...</div></div>';
-  const svc = searchFilter === 'all' ? null : searchFilter;
-  const res = await sendMsg('SEARCH', { query, service: svc, limit: 50 });
-  if (!res.ok || !res.results || !res.results.length) { tabSearch.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📭</div><p>「${esc(query)}」に一致する会話はありません</p></div>`; searchResults = []; return; }
+  tabSearch.innerHTML =
+    '<div class="loading"><div class="loading-spinner"></div><div>検索中...</div></div>';
+  const svc = searchFilter === "all" ? null : searchFilter;
+  const res = await sendMsg("SEARCH", { query, service: svc, limit: 50 });
+  if (!res.ok || !res.results || !res.results.length) {
+    tabSearch.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📭</div><p>「${esc(query)}」に一致する会話はありません</p></div>`;
+    searchResults = [];
+    return;
+  }
   const convGroups = {};
   for (const msg of res.results) {
-    if (!convGroups[msg.conversationId]) convGroups[msg.conversationId] = { conversationId: msg.conversationId, service: msg.service, matchedMessages: [], allMessages: [] };
+    if (!convGroups[msg.conversationId])
+      convGroups[msg.conversationId] = {
+        conversationId: msg.conversationId,
+        service: msg.service,
+        matchedMessages: [],
+        allMessages: [],
+      };
     convGroups[msg.conversationId].matchedMessages.push(msg);
   }
-  const allConvRes = await sendMsg('GET_CONVERSATIONS', { limit: 1000 });
+  const allConvRes = await sendMsg("GET_CONVERSATIONS", { limit: 1000 });
   const convMap = {};
-  if (allConvRes.ok && allConvRes.results) allConvRes.results.forEach(c => { convMap[c.id] = c; });
+  if (allConvRes.ok && allConvRes.results)
+    allConvRes.results.forEach((c) => {
+      convMap[c.id] = c;
+    });
   const grouped = [];
   for (const cid of Object.keys(convGroups)) {
-    const g = convGroups[cid]; const conv = convMap[cid];
-    const msgRes = await sendMsg('GET_MESSAGES', { conversationId: cid });
-    g.allMessages = (msgRes.ok && msgRes.results) ? msgRes.results : g.matchedMessages;
-    g.title = conv ? conv.title : 'Untitled'; g.url = conv ? conv.url : ''; g.updatedAt = conv ? conv.updatedAt : 0;
+    const g = convGroups[cid];
+    const conv = convMap[cid];
+    const msgRes = await sendMsg("GET_MESSAGES", { conversationId: cid });
+    g.allMessages =
+      msgRes.ok && msgRes.results ? msgRes.results : g.matchedMessages;
+    g.title = conv ? conv.title : "Untitled";
+    g.url = conv ? conv.url : "";
+    g.updatedAt = conv ? conv.updatedAt : 0;
     grouped.push(g);
   }
   searchResults = grouped;
@@ -332,21 +471,32 @@ async function executeSearch(query) {
   grouped.forEach((conv, idx) => {
     const matchMsg = conv.matchedMessages[0];
     const allMsgs = conv.allMessages || [];
-    let posLabel = '';
+    let posLabel = "";
     if (matchMsg && allMsgs.length > 0) {
-      const mi = allMsgs.findIndex(m => m.timestamp === matchMsg.timestamp && m.role === matchMsg.role);
-      if (mi >= 0) { const pct = Math.round((mi / allMsgs.length) * 100); posLabel = pct < 30 ? '冒頭' : pct < 70 ? '中盤' : '終盤'; }
+      const mi = allMsgs.findIndex(
+        (m) => m.timestamp === matchMsg.timestamp && m.role === matchMsg.role,
+      );
+      if (mi >= 0) {
+        const pct = Math.round((mi / allMsgs.length) * 100);
+        posLabel = pct < 30 ? "冒頭" : pct < 70 ? "中盤" : "終盤";
+      }
     }
-    const previewHL = highlightText(matchMsg ? matchMsg.content.slice(0, 120) : '', kws);
-    const searchTitleClass = conv.service === 'chatwork' ? 'file-card-title cw-title' : 'file-card-title';
+    const previewHL = highlightText(
+      matchMsg ? matchMsg.content.slice(0, 120) : "",
+      kws,
+    );
+    const searchTitleClass =
+      conv.service === "chatwork"
+        ? "file-card-title cw-title"
+        : "file-card-title";
     html += `<div class="file-card" draggable="true" data-conv-index="${idx}" data-source="search" data-cid="${conv.conversationId}">
       <div class="file-card-header"><span class="file-icon">📄</span><span class="${searchTitleClass}">${esc(conv.title)}</span>
         <span class="service-badge ${conv.service}">${conv.service}</span>
-        <div class="card-actions"><button class="card-btn inject-btn" title="チャットに貼付">📎</button><button class="card-btn fav-btn ${favSet.has(conv.conversationId)?'fav-active':''}" data-cid="${conv.conversationId}">★</button><button class="card-btn expand-btn">▾</button></div>
+        <div class="card-actions"><button class="card-btn inject-btn" title="チャットに貼付">📎</button><button class="card-btn fav-btn ${favSet.has(conv.conversationId) ? "fav-active" : ""}" data-cid="${conv.conversationId}">★</button><button class="card-btn expand-btn">▾</button></div>
       </div>
       <div class="file-card-preview">${previewHL}</div>
       <div class="file-card-tags" data-cid="${conv.conversationId}"></div>
-      <div class="file-card-meta"><span>${allMsgs.length} msgs</span><span>${conv.matchedMessages.length} hits</span>${posLabel?`<span class="match-pos">${posLabel}</span>`:''}<span>~${estimateFileSize(allMsgs)}</span></div>
+      <div class="file-card-meta"><span>${allMsgs.length} msgs</span><span>${conv.matchedMessages.length} hits</span>${posLabel ? `<span class="match-pos">${posLabel}</span>` : ""}<span>~${estimateFileSize(allMsgs)}</span></div>
       <div class="expanded-view" data-cid="${conv.conversationId}"></div>
     </div>`;
   });
@@ -359,126 +509,192 @@ function renderCard(conv, idx, source) {
   const msgs = conv.allMessages || [];
   const cid = conv.conversationId || conv.id;
   const isPinned = favSet.has(cid);
-  const time = conv.updatedAt ? formatTime(conv.updatedAt) : '';
-  const titleClass = conv.service === 'chatwork' ? 'file-card-title cw-title' : 'file-card-title';
-  return `<div class="file-card ${isPinned?'pinned':''}" draggable="true" data-conv-index="${idx}" data-source="${source}" data-cid="${cid}">
+  const time = conv.updatedAt ? formatTime(conv.updatedAt) : "";
+  const titleClass =
+    conv.service === "chatwork"
+      ? "file-card-title cw-title"
+      : "file-card-title";
+  return `<div class="file-card ${isPinned ? "pinned" : ""}" draggable="true" data-conv-index="${idx}" data-source="${source}" data-cid="${cid}">
     <div class="file-card-header"><span class="file-icon">📄</span><span class="${titleClass}">${esc(conv.title)}</span>
       <span class="service-badge ${conv.service}">${conv.service}</span>
-      <div class="card-actions"><button class="card-btn inject-btn" title="チャットに貼付">📎</button><button class="card-btn fav-btn ${isPinned?'fav-active':''}" data-cid="${cid}">★</button><button class="card-btn expand-btn">▾</button></div>
+      <div class="card-actions"><button class="card-btn inject-btn" title="チャットに貼付">📎</button><button class="card-btn fav-btn ${isPinned ? "fav-active" : ""}" data-cid="${cid}">★</button><button class="card-btn expand-btn">▾</button></div>
     </div>
     <div class="file-card-preview">${getSummaryPreview(msgs)}</div>
     <div class="file-card-tags" data-cid="${cid}"></div>
-    <div class="file-card-meta"><span>${msgs.length} msgs</span><span>~${estimateFileSize(msgs)}</span>${time?`<span>${time}</span>`:''}</div>
+    <div class="file-card-meta"><span>${msgs.length} msgs</span><span>~${estimateFileSize(msgs)}</span>${time ? `<span>${time}</span>` : ""}</div>
     <div class="expanded-view" data-cid="${cid}"></div>
   </div>`;
 }
 
 function getSummaryPreview(msgs) {
-  if (!msgs || !msgs.length) return '';
-  const u = msgs.find(m => m.role === 'user'), a = msgs.find(m => m.role === 'assistant');
-  let out = '';
+  if (!msgs || !msgs.length) return "";
+  const u = msgs.find((m) => m.role === "user"),
+    a = msgs.find((m) => m.role === "assistant");
+  let out = "";
   if (u) out += esc(u.content.slice(0, 80));
-  if (a) out += ` <span class="ai-hint">→ ${esc(a.content.slice(0, 50))}...</span>`;
+  if (a)
+    out += ` <span class="ai-hint">→ ${esc(a.content.slice(0, 50))}...</span>`;
   return out || esc(msgs[0].content.slice(0, 100));
 }
 
 // ── Card events ──
 function attachCardEvents(container, dataArray) {
-  container.querySelectorAll('.file-card').forEach(card => {
+  container.querySelectorAll(".file-card").forEach((card) => {
     const idx = parseInt(card.dataset.convIndex);
     const conv = dataArray[idx];
     if (!conv) return;
     const cid = conv.conversationId || conv.id;
 
     // ドラッグ → チャットに直接注入を試みる
-    card.addEventListener('dragstart', e => {
-      card.classList.add('dragging');
+    card.addEventListener("dragstart", (e) => {
+      card.classList.add("dragging");
       injectToChat(conv);
-      e.dataTransfer.setData('text/plain', generateFileContent(conv));
-      e.dataTransfer.effectAllowed = 'copyMove';
+      e.dataTransfer.setData("text/plain", generateFileContent(conv));
+      e.dataTransfer.effectAllowed = "copyMove";
     });
-    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    card.addEventListener("dragend", () => card.classList.remove("dragging"));
 
     // クリック → .txtダウンロード
-    card.addEventListener('click', e => {
-      if (e.target.closest('.card-btn') || e.target.closest('.expand-toggle') || e.target.closest('.tag-pill')) return;
+    card.addEventListener("click", (e) => {
+      if (
+        e.target.closest(".card-btn") ||
+        e.target.closest(".expand-toggle") ||
+        e.target.closest(".tag-pill")
+      )
+        return;
       downloadFile(conv);
     });
 
     // 📎ボタン → チャットに直接注入
-    const injectBtn = card.querySelector('.inject-btn');
-    if (injectBtn) injectBtn.addEventListener('click', async e => {
-      e.stopPropagation();
-      injectToChat(conv);
-    });
+    const injectBtn = card.querySelector(".inject-btn");
+    if (injectBtn)
+      injectBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        injectToChat(conv);
+      });
 
-    const favBtn = card.querySelector('.fav-btn');
-    if (favBtn) favBtn.addEventListener('click', async e => {
-      e.stopPropagation();
-      const res = await sendMsg('TOGGLE_FAVORITE', { conversationId: cid });
-      if (res.ok) {
-        if (res.favorited) { favSet.add(cid); favBtn.classList.add('fav-active'); card.classList.add('pinned'); showToast('ピン留めしました'); }
-        else { favSet.delete(cid); favBtn.classList.remove('fav-active'); card.classList.remove('pinned'); showToast('ピン留め解除'); }
-      }
-    });
+    const favBtn = card.querySelector(".fav-btn");
+    if (favBtn)
+      favBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const res = await sendMsg("TOGGLE_FAVORITE", { conversationId: cid });
+        if (res.ok) {
+          if (res.favorited) {
+            favSet.add(cid);
+            favBtn.classList.add("fav-active");
+            card.classList.add("pinned");
+            showToast("ピン留めしました");
+          } else {
+            favSet.delete(cid);
+            favBtn.classList.remove("fav-active");
+            card.classList.remove("pinned");
+            showToast("ピン留め解除");
+          }
+        }
+      });
 
-    const expandBtn = card.querySelector('.expand-btn');
-    const expandView = card.querySelector('.expanded-view');
-    if (expandBtn && expandView) expandBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      if (expandView.classList.contains('open')) { expandView.classList.remove('open'); expandBtn.textContent = '▾'; }
-      else {
-        const msgs = conv.allMessages || [];
-        expandView.innerHTML = msgs.slice(0, 20).map(m => `<div class="expanded-msg"><div class="role-label ${m.role}">${m.role==='user'?'👤 ユーザー':'🤖 AI'}</div><div class="msg-text">${esc(m.content.slice(0,500))}</div></div>`).join('') + (msgs.length > 20 ? `<div class="expand-toggle">... 残り${msgs.length-20}件</div>` : '');
-        expandView.classList.add('open'); expandBtn.textContent = '▴';
-      }
-    });
+    const expandBtn = card.querySelector(".expand-btn");
+    const expandView = card.querySelector(".expanded-view");
+    if (expandBtn && expandView)
+      expandBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (expandView.classList.contains("open")) {
+          expandView.classList.remove("open");
+          expandBtn.textContent = "▾";
+        } else {
+          const msgs = conv.allMessages || [];
+          expandView.innerHTML =
+            msgs
+              .slice(0, 20)
+              .map(
+                (m) =>
+                  `<div class="expanded-msg"><div class="role-label ${m.role}">${m.role === "user" ? "👤 ユーザー" : "🤖 AI"}</div><div class="msg-text">${esc(m.content.slice(0, 500))}</div></div>`,
+              )
+              .join("") +
+            (msgs.length > 20
+              ? `<div class="expand-toggle">... 残り${msgs.length - 20}件</div>`
+              : "");
+          expandView.classList.add("open");
+          expandBtn.textContent = "▴";
+        }
+      });
 
-    card.addEventListener('contextmenu', e => {
-      e.preventDefault(); ctxConv = conv;
-      $('#ctx-pin').textContent = favSet.has(cid) ? '📌 ピン留め解除' : '📌 ピン留め';
-      ctxMenu.style.left = Math.min(e.clientX, innerWidth - 170) + 'px';
-      ctxMenu.style.top = Math.min(e.clientY, innerHeight - 180) + 'px';
-      ctxMenu.classList.add('open');
+    card.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      ctxConv = conv;
+      $("#ctx-pin").textContent = favSet.has(cid)
+        ? "📌 ピン留め解除"
+        : "📌 ピン留め";
+      ctxMenu.style.left = Math.min(e.clientX, innerWidth - 170) + "px";
+      ctxMenu.style.top = Math.min(e.clientY, innerHeight - 180) + "px";
+      ctxMenu.classList.add("open");
     });
   });
   loadTagsForCards(container);
 }
 
 async function loadTagsForCards(container) {
-  for (const tc of container.querySelectorAll('.file-card-tags')) {
-    const cid = tc.dataset.cid; if (!cid) continue;
-    const res = await sendMsg('GET_TAGS', { conversationId: cid });
-    if (res.ok && res.tags && res.tags.length) tc.innerHTML = res.tags.map(t => `<span class="tag-pill">${esc(t.tag)}</span>`).join('');
+  for (const tc of container.querySelectorAll(".file-card-tags")) {
+    const cid = tc.dataset.cid;
+    if (!cid) continue;
+    const res = await sendMsg("GET_TAGS", { conversationId: cid });
+    if (res.ok && res.tags && res.tags.length)
+      tc.innerHTML = res.tags
+        .map((t) => `<span class="tag-pill">${esc(t.tag)}</span>`)
+        .join("");
   }
 }
 
 // ── Context menu ──
-document.addEventListener('click', () => ctxMenu.classList.remove('open'));
-$$('.ctx-menu-item').forEach(item => {
-  item.addEventListener('click', async () => {
-    ctxMenu.classList.remove('open'); if (!ctxConv) return;
+document.addEventListener("click", () => ctxMenu.classList.remove("open"));
+$$(".ctx-menu-item").forEach((item) => {
+  item.addEventListener("click", async () => {
+    ctxMenu.classList.remove("open");
+    if (!ctxConv) return;
     const cid = ctxConv.conversationId || ctxConv.id;
     switch (item.dataset.action) {
-      case 'download': downloadFile(ctxConv); break;
-      case 'download-date': openDateExportModal(ctxConv); break;
-      case 'copy': await navigator.clipboard.writeText(generateFileContent(ctxConv)); showToast('コピーしました'); break;
-      case 'pin': {
-        const res = await sendMsg('TOGGLE_FAVORITE', { conversationId: cid });
-        if (res.ok) { res.favorited ? favSet.add(cid) : favSet.delete(cid); showToast(res.favorited ? 'ピン留め' : '解除'); if (activeTab === 'history') renderHistory(); }
+      case "download":
+        downloadFile(ctxConv);
         break;
-      }
-      case 'tag': {
-        const tag = prompt('タグを入力:');
-        if (tag && tag.trim()) {
-          await sendMsg('ADD_TAG', { conversationId: cid, tag: tag.trim() });
-          showToast(`タグ「${tag.trim()}」追加`);
-          const tc = document.querySelector(`.file-card-tags[data-cid="${cid}"]`);
-          if (tc) { const r = await sendMsg('GET_TAGS', { conversationId: cid }); if (r.ok && r.tags) tc.innerHTML = r.tags.map(t => `<span class="tag-pill">${esc(t.tag)}</span>`).join(''); }
+      case "download-date":
+        openDateExportModal(ctxConv);
+        break;
+      case "copy":
+        await navigator.clipboard.writeText(generateFileContent(ctxConv));
+        showToast("コピーしました");
+        break;
+      case "pin": {
+        const res = await sendMsg("TOGGLE_FAVORITE", { conversationId: cid });
+        if (res.ok) {
+          res.favorited ? favSet.add(cid) : favSet.delete(cid);
+          showToast(res.favorited ? "ピン留め" : "解除");
+          if (activeTab === "history") renderHistory();
         }
         break;
       }
-      case 'open': ctxConv.url ? chrome.tabs.create({ url: ctxConv.url }) : showToast('URLがありません'); break;
+      case "tag": {
+        const tag = prompt("タグを入力:");
+        if (tag && tag.trim()) {
+          await sendMsg("ADD_TAG", { conversationId: cid, tag: tag.trim() });
+          showToast(`タグ「${tag.trim()}」追加`);
+          const tc = document.querySelector(
+            `.file-card-tags[data-cid="${cid}"]`,
+          );
+          if (tc) {
+            const r = await sendMsg("GET_TAGS", { conversationId: cid });
+            if (r.ok && r.tags)
+              tc.innerHTML = r.tags
+                .map((t) => `<span class="tag-pill">${esc(t.tag)}</span>`)
+                .join("");
+          }
+        }
+        break;
+      }
+      case "open":
+        ctxConv.url
+          ? chrome.tabs.create({ url: ctxConv.url })
+          : showToast("URLがありません");
+        break;
     }
   });
 });
@@ -488,74 +704,149 @@ async function injectToChat(conv) {
   const content = generateFileContent(conv);
   const fileName = generateFileName(conv);
   try {
-    const res = await sendMsg('INJECT_TO_CHAT', { content, fileName });
+    const res = await sendMsg("INJECT_TO_CHAT", { content, fileName });
     if (res.ok) {
-      if (res.method === 'clipboard') {
-        showToast('クリップボードにコピーしました（Ctrl+Vで貼付）');
+      if (res.method === "clipboard") {
+        showToast("クリップボードにコピーしました（Ctrl+Vで貼付）");
       } else {
-        showToast('チャットにファイルを添付しました');
+        showToast("チャットにファイルを添付しました");
       }
     } else {
       // フォールバック: ダウンロード
       downloadFile(conv);
-      showToast('添付できません。ダウンロードしました');
+      showToast("添付できません。ダウンロードしました");
     }
   } catch (err) {
     downloadFile(conv);
-    showToast('添付できません。ダウンロードしました');
+    showToast("添付できません。ダウンロードしました");
   }
 }
 
 // ── 過去5日分を常に出力する対象ルーム ──
-const ALWAYS_5DAYS_ROOM_IDS = ['207619677', '430280030'];
+const ALWAYS_5DAYS_ROOM_IDS = ["207619677", "430280030"];
 function isAlways5DaysConv(conv) {
-  return conv && conv.url && ALWAYS_5DAYS_ROOM_IDS.some(id => conv.url.includes('rid' + id));
+  return (
+    conv &&
+    conv.url &&
+    ALWAYS_5DAYS_ROOM_IDS.some((id) => conv.url.includes("rid" + id))
+  );
 }
 function filterLast5Days(msgs) {
-  const d = new Date(); d.setDate(d.getDate() - 4); // 今日含め5日分
+  const d = new Date();
+  d.setDate(d.getDate() - 4); // 今日含め5日分
   const from5 = d.toISOString().slice(0, 10);
-  return msgs.filter(m => m.messageDate && m.messageDate >= from5);
+  return msgs.filter((m) => m.messageDate && m.messageDate >= from5);
 }
 
 // ── File gen & download ──
 function generateFileContent(conv, filteredMessages) {
   let msgs = filteredMessages || conv.allMessages || [];
   // 対象ルームは常に過去5日分を出力
-  if (!filteredMessages && isAlways5DaysConv(conv)) msgs = filterLast5Days(msgs);
-  const l = ['='.repeat(60),'kakehashi - 関連会話コンテキスト','='.repeat(60),'','タイトル: '+(conv.title||'Untitled'),'サービス: '+(conv.service||''),'URL: '+(conv.url||''),'','-'.repeat(60),''];
-  msgs.forEach(m=>{l.push(`【${m.role==='user'?'ユーザー':'AI'}】`);l.push(m.content);l.push('');});
-  l.push('-'.repeat(60),'※ kakehashiが自動生成した過去の会話コンテキストです。上記を踏まえて回答してください。');
-  return l.join('\n');
+  if (!filteredMessages && isAlways5DaysConv(conv))
+    msgs = filterLast5Days(msgs);
+  const l = [
+    "=".repeat(60),
+    "kakehashi - 関連会話コンテキスト",
+    "=".repeat(60),
+    "",
+    "タイトル: " + (conv.title || "Untitled"),
+    "サービス: " + (conv.service || ""),
+    "URL: " + (conv.url || ""),
+    "",
+    "-".repeat(60),
+    "",
+  ];
+  msgs.forEach((m) => {
+    l.push(`【${m.role === "user" ? "ユーザー" : "AI"}】`);
+    l.push(m.content);
+    l.push("");
+  });
+  l.push(
+    "-".repeat(60),
+    "※ kakehashiが自動生成した過去の会話コンテキストです。上記を踏まえて回答してください。",
+  );
+  return l.join("\n");
 }
-function generateFileName(conv) { return `kakehashi_${conv.service||'unknown'}_${(conv.title||'context').replace(/[/\\?%*:|"<>]/g,'').replace(/\s+/g,'_').slice(0,40)}.txt`; }
+function generateFileName(conv) {
+  return `kakehashi_${conv.service || "unknown"}_${(conv.title || "context")
+    .replace(/[/\\?%*:|"<>]/g, "")
+    .replace(/\s+/g, "_")
+    .slice(0, 40)}.txt`;
+}
 function downloadFile(conv, filteredMessages) {
-  const fc = generateFileContent(conv, filteredMessages), fn = generateFileName(conv);
+  const fc = generateFileContent(conv, filteredMessages),
+    fn = generateFileName(conv);
   // BOM付きUTF-8でどの環境でも文字化けしない
-  const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
-  const blob = new Blob([bom, fc], { type: 'text/plain;charset=utf-8' });
+  const bom = new Uint8Array([0xef, 0xbb, 0xbf]);
+  const blob = new Blob([bom, fc], { type: "text/plain;charset=utf-8" });
   const reader = new FileReader();
-  reader.onload = () => chrome.downloads.download({ url: reader.result, filename: fn, saveAs: false }, () => showToast(fn + ' ダウンロード'));
+  reader.onload = () =>
+    chrome.downloads.download(
+      { url: reader.result, filename: fn, saveAs: false },
+      () => showToast(fn + " ダウンロード"),
+    );
   reader.readAsDataURL(blob);
 }
 
 // ── Utils ──
-function estimateFileSize(m){if(!m)return'0 B';const t=m.reduce((s,x)=>s+(x.content||'').length,0);return t<1024?t+' B':t<1048576?Math.round(t/1024)+' KB':(t/1048576).toFixed(1)+' MB';}
-function formatTime(ts){const d=new Date(ts),n=new Date(),dm=Math.floor((n-d)/60000);if(dm<1)return'今';if(dm<60)return dm+'分前';const dh=Math.floor(dm/60);if(dh<24)return dh+'時間前';const dd=Math.floor(dh/24);if(dd<7)return dd+'日前';return d.toLocaleDateString('ja-JP',{month:'short',day:'numeric'});}
-function highlightText(t,kws){let s=esc(t);kws.forEach(kw=>{s=s.replace(new RegExp(`(${kw.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`,'gi'),'<mark>$1</mark>');});return s;}
-function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
-function showToast(m){toastEl.textContent=m;toastEl.classList.add('show');setTimeout(()=>toastEl.classList.remove('show'),2000);}
+function estimateFileSize(m) {
+  if (!m) return "0 B";
+  const t = m.reduce((s, x) => s + (x.content || "").length, 0);
+  return t < 1024
+    ? t + " B"
+    : t < 1048576
+      ? Math.round(t / 1024) + " KB"
+      : (t / 1048576).toFixed(1) + " MB";
+}
+function formatTime(ts) {
+  const d = new Date(ts),
+    n = new Date(),
+    dm = Math.floor((n - d) / 60000);
+  if (dm < 1) return "今";
+  if (dm < 60) return dm + "分前";
+  const dh = Math.floor(dm / 60);
+  if (dh < 24) return dh + "時間前";
+  const dd = Math.floor(dh / 24);
+  if (dd < 7) return dd + "日前";
+  return d.toLocaleDateString("ja-JP", { month: "short", day: "numeric" });
+}
+function highlightText(t, kws) {
+  let s = esc(t);
+  kws.forEach((kw) => {
+    s = s.replace(
+      new RegExp(`(${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi"),
+      "<mark>$1</mark>",
+    );
+  });
+  return s;
+}
+function esc(s) {
+  if (!s) return "";
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+function showToast(m) {
+  toastEl.textContent = m;
+  toastEl.classList.add("show");
+  setTimeout(() => toastEl.classList.remove("show"), 2000);
+}
 
-contextBar.classList.add('visible');
+contextBar.classList.add("visible");
 
 // ── Theme toggle ──
-const themeBtn = $('#theme-toggle');
+const themeBtn = $("#theme-toggle");
 function applyTheme(light) {
-  document.documentElement.classList.toggle('light', light);
-  themeBtn.textContent = light ? '🌙' : '☀';
-  chrome.storage.local.set({ kakehashiTheme: light ? 'light' : 'dark' });
+  document.documentElement.classList.toggle("light", light);
+  themeBtn.textContent = light ? "🌙" : "☀";
+  chrome.storage.local.set({ kakehashiTheme: light ? "light" : "dark" });
 }
-chrome.storage.local.get('kakehashiTheme', r => { if (r.kakehashiTheme === 'light') applyTheme(true); });
-themeBtn.addEventListener('click', () => applyTheme(!document.documentElement.classList.contains('light')));
+chrome.storage.local.get("kakehashiTheme", (r) => {
+  if (r.kakehashiTheme === "light") applyTheme(true);
+});
+themeBtn.addEventListener("click", () =>
+  applyTheme(!document.documentElement.classList.contains("light")),
+);
 
 // ── 履歴の自動更新（10秒ごとに新しい会話がないかチェック） ──
 setInterval(() => {
@@ -563,84 +854,212 @@ setInterval(() => {
 }, 10000);
 
 // ── ヘッダーの日付エクスポートボタン（全会話一括） ──
-$('#btn-export-date').addEventListener('click', async () => {
+$("#btn-export-date").addEventListener("click", async () => {
   // 履歴がまだ読み込まれていなければ読み込む
   if (!historyLoaded) await loadHistory();
 
   if (!historyConvs.length) {
-    showToast('エクスポートする会話がありません');
+    showToast("エクスポートする会話がありません");
     return;
   }
 
-  // 仮想的な全会話convを作成してモーダルを開く
-  dateExportAllMode = true;
-  const today = todayStr();
-  dateFrom.value = today;
-  dateTo.value = today;
-  dateDesc.textContent = '全サービスの会話を日付でフィルタしてエクスポートします';
-  dateHint.textContent = 'CW=メッセージ投稿日 / Claude・ChatGPT・Gemini=読み込み日';
-  dateOverlay.classList.add('open');
+  openDateExportAllModal();
 });
 
 let dateExportAllMode = false;
 
 // ── 日付指定エクスポート ──
-const dateOverlay = $('#date-modal-overlay');
-const dateFrom = $('#date-from');
-const dateTo = $('#date-to');
-const dateDesc = $('#date-modal-desc');
-const dateHint = $('#date-modal-hint');
+const dateOverlay = $("#date-modal-overlay");
+const dateFrom = $("#date-from");
+const dateTo = $("#date-to");
+const dateDesc = $("#date-modal-desc");
+const dateHint = $("#date-modal-hint");
+const dateSelection = $("#date-selection");
+const dateFixedList = $("#date-fixed-list");
+const dateConvSearch = $("#date-conv-search");
+const dateConvSummary = $("#date-conv-summary");
+const dateConvList = $("#date-conv-list");
+const dateConvEmpty = $("#date-conv-empty");
+const dateSelectAll = $("#date-select-all");
+const dateClearAll = $("#date-clear-all");
 let dateExportConv = null;
+let dateAlwaysIncludedConvs = [];
+let dateSelectableConvs = [];
+let dateSelectedConversationIds = new Set();
 
 // 今日の日付をデフォルトにセット
-function todayStr() { return new Date().toISOString().slice(0, 10); }
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getConvId(conv) {
+  return String(conv?.conversationId || conv?.id || "");
+}
+
+function sortConvsByTitle(convs) {
+  return [...convs].sort((a, b) => {
+    const serviceCmp = String(a.service || "").localeCompare(
+      String(b.service || ""),
+      "ja",
+    );
+    if (serviceCmp !== 0) return serviceCmp;
+    return String(a.title || "").localeCompare(String(b.title || ""), "ja");
+  });
+}
+
+function refreshDateConvSummary() {
+  dateConvSummary.textContent = `固定 ${dateAlwaysIncludedConvs.length} 件 / 追加選択 ${dateSelectedConversationIds.size} 件`;
+}
+
+function renderDateConversationPicker() {
+  const keyword = dateConvSearch.value.trim().toLowerCase();
+
+  dateFixedList.innerHTML = dateAlwaysIncludedConvs.length
+    ? dateAlwaysIncludedConvs
+        .map(
+          (conv) =>
+            `<span class="date-fixed-chip">5日固定: ${esc(conv.title || "Untitled")}</span>`,
+        )
+        .join("")
+    : '<span class="date-fixed-chip">固定チャットなし</span>';
+
+  const visibleConvs = dateSelectableConvs.filter((conv) => {
+    if (!keyword) return true;
+    return `${conv.title || ""} ${conv.service || ""}`
+      .toLowerCase()
+      .includes(keyword);
+  });
+
+  refreshDateConvSummary();
+  dateConvEmpty.classList.toggle("open", visibleConvs.length === 0);
+  dateConvList.style.display = visibleConvs.length ? "block" : "none";
+  dateConvList.innerHTML = visibleConvs
+    .map((conv) => {
+      const cid = getConvId(conv);
+      const checked = dateSelectedConversationIds.has(cid) ? "checked" : "";
+      const msgCount = (conv.allMessages || []).length;
+      return `<label class="date-conv-item">
+      <input class="date-conv-checkbox" type="checkbox" data-cid="${esc(cid)}" ${checked}>
+      <span class="date-conv-text">
+        <span class="date-conv-title">${esc(conv.title || "Untitled")}</span>
+        <span class="date-conv-meta">${esc(conv.service || "")} / ${msgCount} msgs</span>
+      </span>
+    </label>`;
+    })
+    .join("");
+
+  dateConvList.querySelectorAll(".date-conv-checkbox").forEach((input) => {
+    input.addEventListener("change", () => {
+      const { cid } = input.dataset;
+      if (!cid) return;
+      if (input.checked) dateSelectedConversationIds.add(cid);
+      else dateSelectedConversationIds.delete(cid);
+      refreshDateConvSummary();
+    });
+  });
+}
+
+function closeDateExportModal() {
+  dateOverlay.classList.remove("open");
+  dateExportConv = null;
+  dateExportAllMode = false;
+  dateAlwaysIncludedConvs = [];
+  dateSelectableConvs = [];
+  dateSelectedConversationIds = new Set();
+  dateConvSearch.value = "";
+  dateSelection.classList.remove("open");
+  dateFixedList.innerHTML = "";
+  dateConvSummary.textContent = "";
+  dateConvList.innerHTML = "";
+  dateConvList.style.display = "block";
+  dateConvEmpty.classList.remove("open");
+}
+
+function openDateExportAllModal() {
+  dateExportAllMode = true;
+  dateExportConv = null;
+  const today = todayStr();
+  dateFrom.value = today;
+  dateTo.value = today;
+  dateDesc.textContent =
+    "固定チャットは終了日から過去5日分を出力し、追加分は選択したチャットだけを出力します";
+  dateHint.textContent = "固定対象=終了日基準の5日分 / 追加選択=開始日〜終了日";
+  dateAlwaysIncludedConvs = sortConvsByTitle(
+    historyConvs.filter(isAlways5DaysConv),
+  );
+  dateSelectableConvs = sortConvsByTitle(
+    historyConvs.filter((conv) => !isAlways5DaysConv(conv)),
+  );
+  dateSelectedConversationIds = new Set();
+  dateConvSearch.value = "";
+  dateSelection.classList.add("open");
+  renderDateConversationPicker();
+  dateOverlay.classList.add("open");
+}
 
 function openDateExportModal(conv) {
   dateExportConv = conv;
+  dateExportAllMode = false;
   const today = todayStr();
   dateFrom.value = today;
   dateTo.value = today;
 
-  if (conv.service === 'chatwork') {
+  if (conv.service === "chatwork") {
     dateDesc.textContent = `CW: メッセージの投稿日が指定範囲のものだけをエクスポートします`;
-    dateHint.textContent = '※ Chatworkはメッセージの日付スタンプで判定します';
+    dateHint.textContent = "※ Chatworkはメッセージの日付スタンプで判定します";
   } else {
     dateDesc.textContent = `${conv.service}: 指定日に読み込んだログのみをエクスポートします`;
-    dateHint.textContent = '※ DBに記録された日時（読み込み日）で判定します';
+    dateHint.textContent = "※ DBに記録された日時（読み込み日）で判定します";
   }
 
-  dateOverlay.classList.add('open');
+  dateSelection.classList.remove("open");
+  dateOverlay.classList.add("open");
 }
 
-$('#date-cancel').addEventListener('click', () => {
-  dateOverlay.classList.remove('open');
-  dateExportConv = null;
-  dateExportAllMode = false;
+dateConvSearch.addEventListener("input", renderDateConversationPicker);
+dateSelectAll.addEventListener("click", () => {
+  dateSelectableConvs.forEach((conv) =>
+    dateSelectedConversationIds.add(getConvId(conv)),
+  );
+  renderDateConversationPicker();
+});
+dateClearAll.addEventListener("click", () => {
+  dateSelectedConversationIds.clear();
+  renderDateConversationPicker();
 });
 
-dateOverlay.addEventListener('click', e => {
+$("#date-cancel").addEventListener("click", () => {
+  closeDateExportModal();
+});
+
+dateOverlay.addEventListener("click", (e) => {
   if (e.target === dateOverlay) {
-    dateOverlay.classList.remove('open');
-    dateExportConv = null;
-    dateExportAllMode = false;
+    closeDateExportModal();
   }
 });
 
-$('#date-ok').addEventListener('click', () => {
+$("#date-ok").addEventListener("click", () => {
   const from = dateFrom.value;
   const to = dateTo.value;
-  if (!from || !to) { showToast('日付を選択してください'); return; }
-  if (from > to) { showToast('開始日は終了日以前にしてください'); return; }
+  if (!from || !to) {
+    showToast("日付を選択してください");
+    return;
+  }
+  if (from > to) {
+    showToast("開始日は終了日以前にしてください");
+    return;
+  }
 
   function filterMessages(msgs, service, conv) {
     // 対象ルームは指定日(to)から過去5日分を出力
     let effectiveFrom = from;
     if (conv && isAlways5DaysConv(conv)) {
-      const d = new Date(to); d.setDate(d.getDate() - 4);
+      const d = new Date(to);
+      d.setDate(d.getDate() - 4);
       effectiveFrom = d.toISOString().slice(0, 10);
     }
-    return msgs.filter(m => {
-      if (service === 'chatwork') {
+    return msgs.filter((m) => {
+      if (service === "chatwork") {
         if (!m.messageDate) return false;
         return m.messageDate >= effectiveFrom && m.messageDate <= to;
       } else {
@@ -652,41 +1071,66 @@ $('#date-ok').addEventListener('click', () => {
   }
 
   if (dateExportAllMode) {
-    // 全会話一括エクスポート
-    let totalMsgs = 0;
-    const lines = ['='.repeat(60), `kakehashi - 日付指定エクスポート (${from} 〜 ${to})`, '='.repeat(60), ''];
+    const targetConvs = [
+      ...dateAlwaysIncludedConvs,
+      ...dateSelectableConvs.filter((conv) =>
+        dateSelectedConversationIds.has(getConvId(conv)),
+      ),
+    ];
 
-    for (const conv of historyConvs) {
-      const filtered = filterMessages(conv.allMessages || [], conv.service, conv);
-      if (filtered.length === 0) continue;
-      totalMsgs += filtered.length;
-      lines.push('-'.repeat(60));
-      lines.push(`タイトル: ${conv.title || 'Untitled'}`);
-      lines.push(`サービス: ${conv.service || ''}`);
-      lines.push(`URL: ${conv.url || ''}`);
-      lines.push('-'.repeat(60));
-      filtered.forEach(m => {
-        lines.push(`【${m.role === 'user' ? 'ユーザー' : 'AI'}】`);
-        lines.push(m.content);
-        lines.push('');
-      });
-      lines.push('');
-    }
-
-    if (totalMsgs === 0) {
-      showToast('該当するメッセージがありません');
+    if (!targetConvs.length) {
+      showToast("出力するチャットを選択してください");
       return;
     }
 
-    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
-    const blob = new Blob([bom, lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    let totalMsgs = 0;
+    const lines = [
+      "=".repeat(60),
+      `kakehashi - 日付指定エクスポート (${from} 〜 ${to})`,
+      "=".repeat(60),
+      "",
+    ];
+
+    for (const conv of targetConvs) {
+      const filtered = filterMessages(
+        conv.allMessages || [],
+        conv.service,
+        conv,
+      );
+      if (filtered.length === 0) continue;
+      totalMsgs += filtered.length;
+      lines.push("-".repeat(60));
+      lines.push(`タイトル: ${conv.title || "Untitled"}`);
+      lines.push(`サービス: ${conv.service || ""}`);
+      lines.push(`URL: ${conv.url || ""}`);
+      lines.push("-".repeat(60));
+      filtered.forEach((m) => {
+        lines.push(`【${m.role === "user" ? "ユーザー" : "AI"}】`);
+        lines.push(m.content);
+        lines.push("");
+      });
+      lines.push("");
+    }
+
+    if (totalMsgs === 0) {
+      showToast("該当するメッセージがありません");
+      return;
+    }
+
+    const bom = new Uint8Array([0xef, 0xbb, 0xbf]);
+    const blob = new Blob([bom, lines.join("\n")], {
+      type: "text/plain;charset=utf-8",
+    });
     const fn = `kakehashi_export_${from}_${to}.txt`;
     const reader = new FileReader();
-    reader.onload = () => chrome.downloads.download({ url: reader.result, filename: fn, saveAs: false }, () => showToast(`${totalMsgs}件をエクスポート`));
+    reader.onload = () =>
+      chrome.downloads.download(
+        { url: reader.result, filename: fn, saveAs: false },
+        () => showToast(`${totalMsgs}件をエクスポート`),
+      );
     reader.readAsDataURL(blob);
 
-    dateOverlay.classList.remove('open');
-    dateExportAllMode = false;
+    closeDateExportModal();
     return;
   }
 
@@ -696,14 +1140,13 @@ $('#date-ok').addEventListener('click', () => {
   const filtered = filterMessages(conv.allMessages || [], conv.service, conv);
 
   if (filtered.length === 0) {
-    showToast('該当するメッセージがありません');
+    showToast("該当するメッセージがありません");
     return;
   }
 
   downloadFile(conv, filtered);
   showToast(`${filtered.length}件のメッセージをエクスポート`);
-  dateOverlay.classList.remove('open');
-  dateExportConv = null;
+  closeDateExportModal();
 });
 
-console.log('[kakehashi] Side panel v2 initialized');
+console.log("[kakehashi] Side panel v2 initialized");
