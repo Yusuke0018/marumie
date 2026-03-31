@@ -506,9 +506,22 @@ async function injectToChat(conv) {
   }
 }
 
+// ── マイチャット判定（過去5日制限の対象） ──
+const MYCHAT_ROOM_ID = '207619677';
+function isMyChatConv(conv) {
+  return conv && conv.url && conv.url.includes('rid' + MYCHAT_ROOM_ID);
+}
+function filterLast5Days(msgs) {
+  const d = new Date(); d.setDate(d.getDate() - 4); // 今日含め5日分
+  const from5 = d.toISOString().slice(0, 10);
+  return msgs.filter(m => m.messageDate && m.messageDate >= from5);
+}
+
 // ── File gen & download ──
 function generateFileContent(conv, filteredMessages) {
-  const msgs = filteredMessages || conv.allMessages || [];
+  let msgs = filteredMessages || conv.allMessages || [];
+  // マイチャットは常に過去5日分に制限
+  if (!filteredMessages && isMyChatConv(conv)) msgs = filterLast5Days(msgs);
   const l = ['='.repeat(60),'kakehashi - 関連会話コンテキスト','='.repeat(60),'','タイトル: '+(conv.title||'Untitled'),'サービス: '+(conv.service||''),'URL: '+(conv.url||''),'','-'.repeat(60),''];
   msgs.forEach(m=>{l.push(`【${m.role==='user'?'ユーザー':'AI'}】`);l.push(m.content);l.push('');});
   l.push('-'.repeat(60),'※ kakehashiが自動生成した過去の会話コンテキストです。上記を踏まえて回答してください。');
@@ -619,11 +632,17 @@ $('#date-ok').addEventListener('click', () => {
   if (!from || !to) { showToast('日付を選択してください'); return; }
   if (from > to) { showToast('開始日は終了日以前にしてください'); return; }
 
-  function filterMessages(msgs, service) {
+  function filterMessages(msgs, service, conv) {
+    // マイチャットは指定日(to)から過去5日分に制限
+    let effectiveFrom = from;
+    if (conv && isMyChatConv(conv)) {
+      const d = new Date(to); d.setDate(d.getDate() - 4);
+      effectiveFrom = d.toISOString().slice(0, 10);
+    }
     return msgs.filter(m => {
       if (service === 'chatwork') {
         if (!m.messageDate) return false;
-        return m.messageDate >= from && m.messageDate <= to;
+        return m.messageDate >= effectiveFrom && m.messageDate <= to;
       } else {
         if (!m.timestamp) return false;
         const d = new Date(m.timestamp).toISOString().slice(0, 10);
@@ -638,7 +657,7 @@ $('#date-ok').addEventListener('click', () => {
     const lines = ['='.repeat(60), `kakehashi - 日付指定エクスポート (${from} 〜 ${to})`, '='.repeat(60), ''];
 
     for (const conv of historyConvs) {
-      const filtered = filterMessages(conv.allMessages || [], conv.service);
+      const filtered = filterMessages(conv.allMessages || [], conv.service, conv);
       if (filtered.length === 0) continue;
       totalMsgs += filtered.length;
       lines.push('-'.repeat(60));
@@ -674,7 +693,7 @@ $('#date-ok').addEventListener('click', () => {
   // 単一会話エクスポート
   if (!dateExportConv) return;
   const conv = dateExportConv;
-  const filtered = filterMessages(conv.allMessages || [], conv.service);
+  const filtered = filterMessages(conv.allMessages || [], conv.service, conv);
 
   if (filtered.length === 0) {
     showToast('該当するメッセージがありません');
