@@ -506,10 +506,10 @@ async function injectToChat(conv) {
   }
 }
 
-// ── マイチャット判定（過去5日制限の対象） ──
-const MYCHAT_ROOM_ID = '207619677';
-function isMyChatConv(conv) {
-  return conv && conv.url && conv.url.includes('rid' + MYCHAT_ROOM_ID);
+// ── 過去5日分を常に出力する対象ルーム ──
+const ALWAYS_5DAYS_ROOM_IDS = ['207619677', '430280030'];
+function isAlways5DaysConv(conv) {
+  return conv && conv.url && ALWAYS_5DAYS_ROOM_IDS.some(id => conv.url.includes('rid' + id));
 }
 function filterLast5Days(msgs) {
   const d = new Date(); d.setDate(d.getDate() - 4); // 今日含め5日分
@@ -520,8 +520,8 @@ function filterLast5Days(msgs) {
 // ── File gen & download ──
 function generateFileContent(conv, filteredMessages) {
   let msgs = filteredMessages || conv.allMessages || [];
-  // マイチャットは常に過去5日分に制限
-  if (!filteredMessages && isMyChatConv(conv)) msgs = filterLast5Days(msgs);
+  // 対象ルームは常に過去5日分を出力
+  if (!filteredMessages && isAlways5DaysConv(conv)) msgs = filterLast5Days(msgs);
   const l = ['='.repeat(60),'kakehashi - 関連会話コンテキスト','='.repeat(60),'','タイトル: '+(conv.title||'Untitled'),'サービス: '+(conv.service||''),'URL: '+(conv.url||''),'','-'.repeat(60),''];
   msgs.forEach(m=>{l.push(`【${m.role==='user'?'ユーザー':'AI'}】`);l.push(m.content);l.push('');});
   l.push('-'.repeat(60),'※ kakehashiが自動生成した過去の会話コンテキストです。上記を踏まえて回答してください。');
@@ -633,9 +633,9 @@ $('#date-ok').addEventListener('click', () => {
   if (from > to) { showToast('開始日は終了日以前にしてください'); return; }
 
   function filterMessages(msgs, service, conv) {
-    // マイチャットは指定日(to)から過去5日分に制限
+    // 対象ルームは指定日(to)から過去5日分を出力
     let effectiveFrom = from;
-    if (conv && isMyChatConv(conv)) {
+    if (conv && isAlways5DaysConv(conv)) {
       const d = new Date(to); d.setDate(d.getDate() - 4);
       effectiveFrom = d.toISOString().slice(0, 10);
     }
