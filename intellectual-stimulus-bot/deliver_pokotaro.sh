@@ -7,6 +7,9 @@ LOG_DIR="${SCRIPT_DIR}/logs"
 DELIVERY_LOG="${LOG_DIR}/delivery.log"
 PERSONA_LOG="${LOG_DIR}/pokotaro_chatwork.md"
 CLAUDE_MD="${SCRIPT_DIR}/CLAUDE_POKOTARO.md"
+CHATWORK_RANDOM_PEEK_COUNT="${CHATWORK_RANDOM_PEEK_COUNT:-3}"
+CHATWORK_RANDOM_MESSAGE_COUNT="${CHATWORK_RANDOM_MESSAGE_COUNT:-5}"
+POKOTARO_SKIP_POST="${POKOTARO_SKIP_POST:-0}"
 
 mkdir -p "$LOG_DIR"
 
@@ -28,6 +31,33 @@ run_claude() {
 
   perl -e 'alarm shift; exec @ARGV' 90 \
     claude --print --system-prompt "$mode" "$prompt" 2>/dev/null
+}
+
+run_codex_gmail() {
+  local prompt="$1"
+  local outfile
+  local errfile
+
+  outfile="$(mktemp)"
+  errfile="$(mktemp)"
+
+  perl -e 'alarm shift; exec @ARGV' 120 \
+    codex exec \
+      -C /Users/osakasoshin1 \
+      --skip-git-repo-check \
+      -c model_reasoning_effort='"low"' \
+      -o "$outfile" \
+      "$prompt" >/dev/null 2>"$errfile"
+
+  local status=$?
+  if [[ $status -ne 0 ]]; then
+    log "codex Gmail取得失敗: $(sed -n '1,20p' "$errfile" | tr '\n' ' ' | cut -c1-200)"
+    rm -f "$outfile" "$errfile"
+    return $status
+  fi
+
+  cat "$outfile"
+  rm -f "$outfile" "$errfile"
 }
 
 build_fallback_message() {
@@ -82,6 +112,7 @@ fetch_messages() {
   local room_id="$1"
   local label="$2"
   local token="${3:-$CHATWORK_TOKEN}"
+  local limit="${4:-20}"
 
   if [[ -z "$room_id" || "$room_id" == "ここに"* ]]; then
     echo ""
@@ -103,7 +134,8 @@ try:
     msgs = json.load(sys.stdin)
     if not isinstance(msgs, list):
         sys.exit(0)
-    for m in msgs[-20:]:
+    limit = int(sys.argv[1])
+    for m in msgs[-limit:]:
         name = m.get('account', {}).get('name', '不明')
         body = m.get('body', '')
         body = re.sub(r'\\[/?[A-Za-z]+.*?\\]', ' ', body)
@@ -112,7 +144,83 @@ try:
         print()
 except Exception:
     pass
-" 2>/dev/null || echo ""
+" "$limit" 2>/dev/null || echo ""
+}
+
+fetch_random_room_peeks() {
+  local token="${1:-$READ_TOKEN}"
+  local exclude_ids=("$SALON_ROOM_ID" "$DIARY_ROOM_ID" "$MYCHAT_ROOM_ID")
+
+  if [[ -z "$token" ]]; then
+    echo ""
+    return
+  fi
+
+  local rooms_response
+  rooms_response=$(curl -s -f \
+    -H "X-ChatWorkToken: ${token}" \
+    "https://api.chatwork.com/v2/rooms" 2>/dev/null) || {
+    log "Chatworkルーム一覧の取得に失敗"
+    echo ""
+    return
+  }
+
+  local picked
+  picked=$(printf '%s' "$rooms_response" | EXCLUDE_IDS="$(IFS=,; echo "${exclude_ids[*]}")" python3 -c '
+import json, os, random, sys
+
+exclude = {x for x in os.environ.get("EXCLUDE_IDS", "").split(",") if x}
+try:
+    rooms = json.load(sys.stdin)
+except Exception:
+    print("")
+    raise SystemExit
+
+candidates = []
+for room in rooms:
+    room_id = str(room.get("room_id", ""))
+    name = room.get("name", "").strip()
+    room_type = room.get("type", "")
+    if not room_id or room_id in exclude:
+        continue
+    if room_type not in {"group", "direct"}:
+        continue
+    if not name:
+        continue
+    candidates.append((room_id, name, room_type))
+
+if not candidates:
+    print("")
+    raise SystemExit
+
+count = min(len(candidates), int(os.environ.get("CHATWORK_RANDOM_PEEK_COUNT", "3")))
+picked = random.sample(candidates, count)
+for room_id, name, room_type in picked:
+    print(f"{room_id}\t{name}\t{room_type}")
+')
+
+  if [[ -z "$picked" ]]; then
+    echo ""
+    return
+  fi
+
+  local result=""
+  while IFS=$'\t' read -r room_id room_name room_type; do
+    [[ -z "$room_id" ]] && continue
+    local room_msgs
+    room_msgs=$(fetch_messages "$room_id" "${room_name}" "$token" "$CHATWORK_RANDOM_MESSAGE_COUNT")
+    [[ -z "$room_msgs" ]] && continue
+    result+="【${room_name} / ${room_type}】"$'\n'"${room_msgs}"$'\n'
+  done <<< "$picked"
+
+  echo "$result"
+}
+
+fetch_gmail_glimpses() {
+  local prompt
+  prompt=$'Gmail コネクタを使って、直近3日で気になるメールを最大3件だけ確認してください。\n変更操作は一切せず、読むだけにしてください。\n広告、SNS通知、明らかな自動通知は原則除外してください。ただし、運用上の失敗通知や認証通知のように気配として意味があるものは残して構いません。\n出力はプレーンテキストのみで、各行を「件名 | 差出人 | 1行の気配」の形式にしてください。前置きや補足や見出しは不要です。'
+
+  run_codex_gmail "$prompt" || echo ""
 }
 
 log "配信開始"
@@ -124,6 +232,13 @@ MYCHAT_MSGS=""
 if [[ -n "${READ_TOKEN:-}" ]]; then
   MYCHAT_MSGS=$(fetch_messages "$MYCHAT_ROOM_ID" "マイチャット" "$READ_TOKEN")
 fi
+
+RANDOM_ROOM_MSGS=""
+if [[ -n "${READ_TOKEN:-}" ]]; then
+  RANDOM_ROOM_MSGS=$(CHATWORK_RANDOM_PEEK_COUNT="$CHATWORK_RANDOM_PEEK_COUNT" fetch_random_room_peeks "$READ_TOKEN")
+fi
+
+GMAIL_GLIMPSES=$(fetch_gmail_glimpses)
 
 RECENT_LOG=""
 if [[ -f "$PERSONA_LOG" ]]; then
@@ -143,6 +258,12 @@ ${DIARY_MSGS:-（取得できず）}
 
 【マイチャットの断片】
 ${MYCHAT_MSGS:-（取得できず）}
+
+【ランダムに覗いた他のChatworkルームの断片】
+${RANDOM_ROOM_MSGS:-（取得できず）}
+
+【Gmailの断片】
+${GMAIL_GLIMPSES:-（取得できず）}
 
 【ぽこ太郎の過去ログ（重複回避用）】
 ${RECENT_LOG:-（初回配信）}
@@ -168,7 +289,9 @@ fi
 
 log "メッセージ生成成功（${#MESSAGE}文字, tone=${TONE}）"
 
-if [[ -z "$SALON_ROOM_ID" || "$SALON_ROOM_ID" == "ここに"* ]]; then
+if [[ "$POKOTARO_SKIP_POST" == "1" ]]; then
+  log "POKOTARO_SKIP_POST=1 のため投稿をスキップ"
+elif [[ -z "$SALON_ROOM_ID" || "$SALON_ROOM_ID" == "ここに"* ]]; then
   log "SALON_ROOM_ID が未設定のため投稿をスキップ"
 else
   HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
