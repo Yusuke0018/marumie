@@ -130,6 +130,19 @@ if [[ -z "$MESSAGE" || "$MESSAGE" =~ ^[[:space:]]*$ ]]; then
   exit 0
 fi
 
+# フォーマットバリデーション: [info]タグ必須
+if [[ "$MESSAGE" != *"[info]"* ]]; then
+  log "メッセージに[info]タグがありません。リトライします"
+  RETRY_PROMPT="${PROMPT}
+
+【重要】出力は必ず [info] タグで始めてください。メタ解説や説明文は不要です。Chatwork投稿用のメッセージ本文のみを出力してください。"
+  MESSAGE=$(claude --print --system-prompt "$(cat "$CLAUDE_MD")" "$RETRY_PROMPT" 2>/dev/null) || MESSAGE=""
+  if [[ -z "$MESSAGE" || "$MESSAGE" != *"[info]"* ]]; then
+    log "リトライ後も不正なフォーマット。投稿をスキップします"
+    exit 0
+  fi
+fi
+
 log "メッセージ生成成功（${#MESSAGE}文字）"
 
 # ============================================================
