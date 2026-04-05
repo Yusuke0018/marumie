@@ -498,14 +498,30 @@ def ai_evaluate(d: dict, t: dict, target: date, history: list[dict] | None = Non
         items = [f"「{n}」{v['prev']}→{v['recent']}件({v['pct']:+.0f}%)" for n, v in big_down[:2]]
         topics.append((60, "dept_trend", f"予約減少が目立つ科: {'、'.join(items)}"))
 
-    # --- トピック: 当日のTOP科目と偏り ---
+    # --- トピック: 科目別の異常検知（普段と違う動きのみ） ---
     dept_summary = d.get("dept_summary", [])
-    if dept_summary and total_res > 0:
-        top1 = dept_summary[0]
-        top1_ratio = top1["res"] / total_res * 100
-        if top1_ratio > 40:
-            topics.append((45, "dept_concentration",
-                f"「{top1['dept']}」が全体の{top1_ratio:.0f}%を占め偏りが大きい状態"))
+    dept_wow = t.get("dept_wow", {})
+    # 当日の科目件数と月平均を比較して異常値を検出
+    dept_rates_data = t.get("dept_cancel_rates", {})
+    for s in dept_summary:
+        dept = s["dept"]
+        wow_data = dept_wow.get(dept)
+        if wow_data and wow_data.get("pct") is not None:
+            # 週次で大きく変動している科目（増減50%超かつ一定規模以上）
+            # ※ big_up/big_downで既にカバーしているのでここではスキップ
+            pass
+        # 当日の件数が月平均の日割りと大きく乖離している科目
+        rate_data = dept_rates_data.get(dept)
+        if rate_data and t.get("total_days", 0) > 0:
+            daily_avg = rate_data["res"] / t["total_days"]
+            if daily_avg >= 2 and s["res"] > 0:
+                ratio = s["res"] / daily_avg
+                if ratio > 2.5 and s["res"] >= 5:
+                    topics.append((45, f"dept_spike_{dept}",
+                        f"「{dept}」が{s['res']}件と日平均{daily_avg:.0f}件の{ratio:.1f}倍 — 一時的な増加か注視"))
+                elif ratio < 0.3 and daily_avg >= 3:
+                    topics.append((35, f"dept_drop_{dept}",
+                        f"「{dept}」が{s['res']}件と日平均{daily_avg:.0f}件を大きく下回る"))
 
     # --- トピック: キャンセル率が高い科目（月間） ---
     dept_rates = t.get("dept_cancel_rates", {})
