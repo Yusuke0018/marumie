@@ -101,12 +101,17 @@ generate_pair_times() {
   echo "$first $second"
 }
 
-MORNING_TIMES=( $(generate_pair_times "$MORNING_START" "$MORNING_END") )
-AFTERNOON_TIMES=( $(generate_pair_times "$AFTERNOON_START" "$AFTERNOON_END") )
-TIMES=("${MORNING_TIMES[0]}" "${MORNING_TIMES[1]}" "${AFTERNOON_TIMES[0]}" "${AFTERNOON_TIMES[1]}")
-
-# ペルソナの割り当て: ハル→ガク→ハル→ガク
-PERSONAS=("haru" "gaku" "haru" "gaku")
+# 日曜は午前1回ずつ（ハル+ガク=計2回）、それ以外は午前2回+午後2回=計4回
+if [[ "$DOW" -eq 7 ]]; then
+  MORNING_TIMES=( $(generate_pair_times "$MORNING_START" "$MORNING_END") )
+  TIMES=("${MORNING_TIMES[0]}" "${MORNING_TIMES[1]}")
+  PERSONAS=("haru" "gaku")
+else
+  MORNING_TIMES=( $(generate_pair_times "$MORNING_START" "$MORNING_END") )
+  AFTERNOON_TIMES=( $(generate_pair_times "$AFTERNOON_START" "$AFTERNOON_END") )
+  TIMES=("${MORNING_TIMES[0]}" "${MORNING_TIMES[1]}" "${AFTERNOON_TIMES[0]}" "${AFTERNOON_TIMES[1]}")
+  PERSONAS=("haru" "gaku" "haru" "gaku")
+fi
 
 # ============================================================
 # ログ出力
@@ -119,13 +124,20 @@ min_to_time() {
   echo "=== ${TODAY} スケジュール ==="
   echo "曜日: $(date +%A) | 祝日: $(is_holiday && echo 'はい' || echo 'いいえ')"
   echo "配信時間帯: $(min_to_time $START_MIN) 〜 $(min_to_time $END_MIN)"
-  echo "午前枠: $(min_to_time $MORNING_START) 〜 $(min_to_time $MORNING_END)"
-  echo "午後枠: $(min_to_time $AFTERNOON_START) 〜 $(min_to_time $AFTERNOON_END)"
-  echo ""
-  echo "  haru (午前): $(min_to_time ${TIMES[0]})"
-  echo "  gaku (午前): $(min_to_time ${TIMES[1]})"
-  echo "  haru (午後): $(min_to_time ${TIMES[2]})"
-  echo "  gaku (午後): $(min_to_time ${TIMES[3]})"
+  if [[ "$DOW" -eq 7 ]]; then
+    echo "日曜モード: 午前のみ（ハル1回+ガク1回）"
+    echo ""
+    echo "  haru (午前): $(min_to_time ${TIMES[0]})"
+    echo "  gaku (午前): $(min_to_time ${TIMES[1]})"
+  else
+    echo "午前枠: $(min_to_time $MORNING_START) 〜 $(min_to_time $MORNING_END)"
+    echo "午後枠: $(min_to_time $AFTERNOON_START) 〜 $(min_to_time $AFTERNOON_END)"
+    echo ""
+    echo "  haru (午前): $(min_to_time ${TIMES[0]})"
+    echo "  gaku (午前): $(min_to_time ${TIMES[1]})"
+    echo "  haru (午後): $(min_to_time ${TIMES[2]})"
+    echo "  gaku (午後): $(min_to_time ${TIMES[3]})"
+  fi
   echo ""
 } >> "$SCHEDULE_LOG"
 
@@ -134,7 +146,8 @@ min_to_time() {
 # ============================================================
 NOW_MIN=$(( 10#$(date +%H) * 60 + 10#$(date +%M) ))
 
-for i in 0 1 2 3; do
+SLOT_COUNT=${#TIMES[@]}
+for (( i=0; i<SLOT_COUNT; i++ )); do
   TARGET_MIN=${TIMES[$i]}
   PERSONA=${PERSONAS[$i]}
   WAIT_SEC=$(( (TARGET_MIN - NOW_MIN) * 60 ))
