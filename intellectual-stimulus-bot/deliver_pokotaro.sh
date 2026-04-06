@@ -30,7 +30,7 @@ run_claude() {
   local prompt="$2"
 
   perl -e 'alarm shift; exec @ARGV' 90 \
-    claude --print --system-prompt "$mode" "$prompt" 2>/dev/null
+    claude --print --system-prompt "$mode" --strict-mcp-config "$prompt" 2>/dev/null
 }
 
 run_codex_gmail() {
@@ -279,7 +279,7 @@ MESSAGE=$(run_claude "$(cat "$CLAUDE_MD")" "$PROMPT") || {
 
 ---
 ${PROMPT}"
-  MESSAGE=$(perl -e 'alarm shift; exec @ARGV' 90 claude --print 2>/dev/null <<< "$FULL_PROMPT") || MESSAGE=""
+  MESSAGE=$(perl -e 'alarm shift; exec @ARGV' 90 claude --print --strict-mcp-config 2>/dev/null <<< "$FULL_PROMPT") || MESSAGE=""
 }
 
 if [[ -z "$MESSAGE" || "$MESSAGE" =~ ^[[:space:]]*$ ]]; then

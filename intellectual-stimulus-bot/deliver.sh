@@ -115,13 +115,13 @@ ${RECENT_LOG:-（初回配信）}
 Chatwork配信用のメッセージを1件生成してください。"
 
 # --system-prompt を試し、失敗したらフォールバック
-MESSAGE=$(claude --print --system-prompt "$(cat "$CLAUDE_MD")" "$PROMPT" 2>/dev/null) || {
+MESSAGE=$(claude --print --system-prompt "$(cat "$CLAUDE_MD")" --strict-mcp-config "$PROMPT" 2>/dev/null) || {
   log "--system-prompt が使えないためフォールバック方式を使用"
   FULL_PROMPT="$(cat "$CLAUDE_MD")
 
 ---
 ${PROMPT}"
-  MESSAGE=$(echo "$FULL_PROMPT" | claude --print 2>/dev/null) || MESSAGE=""
+  MESSAGE=$(echo "$FULL_PROMPT" | claude --print --strict-mcp-config 2>/dev/null) || MESSAGE=""
 }
 
 # 空チェック
@@ -136,7 +136,7 @@ if [[ "$MESSAGE" != *"[info]"* ]]; then
   RETRY_PROMPT="${PROMPT}
 
 【重要】出力は必ず [info] タグで始めてください。メタ解説や説明文は不要です。Chatwork投稿用のメッセージ本文のみを出力してください。"
-  MESSAGE=$(claude --print --system-prompt "$(cat "$CLAUDE_MD")" "$RETRY_PROMPT" 2>/dev/null) || MESSAGE=""
+  MESSAGE=$(claude --print --system-prompt "$(cat "$CLAUDE_MD")" --strict-mcp-config "$RETRY_PROMPT" 2>/dev/null) || MESSAGE=""
   if [[ -z "$MESSAGE" || "$MESSAGE" != *"[info]"* ]]; then
     log "リトライ後も不正なフォーマット。投稿をスキップします"
     exit 0
