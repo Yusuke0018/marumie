@@ -29,8 +29,10 @@ CORPORATE_CHECKUP = "企業健診（健診）"
 PHONE_RESERVATION_NAME = "電話 予約 (デンワ ヨヤク)"
 # AI評価から除外する科目（データ自体は残すが、AI分析の対象外）
 AI_EXCLUDE_DEPTS = {"人間ドックA"}
-# AI評価で毎回トレンドを表示する科目
-AI_ALWAYS_TREND_DEPTS = {"発熱・風邪症状外来"}
+# AI評価で毎回トレンドを表示する科目（現在なし）
+AI_ALWAYS_TREND_DEPTS: set[str] = set()
+# 週1回（日曜）だけトレンドを表示する科目
+AI_WEEKLY_TREND_DEPTS = {"発熱・風邪症状外来", "胃カメラ", "大腸カメラ（胃カメラ併用もこちら）", "人間ドックB"}
 
 
 # ============================================================
@@ -371,6 +373,32 @@ def analyze_trend(
                 "month_cancel": len(dept_cancel) if not dept_cancel.empty else 0,
             }
 
+    # 週1トレンド表示科目（日曜のみ表示だが、データは常に収集）
+    for dept_name in AI_WEEKLY_TREND_DEPTS:
+        dept_res = p_res[p_res["診療科"] == dept_name]
+        dept_cancel = p_cancel[p_cancel["診療科"] == dept_name] if not p_cancel.empty else pd.DataFrame()
+        if not dept_res.empty:
+            weekly_data = []
+            for w in range(3, -1, -1):
+                w_end = target - timedelta(days=w * 7)
+                w_start = w_end - timedelta(days=6)
+                w_res = dept_res[(dept_res["受信日"] >= w_start) & (dept_res["受信日"] <= w_end)]
+                w_cancel_cnt = 0
+                if not dept_cancel.empty:
+                    w_cancel = dept_cancel[(dept_cancel["受信日"] >= w_start) & (dept_cancel["受信日"] <= w_end)]
+                    w_cancel_cnt = len(w_cancel)
+                weekly_data.append({
+                    "week_start": str(w_start),
+                    "week_end": str(w_end),
+                    "res": len(w_res),
+                    "cancel": w_cancel_cnt,
+                })
+            safe_key = dept_name.replace("・", "_").replace("（", "").replace("）", "").replace("／", "")
+            t[f"weekly_trend_{safe_key}"] = {
+                "dept": dept_name,
+                "weekly": weekly_data,
+            }
+
     # 時間帯別の月間傾向（ピーク時間帯）
     has_time = p_res[
         (p_res["受信時刻JST"].dt.hour != 0)
@@ -558,6 +586,37 @@ def ai_evaluate(d: dict, t: dict, target: date, history: list[dict] | None = Non
                     lines.append(f"  → 減少傾向（前週比{change_pct:+.0f}%）")
                 else:
                     lines.append(f"  → 横ばい（前週比{change_pct:+.0f}%）")
+            lines.append("")
+
+    # ============================================================
+    # 週1トレンド（日曜のみ表示）
+    # ============================================================
+    if target.weekday() == 6:  # 日曜
+        weekly_trends = [(k, v) for k, v in t.items() if k.startswith("weekly_trend_")]
+        if weekly_trends:
+            lines.append("📋 週次定点観測（検査・ドック）")
+            for _, val in sorted(weekly_trends, key=lambda x: x[1]["dept"]):
+                dept_name = val["dept"]
+                weekly = val["weekly"]
+                if len(weekly) >= 2:
+                    curr = weekly[-1]["res"]
+                    prev = weekly[-2]["res"]
+                    w3 = weekly[-3]["res"] if len(weekly) >= 3 else None
+                    # 推移を矢印で
+                    week_nums = [str(w["res"]) for w in weekly]
+                    trend_str = " → ".join(week_nums)
+                    # 変化判定
+                    if prev > 0:
+                        pct = (curr - prev) / prev * 100
+                        if pct > 10:
+                            mark = "↑"
+                        elif pct < -10:
+                            mark = "↓"
+                        else:
+                            mark = "→"
+                    else:
+                        mark = "→" if curr == 0 else "↑"
+                    lines.append(f"  {dept_name}: {trend_str}件 {mark}")
             lines.append("")
 
     # ============================================================
