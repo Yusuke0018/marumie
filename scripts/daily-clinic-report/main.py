@@ -32,7 +32,17 @@ AI_EXCLUDE_DEPTS = {"人間ドックA"}
 # AI評価で毎回トレンドを表示する科目（現在なし）
 AI_ALWAYS_TREND_DEPTS: set[str] = set()
 # 週1回（日曜）だけトレンドを表示する科目
-AI_WEEKLY_TREND_DEPTS = {"内科外来", "発熱・風邪症状外来", "胃カメラ", "大腸カメラ（胃カメラ併用もこちら）", "人間ドックB"}
+# 表示順を保持するためリストで定義
+AI_WEEKLY_TREND_DEPTS_ORDERED = [
+    "内科外来",
+    "発熱・風邪症状外来",
+    "胃カメラ",
+    "大腸カメラ（胃カメラ併用もこちら）",
+    "人間ドックB",
+    "健康診断（A,B,特定健診）",
+    "健康診断C",
+]
+AI_WEEKLY_TREND_DEPTS = set(AI_WEEKLY_TREND_DEPTS_ORDERED)
 
 
 # ============================================================
@@ -594,8 +604,10 @@ def ai_evaluate(d: dict, t: dict, target: date, history: list[dict] | None = Non
     if target.weekday() == 6:  # 日曜
         weekly_trends = [(k, v) for k, v in t.items() if k.startswith("weekly_trend_")]
         if weekly_trends:
-            lines.append("📋 週次定点観測（検査・ドック）")
-            for _, val in sorted(weekly_trends, key=lambda x: x[1]["dept"]):
+            lines.append("📋 週次定点観測")
+            # AI_WEEKLY_TREND_DEPTS_ORDERED の順で表示
+            order = {name: i for i, name in enumerate(AI_WEEKLY_TREND_DEPTS_ORDERED)}
+            for _, val in sorted(weekly_trends, key=lambda x: order.get(x[1]["dept"], 99)):
                 dept_name = val["dept"]
                 weekly = val["weekly"]
                 if len(weekly) >= 2:
