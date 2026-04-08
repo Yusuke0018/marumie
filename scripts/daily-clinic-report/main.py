@@ -418,20 +418,16 @@ def analyze_trend(
 # ============================================================
 
 def ai_evaluate(d: dict, t: dict, target: date, history: list[dict] | None = None) -> str:
-    """統合データからAI評価を生成。
-    毎日の切り口をローテーションしつつ、注目度が高いものは常に出す。
-    構成: 概況（常時）+ 日替わりトピック2〜3個 + 推移（常時）
+    """変化にフォーカスしたAI評価。
+    構成: 全体の週次変化 → 科目別の週次変化 → キャンセル動向 → 純増推移
     """
     wd = WEEKDAY_JA[target.weekday()]
-    day_of_year = target.timetuple().tm_yday  # ローテーション用
     total_res = d["total_res"]
     total_cancel = d["total_cancel"]
     total_change = d["total_change"]
     net = d["net"]
-    avg = t.get("avg", 0)
     history = history or []
 
-    # 旧フォーマット互換
     def _get_net(h: dict) -> int:
         if "net" in h:
             return h["net"]
@@ -442,229 +438,118 @@ def ai_evaluate(d: dict, t: dict, target: date, history: list[dict] | None = Non
     lines: list[str] = []
 
     # ============================================================
-    # 概況（常時表示・3行以内）
+    # 全体の週次変化
     # ============================================================
-    if avg > 0:
-        diff = (total_res - avg) / avg * 100
-        wd_avg_val = t.get("weekday_avg", {}).get(target.weekday())
-        same_wd_cnt = t.get("same_wd_count")
-        # 予約数の評価 + 曜日比較を1〜2行にまとめる
-        if abs(diff) > 20:
-            level = "大きく上回" if diff > 0 else "大きく下回"
-            lines.append(f"▶ 予約{total_res}件は月平均{avg}件を{level}っています（{diff:+.0f}%）。")
-        elif abs(diff) > 10:
-            level = "やや多め" if diff > 0 else "やや少なめ"
-            lines.append(f"▶ 予約{total_res}件は{level}（月平均{avg}件比{diff:+.0f}%）。")
-        else:
-            lines.append(f"▶ 予約{total_res}件は平常水準（月平均{avg}件）。")
+    wow = t.get("wow")
+    recent_avg = t.get("recent_avg")
+    prev_avg = t.get("prev_avg")
+    if wow is not None and recent_avg is not None and prev_avg is not None:
+        direction = "増加" if wow > 0 else "減少"
+        lines.append(f"▶ 全体: 今週平均{recent_avg}件/日 ← 先週{prev_avg}件/日（{wow:+.0f}%{direction}）")
+    else:
+        avg = t.get("avg", 0)
+        if avg > 0:
+            lines.append(f"▶ 全体: 昨日{total_res}件（月平均{avg}件/日）")
 
-        if same_wd_cnt is not None and abs(total_res - same_wd_cnt) > 5:
-            lines.append(f"  先週{wd}曜は{same_wd_cnt}件で{total_res - same_wd_cnt:+d}件の変動。")
-        elif wd_avg_val:
-            lines.append(f"  {wd}曜の月平均は{wd_avg_val}件。")
-
-    # 純増 + キャンセル概要を1行に
-    if total_cancel > 0 or total_change > 0:
-        cancel_avg = t.get("cancel_avg", 0)
-        cancel_note = ""
-        if cancel_avg > 0:
-            if total_cancel > cancel_avg * 1.3:
-                cancel_note = "（平均より多い）"
-            elif total_cancel < cancel_avg * 0.7:
-                cancel_note = "（少なめ）"
-        lines.append(f"▶ キャンセル{total_cancel}件{cancel_note}・変更{total_change}件 → 純増{net:+d}件")
+    # キャンセル全体の変化
+    cancel_rate = t.get("cancel_rate", 0)
+    cancel_avg = t.get("cancel_avg", 0)
+    if cancel_avg > 0:
+        if total_cancel > cancel_avg * 1.3:
+            lines.append(f"▶ キャンセル{total_cancel}件は平均{cancel_avg}件より多い（月間キャンセル率{cancel_rate}%）")
+        elif total_cancel < cancel_avg * 0.7:
+            lines.append(f"▶ キャンセル{total_cancel}件は平均{cancel_avg}件より少ない")
     lines.append("")
 
     # ============================================================
-    # 日替わりトピック — 全候補を生成し、重要度でソート後、上位を採用
+    # 科目別の週次変化（変化があるもののみ）
     # ============================================================
-    topics: list[tuple[int, str, str]] = []  # (priority, category, text)
-    # priority: 数値が大きいほど重要。50以上は常時表示。
-
-    # --- トピック: 科目別の予約増減 ---
     dept_wow = t.get("dept_wow", {})
-    big_up = sorted(
-        [(k, v) for k, v in dept_wow.items() if v.get("pct") and v["pct"] > 40 and v["recent"] >= 5],
-        key=lambda x: -x[1]["pct"],
-    )
-    big_down = sorted(
-        [(k, v) for k, v in dept_wow.items() if v.get("pct") and v["pct"] < -40 and v["prev"] >= 5],
-        key=lambda x: x[1]["pct"],
-    )
-    if big_up:
-        items = [f"「{n}」{v['prev']}→{v['recent']}件({v['pct']:+.0f}%)" for n, v in big_up[:2]]
-        topics.append((60, "dept_trend", f"予約増加が目立つ科: {'、'.join(items)}"))
-    if big_down:
-        items = [f"「{n}」{v['prev']}→{v['recent']}件({v['pct']:+.0f}%)" for n, v in big_down[:2]]
-        topics.append((60, "dept_trend", f"予約減少が目立つ科: {'、'.join(items)}"))
+    if dept_wow:
+        # 変化量の絶対値でソート、実数差が大きいものを優先
+        dept_changes: list[tuple[str, int, int, float | None]] = []
+        for name, vals in dept_wow.items():
+            r, p, pct = vals["recent"], vals["prev"], vals.get("pct")
+            diff = r - p
+            # 実数差が2件以上、または率が30%以上変動のものだけ表示
+            if abs(diff) >= 2 or (pct is not None and abs(pct) >= 30):
+                dept_changes.append((name, r, p, pct))
 
-    # --- トピック: 科目別の異常検知（普段と違う動きのみ） ---
-    dept_summary = d.get("dept_summary", [])
-    dept_wow = t.get("dept_wow", {})
-    # 当日の科目件数と月平均を比較して異常値を検出
-    dept_rates_data = t.get("dept_cancel_rates", {})
-    for s in dept_summary:
-        dept = s["dept"]
-        wow_data = dept_wow.get(dept)
-        if wow_data and wow_data.get("pct") is not None:
-            # 週次で大きく変動している科目（増減50%超かつ一定規模以上）
-            # ※ big_up/big_downで既にカバーしているのでここではスキップ
-            pass
-        # 当日の件数が月平均の日割りと大きく乖離している科目
-        rate_data = dept_rates_data.get(dept)
-        if rate_data and t.get("total_days", 0) > 0:
-            daily_avg = rate_data["res"] / t["total_days"]
-            if daily_avg >= 2 and s["res"] > 0:
-                ratio = s["res"] / daily_avg
-                if ratio > 2.5 and s["res"] >= 5:
-                    topics.append((45, f"dept_spike_{dept}",
-                        f"「{dept}」が{s['res']}件と日平均{daily_avg:.0f}件の{ratio:.1f}倍 — 一時的な増加か注視"))
-                elif ratio < 0.3 and daily_avg >= 3:
-                    topics.append((35, f"dept_drop_{dept}",
-                        f"「{dept}」が{s['res']}件と日平均{daily_avg:.0f}件を大きく下回る"))
+        # 増加と減少に分けて表示
+        ups = sorted(
+            [(n, r, p, pct) for n, r, p, pct in dept_changes if r > p],
+            key=lambda x: -(x[1] - x[2]),
+        )
+        downs = sorted(
+            [(n, r, p, pct) for n, r, p, pct in dept_changes if r < p],
+            key=lambda x: x[1] - x[2],
+        )
 
-    # --- トピック: キャンセル率が高い科目（月間） ---
+        if ups:
+            lines.append("📈 週次で増加")
+            for name, r, p, pct in ups[:5]:
+                pct_str = f"({pct:+.0f}%)" if pct is not None else ""
+                lines.append(f"  {name}: {p}→{r}件{pct_str}")
+
+        if downs:
+            lines.append("📉 週次で減少")
+            for name, r, p, pct in downs[:5]:
+                pct_str = f"({pct:+.0f}%)" if pct is not None else ""
+                lines.append(f"  {name}: {p}→{r}件{pct_str}")
+
+        if ups or downs:
+            lines.append("")
+
+    # ============================================================
+    # キャンセル動向（科目別・月間）
+    # ============================================================
     dept_rates = t.get("dept_cancel_rates", {})
-    high_cancel_depts = sorted(
-        [(n, i) for n, i in dept_rates.items() if i["rate"] >= 25 and i["cancel"] >= 3],
+    # キャンセル率が高い科目（20%以上かつ3件以上）
+    high_cancel = sorted(
+        [(n, i) for n, i in dept_rates.items() if i["rate"] >= 20 and i["cancel"] >= 3],
         key=lambda x: -x[1]["rate"],
     )
-    if high_cancel_depts:
-        items = [f"{n}({i['rate']}%)" for n, i in high_cancel_depts[:3]]
-        topics.append((55, "dept_cancel", f"月間キャンセル率が高い科: {'、'.join(items)}"))
+    if high_cancel:
+        lines.append("⚠ キャンセル率が高い科（月間）")
+        for name, info in high_cancel[:5]:
+            lines.append(f"  {name}: {info['rate']}%（予約{info['res']}件中{info['cancel']}件キャンセル）")
+        lines.append("")
 
-    # --- トピック: 当日キャンセル ---
-    if d["same_day_cancel_count"] >= 3:
-        topics.append((70, "same_day_cancel",
-            f"当日の予約に対するキャンセルが{d['same_day_cancel_count']}件 — 空き枠の再活用を検討"))
-
-    # --- トピック: 当日予約 vs 事前予約のキャンセル傾向 ---
-    sd_cr = t.get("same_day_cancel_rate_monthly")
-    adv_cr = t.get("advance_cancel_rate_monthly")
-    if sd_cr is not None and adv_cr is not None:
-        if sd_cr > adv_cr + 5:
-            topics.append((40, "cancel_type",
-                f"当日予約のキャンセル率({sd_cr}%)が事前予約({adv_cr}%)より高い傾向"))
-        elif adv_cr > sd_cr + 5:
-            topics.append((40, "cancel_type",
-                f"事前予約のキャンセル率({adv_cr}%)が当日予約({sd_cr}%)より高め — リマインド施策を"))
-
-    # --- トピック: 初診率 ---
+    # ============================================================
+    # 初診率・当日予約率の変化
+    # ============================================================
     nr = d.get("new_ratio", 0)
     nr_avg = t.get("new_ratio_avg", 0)
-    if nr_avg > 0:
-        nr_diff = nr - nr_avg
-        if nr_diff > 10:
-            topics.append((50, "new_ratio",
-                f"初診率{nr:.0f}%は月平均{nr_avg:.0f}%より高め — 新患が増えています"))
-        elif nr_diff < -10:
-            topics.append((35, "new_ratio",
-                f"初診率{nr:.0f}%は月平均{nr_avg:.0f}%より低め — 再診中心の日"))
-        else:
-            topics.append((15, "new_ratio",
-                f"初診率{nr:.0f}%は月平均{nr_avg:.0f}%と同水準"))
-
-    # --- トピック: 当日予約率 ---
     sd = d.get("same_day_ratio", 0)
     sd_avg = t.get("same_day_avg", 0)
-    if sd > 60:
-        topics.append((55, "same_day",
-            f"当日予約率{sd:.0f}%（平均{sd_avg:.0f}%）→ 急な予約需要が多い。キャンセル・変更も起きやすい"))
-    elif sd_avg > 0 and abs(sd - sd_avg) > 15:
-        direction = "高め" if sd > sd_avg else "低め"
-        topics.append((30, "same_day",
-            f"当日予約率{sd:.0f}%は平均{sd_avg:.0f}%より{direction}"))
 
-    # --- トピック: リードタイム ---
-    lmed = d.get("lead_median", 0)
-    lm = d.get("lead_mean", 0)
-    if lmed > 0 and lmed < 1:
-        topics.append((35, "leadtime",
-            f"リードタイム中央値{lmed}日 — 半数以上が即日〜翌日予約で即時ニーズが高い"))
-    elif lm > 14:
-        topics.append((35, "leadtime",
-            f"リードタイム平均{lm}日と長め — 予約枠が埋まりやすい可能性"))
-
-    # --- トピック: 時間帯 ---
-    hourly = d.get("hourly", {})
-    if hourly:
-        am = sum(v for h, v in hourly.items() if h < 12)
-        pm = sum(v for h, v in hourly.items() if h >= 12)
-        pk = d.get("peak_hour", "")
-        if am > 0 and pm > 0:
-            if am > pm * 2:
-                topics.append((30, "time_balance", f"予約受付は午前に集中（午前{am}件/午後{pm}件、ピーク{pk}）"))
-            elif pm > am * 2:
-                topics.append((30, "time_balance", f"予約受付は午後〜夜間に集中（午前{am}件/午後{pm}件、ピーク{pk}）"))
-
-    # --- トピック: 週間トレンド ---
-    wow = t.get("wow")
-    if wow is not None:
-        if abs(wow) > 15:
-            direction = "増加" if wow > 0 else "減少"
-            topics.append((50, "wow", f"週間トレンドは{direction}傾向（前週比{wow:+.0f}%）"))
-
-    # --- トピック: 純増マイナス ---
-    if net < 0:
-        topics.append((80, "net_negative", f"純増がマイナス（{net:+d}件）— キャンセルが予約を上回っています"))
-
-    # --- トピック: 連続増減 ---
-    if history:
-        past_nets = [_get_net(h) for h in history]
-        vals = past_nets + [net]
-        streak_down = 0
-        streak_up = 0
-        for i in range(1, len(vals)):
-            if vals[i] < vals[i - 1]:
-                streak_down += 1
-                streak_up = 0
-            elif vals[i] > vals[i - 1]:
-                streak_up += 1
-                streak_down = 0
-            else:
-                streak_down = 0
-                streak_up = 0
-        if streak_down >= 3:
-            topics.append((65, "streak", f"{streak_down}日連続で純増数が減少 — 注視してください"))
-        elif streak_up >= 3:
-            topics.append((45, "streak", f"{streak_up}日連続で純増数が増加 — 好調"))
-
-    # ============================================================
-    # トピック選択: 重要度50以上は全て表示 + 残りからローテーションで1〜2個
-    # ============================================================
-    must_show = [(p, cat, txt) for p, cat, txt in topics if p >= 50]
-    optional = [(p, cat, txt) for p, cat, txt in topics if p < 50]
-
-    # ローテーション: 日毎にオフセットをずらして選ぶ
-    optional.sort(key=lambda x: -x[0])  # 重要度順
-    if optional:
-        # 日替わりで開始位置を変える
-        offset = day_of_year % max(len(optional), 1)
-        rotated = optional[offset:] + optional[:offset]
-        # カテゴリが被らないように最大2個選ぶ
-        selected_cats: set[str] = {cat for _, cat, _ in must_show}
-        picks = []
-        for p, cat, txt in rotated:
-            if cat not in selected_cats and len(picks) < 2:
-                picks.append((p, cat, txt))
-                selected_cats.add(cat)
-        must_show.extend(picks)
-
-    must_show.sort(key=lambda x: -x[0])
-
-    for _, _, txt in must_show:
-        lines.append(f"▶ {txt}")
-
-    # ============================================================
-    # 推移（常時表示・1行）
-    # ============================================================
-    if history:
+    rate_notes = []
+    if nr_avg > 0 and abs(nr - nr_avg) > 10:
+        direction = "高" if nr > nr_avg else "低"
+        rate_notes.append(f"初診率{nr:.0f}%（月平均{nr_avg:.0f}%より{direction}い）")
+    if sd_avg > 0 and abs(sd - sd_avg) > 15:
+        direction = "高" if sd > sd_avg else "低"
+        rate_notes.append(f"当日予約率{sd:.0f}%（月平均{sd_avg:.0f}%より{direction}い）")
+    if rate_notes:
+        lines.append("▶ " + " / ".join(rate_notes))
         lines.append("")
+
+    # ============================================================
+    # 純増がマイナス
+    # ============================================================
+    if net < 0:
+        lines.append(f"🔴 純増がマイナス（{net:+d}件）: キャンセルが予約を上回っている")
+        lines.append("")
+
+    # ============================================================
+    # 純増推移
+    # ============================================================
+    if history:
         hist_str = " → ".join(f"{h['weekday']}{_get_net(h)}" for h in history)
-        lines.append(f"📉 純増推移: {hist_str} → {wd}{net}")
+        lines.append(f"📊 純増推移: {hist_str} → {wd}{net}")
 
     if not lines:
-        return "▶ 特筆すべき変動はありません"
+        return "▶ 特筆すべき変動なし"
 
     return "\n".join(lines)
 
