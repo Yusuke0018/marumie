@@ -16,7 +16,9 @@ mkdir -p "$LOG_DIR"
 source "${SCRIPT_DIR}/config.env"
 
 export TZ="Asia/Tokyo"
-JST_DATE=$(date '+%Y年%m月%d日(%A)')
+JST_DATE=$(date '+%Y年%m月%d日')
+JST_WEEKDAY_JA=$(date +%u | awk '{split("月火水木金土日",a,""); print a[$1]"曜日"}')
+JST_DATE="${JST_DATE}(${JST_WEEKDAY_JA})"
 JST_TIME=$(date '+%H:%M')
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 DAY_OF_YEAR=$(date '+%j')
@@ -30,7 +32,11 @@ run_claude() {
   local prompt="$2"
 
   perl -e 'alarm shift; exec @ARGV' 90 \
-    claude --print --system-prompt "$mode" --strict-mcp-config "$prompt" 2>/dev/null
+    claude --print \
+    --dangerously-skip-permissions \
+    --mcp-config "${SCRIPT_DIR}/mcp_config_morning.json" \
+    --system-prompt "$mode" \
+    "$prompt" 2>/dev/null
 }
 
 run_codex_gmail() {
@@ -279,11 +285,22 @@ MESSAGE=$(run_claude "$(cat "$CLAUDE_MD")" "$PROMPT") || {
 
 ---
 ${PROMPT}"
-  MESSAGE=$(perl -e 'alarm shift; exec @ARGV' 90 claude --print --strict-mcp-config 2>/dev/null <<< "$FULL_PROMPT") || MESSAGE=""
+  MESSAGE=$(perl -e 'alarm shift; exec @ARGV' 90 \
+    claude --print \
+    --dangerously-skip-permissions \
+    --mcp-config "${SCRIPT_DIR}/mcp_config_morning.json" \
+    2>/dev/null <<< "$FULL_PROMPT") || MESSAGE=""
 }
 
 if [[ -z "$MESSAGE" || "$MESSAGE" =~ ^[[:space:]]*$ ]]; then
   log "Claude CLIが空を返したためローカルfallbackで配信"
+  MESSAGE=$(build_fallback_message "$TONE")
+elif ! echo "$MESSAGE" | grep -q '^\[info\]'; then
+  log "出力が[info]で始まっていない（不正な出力）。フォールバック配信"
+  log "不正な出力内容: $(echo "$MESSAGE" | head -3 | tr '\n' ' ' | cut -c1-200)"
+  MESSAGE=$(build_fallback_message "$TONE")
+elif echo "$MESSAGE" | grep -iq 'this task is complete\|task complete\|the output above'; then
+  log "英語メタコメントを検出。フォールバック配信"
   MESSAGE=$(build_fallback_message "$TONE")
 fi
 
