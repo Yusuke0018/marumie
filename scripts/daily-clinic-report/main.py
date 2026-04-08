@@ -27,6 +27,8 @@ HISTORY_DIR = Path(__file__).parent / "history"
 # 除外対象
 CORPORATE_CHECKUP = "企業健診（健診）"
 PHONE_RESERVATION_NAME = "電話 予約 (デンワ ヨヤク)"
+# AI評価から除外する科目（データ自体は残すが、AI分析の対象外）
+AI_EXCLUDE_DEPTS = {"人間ドックA"}
 
 
 # ============================================================
@@ -464,7 +466,7 @@ def ai_evaluate(d: dict, t: dict, target: date, history: list[dict] | None = Non
     # ============================================================
     # 科目別の週次変化（変化があるもののみ）
     # ============================================================
-    dept_wow = t.get("dept_wow", {})
+    dept_wow = {k: v for k, v in t.get("dept_wow", {}).items() if k not in AI_EXCLUDE_DEPTS}
     if dept_wow:
         # 変化量の絶対値でソート、実数差が大きいものを優先
         dept_changes: list[tuple[str, int, int, float | None]] = []
@@ -503,7 +505,7 @@ def ai_evaluate(d: dict, t: dict, target: date, history: list[dict] | None = Non
     # ============================================================
     # キャンセル動向（科目別・月間）
     # ============================================================
-    dept_rates = t.get("dept_cancel_rates", {})
+    dept_rates = {k: v for k, v in t.get("dept_cancel_rates", {}).items() if k not in AI_EXCLUDE_DEPTS}
     # キャンセル率が高い科目（20%以上かつ3件以上）
     high_cancel = sorted(
         [(n, i) for n, i in dept_rates.items() if i["rate"] >= 20 and i["cancel"] >= 3],
