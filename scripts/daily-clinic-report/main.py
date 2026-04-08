@@ -602,6 +602,65 @@ def ai_evaluate(d: dict, t: dict, target: date, history: list[dict] | None = Non
         lines.append("")
 
     # ============================================================
+    # 特記事項（該当するものだけ表示）
+    # ============================================================
+    notes: list[str] = []
+
+    # 純増マイナスが続いている
+    if history:
+        past_nets = [_get_net(h) for h in history]
+        vals = past_nets + [net]
+        streak_down = 0
+        for i in range(len(vals) - 1, 0, -1):
+            if vals[i] < vals[i - 1]:
+                streak_down += 1
+            else:
+                break
+        if streak_down >= 3:
+            notes.append(f"{streak_down}日連続で純増数が減少している")
+
+    # 当日予約のキャンセルが目立つ
+    sd_cr = t.get("same_day_cancel_rate_monthly")
+    adv_cr = t.get("advance_cancel_rate_monthly")
+    if sd_cr is not None and adv_cr is not None and sd_cr > adv_cr + 10:
+        notes.append(f"当日予約のキャンセル率({sd_cr}%)が事前予約({adv_cr}%)より高い")
+
+    # リードタイム極端
+    lmed = d.get("lead_median", 0)
+    if 0 < lmed < 0.5:
+        notes.append(f"リードタイム中央値{lmed}日: 半数以上が即日予約")
+    elif d.get("lead_mean", 0) > 14:
+        notes.append(f"リードタイム平均{d['lead_mean']}日: 予約枠が先まで埋まっている可能性")
+
+    # 特定曜日だけ極端に少ない/多い
+    wd_avg = t.get("weekday_avg", {})
+    if wd_avg:
+        overall_avg = sum(wd_avg.values()) / len(wd_avg) if wd_avg else 0
+        today_wd_avg = wd_avg.get(target.weekday())
+        if today_wd_avg and overall_avg > 0:
+            ratio = today_wd_avg / overall_avg
+            if ratio > 1.4:
+                notes.append(f"{wd}曜は平均{today_wd_avg}件で他の曜日より多い傾向")
+            elif ratio < 0.6:
+                notes.append(f"{wd}曜は平均{today_wd_avg}件で他の曜日より少ない傾向")
+
+    # 当日予約率が極端に高い
+    sd = d.get("same_day_ratio", 0)
+    if sd > 65:
+        notes.append(f"当日予約率{sd:.0f}%: 予約の大半が当日")
+
+    # 月間全体のキャンセル率が高い
+    cancel_rate = t.get("cancel_rate", 0)
+    if cancel_rate > 20:
+        notes.append(f"月間キャンセル率{cancel_rate}%: 全体的にキャンセルが多い")
+
+    if notes:
+        lines.append("💡 特記事項")
+        for note in notes:
+            lines.append(f"  {note}")
+        lines.append("")
+
+    # ============================================================
     # 純増推移
     # ============================================================
     if history:
