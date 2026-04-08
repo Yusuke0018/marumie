@@ -725,6 +725,17 @@ def ai_evaluate(d: dict, t: dict, target: date, history: list[dict] | None = Non
     if cancel_rate > 20:
         notes.append(f"月間キャンセル率{cancel_rate}%: 全体的にキャンセルが多い")
 
+    # 科目別の急激な需要変動（週次で50%超の変動かつ実数差5件以上）
+    dept_wow = {k: v for k, v in t.get("dept_wow", {}).items() if k not in AI_EXCLUDE_DEPTS}
+    for name, vals in dept_wow.items():
+        r, p, pct = vals["recent"], vals["prev"], vals.get("pct")
+        diff = r - p
+        if pct is not None and abs(pct) >= 50 and abs(diff) >= 5:
+            if pct > 0:
+                notes.append(f"{name}: 先週{p}件→今週{r}件に急増({pct:+.0f}%)")
+            else:
+                notes.append(f"{name}: 先週{p}件→今週{r}件に急減({pct:+.0f}%)")
+
     if notes:
         lines.append("💡 特記事項")
         for note in notes:
