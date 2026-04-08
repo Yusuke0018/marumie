@@ -29,6 +29,8 @@ CORPORATE_CHECKUP = "企業健診（健診）"
 PHONE_RESERVATION_NAME = "電話 予約 (デンワ ヨヤク)"
 # AI評価から除外する科目（データ自体は残すが、AI分析の対象外）
 AI_EXCLUDE_DEPTS = {"人間ドックA"}
+# AI評価で毎回トレンドを表示する科目
+AI_ALWAYS_TREND_DEPTS = {"発熱・風邪症状外来"}
 
 
 # ============================================================
@@ -341,6 +343,34 @@ def analyze_trend(
                 dept_wow[dept] = {"recent": r_val, "prev": p_val, "pct": pct}
         t["dept_wow"] = dept_wow
 
+    # 常時トレンド表示科目の週別推移（過去4週）
+    for dept_name in AI_ALWAYS_TREND_DEPTS:
+        dept_res = p_res[p_res["診療科"] == dept_name]
+        dept_cancel = p_cancel[p_cancel["診療科"] == dept_name] if not p_cancel.empty else pd.DataFrame()
+        if not dept_res.empty:
+            weekly_data = []
+            for w in range(3, -1, -1):  # 4週前〜今週
+                w_end = target - timedelta(days=w * 7)
+                w_start = w_end - timedelta(days=6)
+                w_res = dept_res[(dept_res["受信日"] >= w_start) & (dept_res["受信日"] <= w_end)]
+                w_cancel_cnt = 0
+                if not dept_cancel.empty:
+                    w_cancel = dept_cancel[(dept_cancel["受信日"] >= w_start) & (dept_cancel["受信日"] <= w_end)]
+                    w_cancel_cnt = len(w_cancel)
+                weekly_data.append({
+                    "week_start": str(w_start),
+                    "week_end": str(w_end),
+                    "res": len(w_res),
+                    "cancel": w_cancel_cnt,
+                })
+            safe_key = dept_name.replace("・", "_").replace("（", "").replace("）", "")
+            t[f"always_trend_{safe_key}"] = {
+                "dept": dept_name,
+                "weekly": weekly_data,
+                "month_total": len(dept_res),
+                "month_cancel": len(dept_cancel) if not dept_cancel.empty else 0,
+            }
+
     # 時間帯別の月間傾向（ピーク時間帯）
     has_time = p_res[
         (p_res["受信時刻JST"].dt.hour != 0)
@@ -500,6 +530,34 @@ def ai_evaluate(d: dict, t: dict, target: date, history: list[dict] | None = Non
                 lines.append(f"  {name}: {p}→{r}件{pct_str}")
 
         if ups or downs:
+            lines.append("")
+
+    # ============================================================
+    # 常時トレンド表示科目（発熱外来等）
+    # ============================================================
+    for key, val in t.items():
+        if not key.startswith("always_trend_"):
+            continue
+        dept_name = val["dept"]
+        weekly = val["weekly"]
+        if len(weekly) >= 2:
+            lines.append(f"🌡 {dept_name}の推移（週別予約数）")
+            for w in weekly:
+                ws = w["week_start"][5:]  # MM-DD
+                we = w["week_end"][5:]
+                cancel_str = f"（キャンセル{w['cancel']}件）" if w["cancel"] > 0 else ""
+                lines.append(f"  {ws}〜{we}: {w['res']}件{cancel_str}")
+            # 直近2週の変化を一言で
+            curr = weekly[-1]["res"]
+            prev = weekly[-2]["res"]
+            if prev > 0:
+                change_pct = (curr - prev) / prev * 100
+                if change_pct > 10:
+                    lines.append(f"  → 増加傾向（前週比{change_pct:+.0f}%）")
+                elif change_pct < -10:
+                    lines.append(f"  → 減少傾向（前週比{change_pct:+.0f}%）")
+                else:
+                    lines.append(f"  → 横ばい（前週比{change_pct:+.0f}%）")
             lines.append("")
 
     # ============================================================
