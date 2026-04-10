@@ -208,4 +208,98 @@ fi
   echo ""
 } >> "$PERSONA_LOG"
 
+# ============================================================
+# Step 6: 記憶の符号化（Encoding）— 配信後に記憶を更新
+# ============================================================
+if [[ -d "$MEMORY_DIR" ]]; then
+  log "記憶の符号化開始"
+
+  ENCODE_PROMPT="あなたは記憶管理エージェントです。以下の情報を元に、記憶ファイルを更新してください。
+
+【今回の配信メッセージ（${PERSONA}）】
+${MESSAGE}
+
+【サロンの直近の会話（ゆうすけ様の反応を含む）】
+${SALON_MSGS:-（なし）}
+
+【日記ルームの動き】
+${DIARY_MSGS:-（なし）}
+
+【現在の記憶ファイル】
+$(cat "$MEMORY_DIR/context-log.md" 2>/dev/null)
+
+---
+
+以下のルールに従って、記憶を更新してください:
+
+## 符号化の3軸判定
+記録するかどうか、以下の3軸で判定する:
+- 再利用性: 将来のセッションでも使うか？
+- 非自明性: ファイルを読めばわかることではないか？
+- 判断影響度: 意思決定や行動を変えるか？
+2つ以上当てはまれば記録。0なら何もしない。
+
+## やること
+1. ゆうすけ様のサロンでの新しい反応・返信があれば context-log.md に追記
+2. 日記に重要な動きがあれば context-log.md に追記
+3. 既存エントリが参照された場合は ref_count を+1
+4. ref_count が3以上になったエントリがあれば frameworks.md に昇格を検討
+5. MEMORY.md の「最近の出来事」を更新（最新10件維持）
+6. 記録すべきものがなければ何もしない（空コミットは不要）
+
+## 出力
+更新が必要なファイルだけ、以下の形式で出力してください:
+
+---FILE: data/memory/context-log.md---
+（ファイル全文）
+
+---FILE: data/memory/MEMORY.md---
+（ファイル全文）
+
+更新不要なら「更新なし」とだけ出力してください。"
+
+  ENCODE_RESULT=$(echo "$ENCODE_PROMPT" | claude --print 2>/dev/null) || ENCODE_RESULT=""
+
+  if [[ -n "$ENCODE_RESULT" && "$ENCODE_RESULT" != *"更新なし"* && "$ENCODE_RESULT" == *"---FILE:"* ]]; then
+    # ファイル書き出し: ---FILE: path--- で区切られたブロックを各ファイルに書き込む
+    echo "$ENCODE_RESULT" | python3 -c "
+import sys, re
+
+content = sys.stdin.read()
+blocks = re.split(r'---FILE:\s*(.+?)\s*---\n', content)
+# blocks[0] = 前文, blocks[1] = path, blocks[2] = content, blocks[3] = path, ...
+
+i = 1
+written = []
+while i < len(blocks) - 1:
+    path = blocks[i].strip()
+    body = blocks[i+1].rstrip()
+    if path.startswith('data/memory/'):
+        full_path = '/tmp/schedule-repo/' + path
+        with open(full_path, 'w') as f:
+            f.write(body + '\n')
+        written.append(path)
+    i += 2
+
+if written:
+    print('Updated: ' + ', '.join(written))
+else:
+    print('No files written')
+" 2>/dev/null && {
+      cd "$SCHEDULE_REPO"
+      if git diff --quiet data/memory/ 2>/dev/null; then
+        log "記憶に変更なし"
+      else
+        git add data/memory/
+        git commit -m "memory update ${PERSONA} $(TZ=Asia/Tokyo date +%Y-%m-%d_%H:%M)" >/dev/null 2>&1
+        git push origin main >/dev/null 2>&1 && log "記憶の符号化・push完了" || log "記憶のpush失敗"
+      fi
+    }
+  else
+    log "記憶の更新なし（符号化スキップ）"
+  fi
+else
+  log "記憶ディレクトリが見つからないため符号化スキップ"
+fi
+
 log "配信完了"
