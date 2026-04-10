@@ -44,11 +44,44 @@ git reset --hard origin/main
 
 ---
 
-## Step 0.5: 過去レポートの確認（たとえ・引用の重複回避）
+## Step 0.5: 記憶の想起（Retrieval）— セッション開始時に必ず実行
 
-### 直近5日分は全文を読む
+### 記憶インデックスの読み込み
+
+```bash
+cd /tmp/schedule-repo
+cat data/memory/MEMORY.md
+```
+
+MEMORY.md を読み、今日の文脈（日付・曜日・直近のChatwork/日記の話題）と照らし合わせて、
+**R×I×R スコアリング**で関連する記憶を判定する:
+
+- **Relevance（関連性）**: 今日の話題に近い記憶を最優先
+- **Recency（新しさ）**: last_ref が新しいものを優先（減衰テーブルはMEMORY.md参照）
+- **Importance（重要度）**: frameworks.md > context-log.md
+
+### 記憶ファイルの読み込み
+
+```bash
+cat data/memory/frameworks.md    # 意味記憶（パターン・洞察）— 毎回読む
+cat data/memory/preferences.md   # 手続き記憶（好み・反応傾向）— 毎回読む
+cat data/memory/context-log.md   # エピソード記憶（出来事ログ）— 直近30日分に注目
+```
+
+**frameworks.md と preferences.md は毎回全文を読む**（量が少ないため）。
+context-log.md は直近30日分を重点的に、それ以前はスコアが高いもののみ参照。
+
+### 記憶を活用してレポートを書く
+
+- 過去の出来事との**連続性**を意識する（「先週〜とおっしゃっていましたが」）
+- frameworks.md のパターンに照らして、今日の行動を分析する
+- preferences.md の反応傾向を参考に、レポートの構成を調整する
+- ゆうすけ様がサロンで前回の投稿に返信していたら、**必ずその返信に触れる**
+
+### 過去レポートの確認
 
 Notionからハルの直近5件、ガクの直近5件のレポートを全文で読む（Step 1のNotion情報収集で行う）。
+サロン（430280030）に蓄積された過去レポートも確認する。
 直近5日分の内容は全文が頭に入っている状態でレポートを書くこと。
 
 ### 引用・たとえを使う前にgit検索で確認
@@ -260,6 +293,29 @@ with open('/tmp/schedule-repo/data/hal_gaku_metaphors.json', 'w') as f:
 
 たとえや引用を1つも使わなかった日も、空配列で記録すること。
 
+### レポート完了後: 記憶の符号化（Encoding）— ハル分
+
+ハルのレポート投稿後、今日の発見・ゆうすけ様の重要な動きを記憶に書き込む。
+**符号化の3軸判定**: 再利用性 × 非自明性 × 判断影響度 → 2つ以上当てはまれば記録。
+
+1. **context-log.md にエピソード記憶を追記**:
+```bash
+cd /tmp/schedule-repo
+# 今日の日付のセクションがなければ追加し、重要な出来事を箇条書きで記録
+# 例: "- ゆうすけ様が○○について△△と発言。□□の兆候 [ref_count: 0]"
+```
+
+2. **frameworks.md の更新判定**:
+- context-log で ref_count が3以上のエントリがあれば、パターンとして frameworks.md に昇格
+- 既存のパターンに新しい根拠が見つかったら、根拠を追記
+
+3. **preferences.md の更新判定**:
+- ゆうすけ様のレポートへの反応（返信・リアクション）に新しい傾向が見られたら更新
+
+4. **MEMORY.md のインデックス更新**:
+- 「最近の出来事」セクションに今日の1行サマリを追加（最新10件を維持）
+- last_ref 日付を更新
+
 ---
 
 # Phase 2: ガクの問い
@@ -376,6 +432,21 @@ with open('/tmp/schedule-repo/data/hal_gaku_metaphors.json', 'w') as f:
 - 短文主体
 - ハルの名前を出すときは敬意を持って
 
+### レポート完了後: 記憶の符号化（Encoding）— ガク分
+
+ガクのレポート投稿後、ハルとは異なる視点で記憶を書き込む。
+
+1. **context-log.md にエピソード記憶を追記**:
+- ハルが記録しなかった観点（行動の裏の動機、矛盾点、盲点）を記録
+- ガクが投げた問いと、その意図を記録（次回以降の追跡用）
+
+2. **frameworks.md の更新判定**:
+- マスターの新しい行動パターンを発見したら追記
+- 既存パターンの反証が見つかったら修正
+
+3. **MEMORY.md のインデックス更新**:
+- ハルが更新済みの場合は、ガク視点の補足を追加
+
 ---
 
 # 重要な注意事項（共通）
@@ -386,10 +457,33 @@ with open('/tmp/schedule-repo/data/hal_gaku_metaphors.json', 'w') as f:
 - ガクは同じ問いを繰り返さない（過去7件を確認）
 - 生データがない日でもレポートは書く
 - 「ご機嫌」を否定するのではなく、「本当にご機嫌か？」を問う立場（ガク）
-- **Phase 2完了後、メタファー履歴を必ずgit push**:
+- **Phase 2完了後、記憶とメタファー履歴を必ずgit push**:
   ```bash
   cd /tmp/schedule-repo
-  git add data/hal_gaku_metaphors.json
-  git commit -m "metaphors $(TZ=Asia/Tokyo date +%Y-%m-%d)"
+  git add data/hal_gaku_metaphors.json data/memory/
+  git commit -m "memory + metaphors $(TZ=Asia/Tokyo date +%Y-%m-%d)"
   git push origin main
   ```
+
+## 月初メンテナンス（忘却 / Forgetting）
+
+**毎月1日のレポート作成時に、以下の記憶メンテナンスを実行する:**
+
+1. **context-log.md の棚卸し**:
+   - 90日以上前のエントリを確認
+   - まだ重要なものは → frameworks.md に昇格（エピソード→意味記憶への固定化）
+   - 不要なものは → 削除
+   - ref_count が3以上のエントリは → frameworks.md に昇格
+
+2. **frameworks.md の陳腐化チェック**:
+   - 記載されているパターンが現在も当てはまるか検証
+   - 古くなったパターンには「要検証」タグを付ける
+   - 明らかに間違いとわかったものは削除
+
+3. **preferences.md の更新**:
+   - 「ゆうすけ様の現在の関心事」セクションを最新化
+   - last_updated を更新
+
+4. **MEMORY.md の整理**:
+   - 「最近の出来事」を最新10件に絞る
+   - last_ref を確認し、減衰テーブルに基づいて重要度を再評価

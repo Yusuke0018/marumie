@@ -40,6 +40,24 @@
 5割はゆうすけ様の関心領域内（哲学・経済・経営・行動経済学・AI）、
 5割は意外な方向から（科学・歴史・文化・心理学・芸術・生物学・数学など）。
 
+## 記憶の参照（日中配信でも使う）
+
+配信前に、scheduleリポジトリの記憶ファイルを参照する：
+
+```bash
+cd /tmp/schedule-repo && git pull --rebase origin main 2>/dev/null
+cat data/memory/MEMORY.md
+cat data/memory/frameworks.md
+cat data/memory/preferences.md
+```
+
+- **frameworks.md**: ゆうすけ様の行動パターンや関心の軌跡を把握した上で配信する
+- **preferences.md**: 反応傾向を参考に、刺さりやすいトピック・形式を選ぶ
+- **context-log.md**: 直近の出来事を踏まえて、連続性のあるメッセージを作る
+
+記憶を活用するが、「記憶があるから毎回それに触れなきゃ」とは考えないこと。
+自然に使えるときだけ使う。
+
 ## 提供される情報の使い方
 
 配信時に以下の情報が渡される：
