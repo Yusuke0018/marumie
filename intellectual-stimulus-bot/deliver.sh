@@ -86,6 +86,35 @@ if [[ -n "$READ_TOKEN" ]]; then
 fi
 
 # ============================================================
+# Step 1.5: 記憶ファイル読み込み（schedule リポジトリから）
+# ============================================================
+SCHEDULE_REPO="/tmp/schedule-repo"
+MEMORY_DIR="${SCHEDULE_REPO}/data/memory"
+MEMORY_CONTEXT=""
+
+if [[ -d "$SCHEDULE_REPO/.git" ]]; then
+  git -C "$SCHEDULE_REPO" pull --rebase origin main >/dev/null 2>&1 || true
+fi
+
+if [[ -d "$MEMORY_DIR" ]]; then
+  MEMORY_INDEX=$(cat "$MEMORY_DIR/MEMORY.md" 2>/dev/null || echo "")
+  MEMORY_FRAMEWORKS=$(cat "$MEMORY_DIR/frameworks.md" 2>/dev/null || echo "")
+  MEMORY_PREFERENCES=$(cat "$MEMORY_DIR/preferences.md" 2>/dev/null || echo "")
+  MEMORY_CONTEXT="
+【共有記憶: インデックス】
+${MEMORY_INDEX}
+
+【共有記憶: 行動パターン・洞察（意味記憶）】
+${MEMORY_FRAMEWORKS}
+
+【共有記憶: 好み・反応傾向（手続き記憶）】
+${MEMORY_PREFERENCES}"
+  log "記憶ファイル読み込み完了"
+else
+  log "記憶ディレクトリが見つかりません: ${MEMORY_DIR}"
+fi
+
+# ============================================================
 # Step 2: ローカルログ読み込み（重複回避用）
 # ============================================================
 RECENT_LOG=""
@@ -109,8 +138,10 @@ ${MYCHAT_MSGS:-（取得できず）}
 
 【あなたの過去の配信（重複回避用）】
 ${RECENT_LOG:-（初回配信）}
+${MEMORY_CONTEXT}
 
 上記は参考情報。5回に1回くらいは、上記の参考情報（サロン・日記・マイチャットの内容）に触れた文章を作ってほしい。
+記憶（frameworks/preferences）は毎回意識する必要はないが、自然に活かせるときは活かすこと。
 それ以外のときは自由。過去の配信の続きでも、全く別の話題でも、その時の直感で決めてよい。
 Chatwork配信用のメッセージを1件生成してください。"
 
