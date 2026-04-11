@@ -477,6 +477,127 @@ def main():
         )
 
     # =============================================
+    # 8c. デバイス別LP CV率
+    # =============================================
+    device_lp_lines = []
+    for lp_path, lp_label in LP_PAGES:
+        lp_device_filter = FilterExpression(
+            filter=Filter(field_name="pagePath", string_filter=Filter.StringFilter(
+                match_type=Filter.StringFilter.MatchType.EXACT, value=lp_path
+            ))
+        )
+        lp_device = run_report(client, cur_start, cur_end,
+                               ["sessions", "conversions"], ["deviceCategory"],
+                               dim_filter=lp_device_filter)
+        device_lp_lines.append(f"■ {lp_label}")
+        if lp_device.rows:
+            for r in sorted(lp_device.rows, key=lambda r: -int(r.metric_values[0].value)):
+                dev = r.dimension_values[0].value
+                dev_sess = int(r.metric_values[0].value)
+                dev_cv = int(float(r.metric_values[1].value))
+                dev_cvr = safe_div(dev_cv, dev_sess) * 100
+                dev_label = {"mobile": "📱スマホ", "desktop": "💻PC", "tablet": "📋タブレット"}.get(dev, dev)
+                device_lp_lines.append(f"　{dev_label}：{fmt(dev_sess)}セッション / CV {fmt(dev_cv)} / CV率 {dev_cvr:.2f}%")
+        else:
+            device_lp_lines.append("　データなし")
+
+    # =============================================
+    # 8d. 新規 vs リピーター CV率
+    # =============================================
+    newret_lines = []
+    for lp_path, lp_label in LP_PAGES:
+        lp_nr_filter = FilterExpression(
+            filter=Filter(field_name="pagePath", string_filter=Filter.StringFilter(
+                match_type=Filter.StringFilter.MatchType.EXACT, value=lp_path
+            ))
+        )
+        lp_nr = run_report(client, cur_start, cur_end,
+                           ["sessions", "conversions"], ["newVsReturning"],
+                           dim_filter=lp_nr_filter)
+        newret_lines.append(f"■ {lp_label}")
+        if lp_nr.rows:
+            for r in sorted(lp_nr.rows, key=lambda r: -int(r.metric_values[0].value)):
+                nr_type = r.dimension_values[0].value
+                nr_sess = int(r.metric_values[0].value)
+                nr_cv = int(float(r.metric_values[1].value))
+                nr_cvr = safe_div(nr_cv, nr_sess) * 100
+                nr_label = {"new": "🆕新規", "returning": "🔄リピーター"}.get(nr_type, nr_type)
+                newret_lines.append(f"　{nr_label}：{fmt(nr_sess)}セッション / CV {fmt(nr_cv)} / CV率 {nr_cvr:.2f}%")
+        else:
+            newret_lines.append("　データなし")
+
+    # =============================================
+    # 8e. ディスプレイ広告 LP別直帰率
+    # =============================================
+    display_filter = FilterExpression(
+        filter=Filter(
+            field_name="sessionDefaultChannelGroup",
+            string_filter=Filter.StringFilter(
+                match_type=Filter.StringFilter.MatchType.EXACT, value="Display"
+            ),
+        )
+    )
+    display_lp_resp = run_report(
+        client, cur_start, cur_end,
+        ["sessions", "bounceRate", "averageSessionDuration", "conversions"],
+        ["pagePath"],
+        dim_filter=display_filter,
+    )
+    display_lp_lines = []
+    if display_lp_resp.rows:
+        display_rows = sorted(display_lp_resp.rows, key=lambda r: -int(r.metric_values[0].value))
+        for r in display_rows[:10]:
+            dp_path = r.dimension_values[0].value
+            dp_sess = int(r.metric_values[0].value)
+            dp_bounce = float(r.metric_values[1].value) * 100
+            dp_dur = float(r.metric_values[2].value)
+            dp_cv = int(float(r.metric_values[3].value))
+            warn = " ⚠" if dp_bounce > 80 else ""
+            display_lp_lines.append(
+                f"　{dp_path}：{fmt(dp_sess)}セッション / 直帰率 {dp_bounce:.0f}%{warn} / 滞在 {fmt_duration(dp_dur)} / CV {fmt(dp_cv)}"
+            )
+    else:
+        display_lp_lines.append("　データなし")
+
+    # =============================================
+    # 8f. LP別スクロール到達率（90%）
+    # =============================================
+    scroll_lines = []
+    for lp_path, lp_label in LP_PAGES:
+        lp_scroll_filter = FilterExpression(
+            and_group=FilterExpressionList(expressions=[
+                FilterExpression(filter=Filter(
+                    field_name="pagePath",
+                    string_filter=Filter.StringFilter(
+                        match_type=Filter.StringFilter.MatchType.EXACT, value=lp_path
+                    ),
+                )),
+                FilterExpression(filter=Filter(
+                    field_name="eventName",
+                    string_filter=Filter.StringFilter(
+                        match_type=Filter.StringFilter.MatchType.EXACT, value="scroll"
+                    ),
+                )),
+            ])
+        )
+        lp_scroll = run_report(client, cur_start, cur_end,
+                               ["eventCount"], ["percentScrolled"],
+                               dim_filter=lp_scroll_filter)
+        # LP全セッション数を取得（8bで既出だが再利用のため再取得は避ける）
+        lp_sess_for_scroll_filter = FilterExpression(
+            filter=Filter(field_name="pagePath", string_filter=Filter.StringFilter(
+                match_type=Filter.StringFilter.MatchType.EXACT, value=lp_path
+            ))
+        )
+        lp_sess_resp = run_report(client, cur_start, cur_end,
+                                  ["sessions"], ["pagePath"],
+                                  dim_filter=lp_sess_for_scroll_filter)
+        total_sess = sum_metric(lp_sess_resp, 0) if lp_sess_resp.rows else 0
+        scroll_count = sum_metric(lp_scroll, 0) if lp_scroll.rows else 0
+        scroll_rate = safe_div(scroll_count, total_sess) * 100
+        scroll_lines.append(f"■ {lp_label}：90%到達 {fmt(scroll_count)} / {fmt(total_sess)}セッション（{scroll_rate:.1f}%）")
+
+    # =============================================
     # 9. 流入元と滞在時間の傾向
     # =============================================
     ch_duration_sorted = sorted(
@@ -600,6 +721,27 @@ ENG率：{cur_eng_rate:.1f}%（前週 {prev_eng_rate:.1f}%）
 🎯 LP別CV推移
 ━━━━━━━━━━━━━━━━━━
 {chr(10).join(lp_lines)}
+
+━━━━━━━━━━━━━━━━━━
+📱 LP デバイス別CV率
+━━━━━━━━━━━━━━━━━━
+{chr(10).join(device_lp_lines)}
+
+━━━━━━━━━━━━━━━━━━
+🆕 LP 新規 vs リピーター CV率
+━━━━━━━━━━━━━━━━━━
+{chr(10).join(newret_lines)}
+
+━━━━━━━━━━━━━━━━━━
+📢 ディスプレイ広告 着地ページ別直帰率 TOP10
+━━━━━━━━━━━━━━━━━━
+{chr(10).join(display_lp_lines)}
+
+━━━━━━━━━━━━━━━━━━
+📜 LP スクロール到達率（90%）
+━━━━━━━━━━━━━━━━━━
+{chr(10).join(scroll_lines)}
+※GA4デフォルトは90%到達のみ計測。25%/50%/75%はGTM設定で追加可能。
 
 ━━━━━━━━━━━━━━━━━━
 📄 ページ閲覧 TOP10
