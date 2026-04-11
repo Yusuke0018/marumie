@@ -437,6 +437,46 @@ def main():
         reserve_comment = "▶ 予約到達率は前週と同水準。更なる改善施策の検討を。"
 
     # =============================================
+    # 8b. LP別CV分析（大腸内視鏡LP・胃カメラLP）
+    # =============================================
+    LP_PAGES = [
+        ("/colonoscopy/lp/", "大腸内視鏡LP"),
+        ("/gastroscope/lp/", "胃カメラLP"),
+    ]
+    lp_lines = []
+    for lp_path, lp_label in LP_PAGES:
+        lp_filter = FilterExpression(
+            filter=Filter(field_name="pagePath", string_filter=Filter.StringFilter(
+                match_type=Filter.StringFilter.MatchType.EXACT, value=lp_path
+            ))
+        )
+        lp_cur = run_report(client, cur_start, cur_end,
+                            ["sessions", "conversions"], ["pagePath"],
+                            dim_filter=lp_filter)
+        lp_prev = run_report(client, prev_start, prev_end,
+                             ["sessions", "conversions"], ["pagePath"],
+                             dim_filter=lp_filter)
+
+        lp_sess_cur = sum_metric(lp_cur, 0) if lp_cur.rows else 0
+        lp_cv_cur = int(sum_metric_float(lp_cur, 1)) if lp_cur.rows else 0
+        lp_sess_prev = sum_metric(lp_prev, 0) if lp_prev.rows else 0
+        lp_cv_prev = int(sum_metric_float(lp_prev, 1)) if lp_prev.rows else 0
+
+        lp_cvr_cur = safe_div(lp_cv_cur, lp_sess_cur) * 100
+        lp_cvr_prev = safe_div(lp_cv_prev, lp_sess_prev) * 100
+
+        lp_lines.append(f"■ {lp_label}（{lp_path}）")
+        lp_lines.append(
+            f"　セッション：{fmt(lp_sess_cur)}（前週 {fmt(lp_sess_prev)}、{pct_change(lp_sess_cur, lp_sess_prev)}）"
+        )
+        lp_lines.append(
+            f"　CV数：{fmt(lp_cv_cur)}（前週 {fmt(lp_cv_prev)}、{pct_change(lp_cv_cur, lp_cv_prev)}）"
+        )
+        lp_lines.append(
+            f"　CV率：{lp_cvr_cur:.2f}%（前週 {lp_cvr_prev:.2f}%）"
+        )
+
+    # =============================================
     # 9. 流入元と滞在時間の傾向
     # =============================================
     ch_duration_sorted = sorted(
@@ -555,6 +595,11 @@ ENG率：{cur_eng_rate:.1f}%（前週 {prev_eng_rate:.1f}%）
 セッション→予約到達率：約{reserve_rate_cur:.1f}%（前週 {reserve_rate_prev:.1f}%）
 前週予約PV：{fmt(reserve_pv_prev)}
 {reserve_comment}
+
+━━━━━━━━━━━━━━━━━━
+🎯 LP別CV推移
+━━━━━━━━━━━━━━━━━━
+{chr(10).join(lp_lines)}
 
 ━━━━━━━━━━━━━━━━━━
 📄 ページ閲覧 TOP10
