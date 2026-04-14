@@ -1,0 +1,31 @@
+{
+  "mcpServers": {
+    "chatwork": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@chatwork/mcp-server"],
+      "env": {
+        "CHATWORK_API_TOKEN": "efef49105c1434d76b32f58ca1d15285"
+      }
+    },
+    "personal-gmail": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "--experimental-specifier-resolution=node",
+        "/opt/homebrew/lib/node_modules/mcp-mail-server/dist/index.js"
+      ],
+      "env": {
+        "IMAP_HOST": "imap.gmail.com",
+        "IMAP_PORT": "993",
+        "EMAIL_USER": "youyou00181002@gmail.com",
+        "EMAIL_PASS": "idng pgkm etsm bfnb",
+        "IMAP_SECURE": "true",
+        "SMTP_HOST": "smtp.gmail.com",
+        "SMTP_PORT": "465",
+        "SMTP_SECURE": "true",
+        "NODE_TLS_REJECT_UNAUTHORIZED": "0"
+      }
+    }
+  }
+}
