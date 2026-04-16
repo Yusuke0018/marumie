@@ -14,6 +14,7 @@
 ```bash
 JST_DATE=$(TZ=Asia/Tokyo date +%Y-%m-%d)
 JST_DATE_SLASH=$(TZ=Asia/Tokyo date +%Y/%m/%d)
+JST_YESTERDAY=$(TZ=Asia/Tokyo date -v-1d +%Y-%m-%d)
 JST_WEEKDAY_JA=$(TZ=Asia/Tokyo date +%u | awk '{split("月火水木金土日",a,""); print a[$1]"曜日"}')
 echo "今日: $JST_DATE ($JST_WEEKDAY_JA)"
 ```
@@ -179,26 +180,19 @@ mkdir -p /tmp/schedule-repo/output
 
 ## ステップ2-1: Gmailで対象メールを検索
 
-`mcp__personal-gmail__search_by_sender` または `mcp__personal-gmail__search_with_keyword` で以下を検索:
+`gmail_search_messages` で以下を検索:
+- `from:note.com 後藤達也 newer_than:1d`
+- `from:note.com 唐鎌大輔 newer_than:1d`
+- `from:note.com 泉 newer_than:1d`
 
-```
-# 送信者で検索（note.comからのニュースレター）
-mcp__personal-gmail__search_by_sender: sender="noreply@note.com" または "mail@note.com"
-
-# キーワードで各著者のメールを絞り込む
-mcp__personal-gmail__search_with_keyword: keyword="後藤達也"
-mcp__personal-gmail__search_with_keyword: keyword="唐鎌大輔"
-mcp__personal-gmail__search_with_keyword: keyword="泉"
-```
-
-または `mcp__personal-gmail__search_since_date` で直近1日分を取得してフィルタしてもよい。
-
-**⚠️ ツールが使えない場合のフォールバック:**
-`mcp__personal-gmail__` ツールがエラーになった場合は、WebSearchで「後藤達也 note 最新記事 site:note.com」等を検索して代替取得すること。「取得不可」で諦めない。
+**⚠️ `gmail_search_messages` が使えない場合のフォールバック（優先順）:**
+1. `mcp__personal-gmail__search_by_sender` で `sender="noreply@note.com"`, `startDate="${JST_YESTERDAY}"`, `inboxOnly=true` を1回だけ検索し、結果から著者名でフィルタ
+2. それもエラーなら WebSearch で「後藤達也 note 最新記事 site:note.com」等を検索して代替取得
+3. 「取得不可」で諦めない。必ずいずれかの方法で取得を試みること
 
 ## ステップ2-2: メールの内容を全文取得
 
-ヒットしたメールを `mcp__personal-gmail__get_message` で全文取得。記事の内容、数字、データ、URLを抽出。重複除外。
+ヒットしたメールを `gmail_read_message`（または `mcp__personal-gmail__get_message`）で全文取得。記事の内容、数字、データ、URLを抽出。重複除外。
 
 ## ステップ2-3: 中間ファイルの保存
 

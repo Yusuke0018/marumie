@@ -70,7 +70,7 @@ fi
 # --dangerously-skip-permissions: 非対話環境のためツール許可を自動承認
 # --mcp-config: Chatwork MCPをローカル起動（Notion/GmailはClaude.aiクラウドコネクタ経由）
 log "claude CLI 実行開始"
-perl -e 'alarm shift; exec @ARGV' 900 \
+perl -e 'alarm shift; exec @ARGV' 1500 \
   claude --print \
   --dangerously-skip-permissions \
   --mcp-config "${SCRIPT_DIR}/mcp_config_morning.json" \
